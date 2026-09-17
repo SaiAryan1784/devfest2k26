@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DevFest Noida 2026 glimpse v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,slnt,wdth,wght@6..144,-10..0,25..151,100..1000&family=Google+Sans+Code:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --canvas: #050505;
+    --surface: #0b0b0d;
+    --hair: rgba(255,255,255,.09);
+    --text: #f5f5f7;
+    --muted: #9a9aa3;
+    --display: "Google Sans Flex", system-ui, sans-serif;
+    --mono: "Google Sans Code", ui-monospace, monospace;
+    --px: 0; --py: 0;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; scroll-behavior: smooth; }
+  body { margin: 0; background: var(--canvas); color: var(--text); font-family: var(--display); font-variation-settings: "opsz" 24; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; text-decoration: none; }
+
+  nav { position: absolute; inset: 0 0 auto 0; height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(20px, 4vw, 56px); z-index: 10; }
+  nav .logo svg { height: 40px; width: auto; display: block; }
+  nav ul { display: flex; gap: 32px; list-style: none; margin: 0; padding: 0; font-size: 14px; font-weight: 500; color: var(--muted); }
+  nav ul a:hover { color: var(--text); }
+  .btn { display: inline-flex; align-items: center; height: 48px; padding: 0 24px; border-radius: 999px; font: 500 15px/1 var(--display); transition: transform .3s cubic-bezier(.16,1,.3,1), background .3s; }
+  .btn:active { transform: scale(.97); }
+  .btn.primary { background: var(--text); color: #0a0a0c; }
+  .btn.primary:hover { background: #fff; }
+  .btn.ghost { color: var(--text); border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.04); backdrop-filter: blur(10px); }
+  nav .btn { height: 40px; padding: 0 18px; font-size: 14px; }
+
+  /* HERO: real Figma exports as the lit edges, crossfading through the track colours */
+  .hero { position: relative; min-height: 100dvh; display: grid; grid-template-rows: 1fr auto; overflow: hidden; isolation: isolate; }
+  .edges { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+  .edge { position: absolute; top: -6%; height: 112%; width: 56%; overflow: hidden; }
+  .edge.l { left: 0; -webkit-mask-image: linear-gradient(to right, #000 55%, transparent 100%); mask-image: linear-gradient(to right, #000 55%, transparent 100%); transform: translate(calc(var(--px) * -14px), calc(var(--py) * -10px)); }
+  .edge.r { right: 0; -webkit-mask-image: linear-gradient(to left, #000 55%, transparent 100%); mask-image: linear-gradient(to left, #000 55%, transparent 100%); transform: translate(calc(var(--px) * 14px), calc(var(--py) * 10px)); }
+  .edge img { position: absolute; top: 0; height: 100%; width: auto; opacity: 0; transition: opacity 1.8s ease; }
+  .edge.l img { left: 0; }
+  .edge.r img { right: 0; }
+  .edge img.on { opacity: 1; }
+  .edge { transition: transform .6s cubic-bezier(.16,1,.3,1); }
+
+  .hero-main { display: grid; place-items: center; text-align: center; padding: 120px 20px 40px; }
+  .lockup { width: min(400px, 64vw); margin: 0 auto 40px; }
+  .lockup svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .lockup .pill { transition: fill 1.2s ease; }
+  h1 { font-size: clamp(2.4rem, 5.6vw, 5.4rem); line-height: 1.02; letter-spacing: -.035em; font-weight: 500; margin: 0 0 32px; font-variation-settings: "opsz" 144, "wdth" 100; }
+  h1 em { font-style: normal; font-variation-settings: "opsz" 144, "wdth" 128, "wght" 640; letter-spacing: -.02em; }
+  .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .facts { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 24px; padding: 0 clamp(20px, 4vw, 56px) 36px; font: 500 12px/1.6 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .facts > :nth-child(2) { text-align: center; }
+  .facts > :nth-child(3) { text-align: right; }
+  .facts b { display: block; color: var(--text); font-weight: 500; }
+
+  /* TRACKS: procedural glass slabs (SVG) so every panel can carry its own colour and animate */
+  .tracks { padding: 120px clamp(20px, 4vw, 56px) 40px; max-width: 1440px; margin: 0 auto; }
+  .tracks h2 { font-size: clamp(2.2rem, 5vw, 4.5rem); letter-spacing: -.035em; line-height: 1; margin: 0 0 40px; font-weight: 500; font-variation-settings: "opsz" 144; }
+  .tracks h2 em { font-style: normal; font-variation-settings: "opsz" 144, "wdth" 128, "wght" 640; }
+  .panel { position: relative; border-radius: 24px; background: var(--surface); border: 1px solid var(--hair); min-height: 340px; overflow: hidden; isolation: isolate; display: grid; grid-template-columns: 1fr auto; align-items: end; padding: 44px 48px; gap: 32px; margin-bottom: 16px; }
+  .panel .slabs { position: absolute; top: -10%; bottom: -10%; width: 34%; z-index: -1; pointer-events: none; }
+  .panel .slabs::before { content: ""; position: absolute; inset: -20% -30%; background: radial-gradient(60% 55% at var(--gx) 45%, var(--glow) 0%, transparent 70%); filter: blur(30px); opacity: .55; }
+  .panel .slabs.l { --gx: 25%; } .panel .slabs.r { --gx: 75%; }
+  .panel[data-color="blue"] { --glow: #4285F4; } .panel[data-color="red"] { --glow: #EA4335; } .panel[data-color="yellow"] { --glow: #FBBC04; } .panel[data-color="green"] { --glow: #34A853; }
+  .panel .slabs.l { left: 0; }
+  .panel .slabs.r { right: 0; }
+  .panel .slabs svg { width: 100%; height: 100%; display: block; }
+  .panel .copy { padding-left: 26%; }
+  .panel .name { font-size: clamp(2.6rem, 6vw, 5.5rem); letter-spacing: -.04em; line-height: .95; font-weight: 560; margin: 0 0 16px; font-variation-settings: "opsz" 144; }
+  .panel .desc { color: var(--muted); max-width: 42ch; margin: 0; line-height: 1.5; font-size: 17px; }
+  .panel .count { font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); white-space: nowrap; align-self: start; justify-self: end; margin-right: 26%; }
+  .sheen { animation: sheen 7s ease-in-out infinite; }
+  @keyframes sheen { 0%,100% { transform: translateY(-12%) } 50% { transform: translateY(12%) } }
+
+  /* STAGE: spotlight motif for speakers (pure CSS, mirrors the amber spotlight export) */
+  .stage { position: relative; min-height: 78vh; display: grid; align-content: end; justify-items: center; overflow: hidden; isolation: isolate; padding: 0 20px 0; margin-top: 80px; }
+  .stage h2 { position: absolute; top: 72px; left: clamp(20px, 4vw, 56px); right: clamp(20px, 4vw, 56px); margin: 0; font-size: clamp(2.2rem, 5vw, 4.5rem); letter-spacing: -.035em; line-height: 1; font-weight: 500; font-variation-settings: "opsz" 144; max-width: 1440px; }
+  .beam { position: absolute; left: 50%; top: -14%; height: 104%; transform: translateX(-50%); z-index: -1; pointer-events: none; }
+  .beam i { position: absolute; inset: 0; display: block; background: linear-gradient(to bottom, rgba(251,188,4,0) 0%, rgba(251,188,4,.14) 40%, rgba(255,205,80,.40) 100%); }
+  .beam.wide { width: 64vw; filter: blur(34px); opacity: .75; } .beam.wide i { clip-path: polygon(47% 0, 53% 0, 100% 100%, 0 100%); }
+  .beam.mid { width: 36vw; filter: blur(18px); } .beam.mid i { clip-path: polygon(45% 0, 55% 0, 100% 100%, 0 100%); }
+  .beam.core { width: 15vw; filter: blur(9px); } .beam.core i { clip-path: polygon(41% 0, 59% 0, 100% 100%, 0 100%); background: linear-gradient(to bottom, rgba(255,230,150,0) 0%, rgba(255,230,150,.26) 45%, rgba(255,242,200,.9) 100%); }
+  .floor { position: relative; width: 100%; height: 30vh; z-index: -1; overflow: hidden; }
+  .floor::before { content: ""; position: absolute; left: 50%; top: 0; width: 30vw; height: 3px; transform: translateX(-50%); background: #fff1c2; border-radius: 999px; filter: blur(1px); box-shadow: 0 0 26px 8px rgba(255,215,90,.8), 0 0 110px 40px rgba(251,188,4,.4), 0 0 260px 110px rgba(251,188,4,.16); }
+  .floor::after { content: ""; position: absolute; left: 50%; top: 0; width: 60vw; height: 100%; transform: translateX(-50%);
+    background: linear-gradient(to bottom, rgba(255,205,80,.34), rgba(251,188,4,.10) 45%, transparent 85%);
+    -webkit-mask-image: radial-gradient(60% 100% at 50% 0%, #000 30%, transparent 100%); mask-image: radial-gradient(60% 100% at 50% 0%, #000 30%, transparent 100%); filter: blur(6px); }
+  .speaker { position: relative; z-index: 1; display: grid; grid-template-columns: 72px 1fr; gap: 18px; align-items: center; margin-bottom: -18px; padding: 16px 22px 16px 16px; border-radius: 999px; background: rgba(12,12,14,.72); border: 1px solid rgba(255,255,255,.1); backdrop-filter: blur(12px); }
+  .speaker img { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; display: block; filter: grayscale(.2); }
+  .speaker b { display: block; font-size: 18px; font-weight: 560; letter-spacing: -.01em; }
+  .speaker span { color: var(--muted); font-size: 14px; }
+
+  footer { padding: 120px 20px 48px; text-align: center; color: var(--muted); font-size: 13px; }
+  @media (max-width: 767px) {
+    nav ul { display: none; }
+    .edge { width: 70%; }
+    .facts { grid-template-columns: 1fr; text-align: left !important; }
+    .facts > * { text-align: left !important; }
+    .panel { grid-template-columns: 1fr; padding: 36px 28px; }
+    .panel .copy { padding-left: 0; }
+    .panel .slabs { width: 42%; opacity: .55; }
+  }
+  @media (prefers-reduced-motion: reduce) { .breathe, .sheen { animation: none; } .edge img { transition: none; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="logo" href="#" aria-label="DevFest Noida 2026" id="navlogo"></a>
+  <ul><li><a href="#tracks">Tracks</a></li><li><a href="#stage">Speakers</a></li><li><a href="#">Schedule</a></li><li><a href="#">Venue</a></li><li><a href="#">Partners</a></li></ul>
+  <a class="btn primary" href="https://www.commudle.com/fill-form/5096" target="_blank" rel="noopener">Join the waitlist</a>
+</nav>
+
+<section class="hero">
+  <div class="edges">
+    <div class="edge l" id="edgeL"></div>
+    <div class="edge r" id="edgeR"></div>
+  </div>
+  <div class="hero-main">
+    <div>
+      <div class="lockup" id="lockup"></div>
+      <h1>One day. <em>Five tracks.</em><br/>Every builder in Delhi NCR.</h1>
+      <div class="ctas">
+        <a class="btn primary" href="https://www.commudle.com/fill-form/5096" target="_blank" rel="noopener">Join the waitlist</a>
+        <a class="btn ghost" href="#tracks">See the tracks</a>
+      </div>
+    </div>
+  </div>
+  <div class="facts">
+    <div>Date<b>10 October 2026</b></div>
+    <div>Venue<b>Expo Inn, Greater Noida</b></div>
+    <div>Last year<b>4,400+ registered</b></div>
+  </div>
+</section>
+
+<section class="tracks" id="tracks">
+  <h2>Pick your track. <em>Or wander.</em></h2>
+  <div class="panel" data-color="blue">
+    <div class="slabs l"></div><div class="slabs r"></div>
+    <div class="copy"><p class="name">Build</p><p class="desc">Hands-on sessions on Android, Web, Cloud, and Gemini. Bring a laptop, leave with something running.</p></div>
+    <div class="count">12 sessions</div>
+  </div>
+  <div class="panel" data-color="red">
+    <div class="slabs l"></div><div class="slabs r"></div>
+    <div class="copy"><p class="name">Think</p><p class="desc">Talks from Googlers, GDEs, and founders on where AI, product, and design are heading next.</p></div>
+    <div class="count">10 sessions</div>
+  </div>
+</section>
+
+<section class="stage" id="stage">
+  <h2>Last year's stage.</h2>
+  <div class="beam wide"><i></i></div><div class="beam mid"><i></i></div><div class="beam core"><i></i></div>
+  <div class="speaker">
+    <img src="https://picsum.photos/seed/devfest-noida-speaker-saurabh/144/144" alt="" />
+    <div><b>Saurabh Rajpal</b><span>Staff Web Ecosystem Consultant, Google</span></div>
+  </div>
+  <div class="floor"></div>
+</section>
+
+<footer>Throwaway glimpse v2. Hero edges are your Figma exports; track panels are procedural SVG glass slabs; stage light is CSS.</footer>
+
+<script>
+  /* ---------- DevFest lockup (your SVG, pill colour driven by the active track colour) ---------- */
+  const LOCKUP = (pill) => `<svg viewBox="0 0 218 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M213.09 30.2827H209.094C207.67 30.2827 206.514 29.1283 206.514 27.7014V13.4038C206.514 6.27663 200.739 0.5 193.615 0.5H184.609C184.038 0.5 183.577 0.961213 183.577 1.532V16.0105C183.577 16.5813 184.038 17.0425 184.609 17.0425H191.218C192.642 17.0425 193.799 18.1968 193.799 19.6238V58.7759C193.799 60.2004 192.645 61.3572 191.218 61.3572H184.609C184.038 61.3572 183.577 61.8184 183.577 62.3892V76.8677C183.577 77.4385 184.038 77.8997 184.609 77.8997H193.615C200.739 77.8997 206.514 72.1231 206.514 64.9959V50.0537C206.514 48.6293 207.668 47.4724 209.094 47.4724H213.09C213.661 47.4724 214.122 47.0112 214.122 46.4404V31.3172C214.122 30.7464 213.661 30.2852 213.09 30.2852V30.2827Z" fill="white" stroke="#202124" stroke-linejoin="round"/>
+  <path d="M4.30619 30.2827H8.30256C9.72639 30.2827 10.8828 29.1283 10.8828 27.7014V13.4038C10.8828 6.27663 16.657 0.5 23.7812 0.5H32.7878C33.3583 0.5 33.8193 0.961213 33.8193 1.532V16.0105C33.8193 16.5813 33.3583 17.0425 32.7878 17.0425H26.1781C24.7542 17.0425 23.5979 18.1968 23.5979 19.6238V58.7759C23.5979 60.2004 24.7517 61.3572 26.1781 61.3572H32.7878C33.3583 61.3572 33.8193 61.8184 33.8193 62.3892V76.8677C33.8193 77.4385 33.3583 77.8997 32.7878 77.8997H23.7812C16.657 77.8997 10.8828 72.1231 10.8828 64.9959V50.0537C10.8828 48.6293 9.72894 47.4724 8.30256 47.4724H4.30619C3.73565 47.4724 3.27461 47.0112 3.27461 46.4404V31.3172C3.27461 30.7464 3.73565 30.2852 4.30619 30.2852V30.2827Z" fill="white" stroke="#202124" stroke-linejoin="round"/>
+  <path d="M58.8122 9.86604C56.8788 8.80705 54.586 8.27271 51.9239 8.27271H43.4326V33.3871H51.9239C54.586 33.3871 56.8885 32.8625 58.8122 31.8132C60.7455 30.764 62.2223 29.2872 63.2716 27.3927C64.3111 25.4982 64.8357 23.3122 64.8357 20.8348C64.8357 18.3573 64.3111 16.1714 63.2716 14.2963C62.232 12.4115 60.7455 10.9445 58.8122 9.87575V9.86604ZM59.1328 25.0707C58.511 26.2851 57.588 27.2275 56.3444 27.8979C55.1009 28.5683 53.5658 28.8986 51.7102 28.8986H48.164V12.7612H51.7102C53.5561 12.7612 55.1009 13.0916 56.3444 13.7619C57.588 14.4323 58.511 15.365 59.1328 16.5697C59.7546 17.7744 60.0655 19.1929 60.0655 20.8348C60.0655 22.4767 59.7546 23.866 59.1328 25.0804V25.0707Z" fill="white"/>
+  <path d="M81.1458 16.1626C79.8342 15.3465 78.2215 14.9385 76.3075 14.9385C74.3936 14.9385 72.9557 15.3757 71.5761 16.2501C70.1965 17.1245 69.1084 18.2903 68.3117 19.7379C67.515 21.1855 67.1167 22.7691 67.1167 24.4693C67.1167 26.1695 67.5247 27.9183 68.3311 29.3465C69.1375 30.7747 70.2451 31.8919 71.6635 32.7177C73.082 33.5338 74.685 33.9419 76.4824 33.9419C78.2798 33.9419 80.1451 33.5144 81.4956 32.6595C82.8557 31.8045 83.9536 30.6386 84.7891 29.1716L81.0681 27.3451C80.6503 28.0738 80.0577 28.6761 79.3096 29.1522C78.5615 29.6282 77.6385 29.8711 76.5407 29.8711C75.4428 29.8711 74.753 29.6574 73.9952 29.2202C73.2374 28.783 72.6351 28.1612 72.1882 27.3257C71.9064 26.801 71.7218 26.189 71.6247 25.5186H85.032C85.0514 25.402 85.0806 25.2077 85.1 24.9357C85.1194 24.6636 85.1389 24.343 85.1389 23.9738C85.1389 22.3125 84.7988 20.7969 84.1187 19.427C83.4387 18.0571 82.4477 16.969 81.1361 16.1432L81.1458 16.1626ZM71.8093 22.2639C71.9064 21.9336 72.0133 21.6227 72.159 21.3312C72.5768 20.5054 73.1597 19.8545 73.8981 19.3882C74.6365 18.9218 75.4428 18.6886 76.3367 18.6886C77.2305 18.6886 77.6191 18.7955 78.1437 19.019C78.6684 19.2424 79.1153 19.5242 79.4942 19.8739C79.8634 20.2237 80.1645 20.6123 80.3686 21.0301C80.5726 21.4478 80.6989 21.8559 80.7183 22.2542H71.8093V22.2639Z" fill="white"/>
+  <path d="M95.3012 27.1418H95.0195L90.4921 15.5027H85.2749L92.8432 33.3888H97.4095L105.056 15.5027H99.8966L95.3012 27.1418Z" fill="white"/>
+  <path d="M107.307 33.3879H112.038V23.3518H122.103V18.8633H112.038V12.762H123.23V8.27344H107.307V33.3879Z" fill="white"/>
+  <path d="M138.641 16.1626C137.33 15.3465 135.717 14.9385 133.803 14.9385C131.889 14.9385 130.451 15.3757 129.072 16.2501C127.692 17.1245 126.604 18.2903 125.807 19.7379C125.011 21.1855 124.612 22.7691 124.612 24.4693C124.612 26.1695 125.02 27.9183 125.827 29.3465C126.633 30.7747 127.741 31.8919 129.159 32.7177C130.578 33.5338 132.181 33.9419 133.978 33.9419C135.775 33.9419 137.641 33.5144 138.991 32.6595C140.351 31.8045 141.449 30.6386 142.285 29.1716L138.564 27.3451C138.146 28.0738 137.553 28.6761 136.805 29.1522C136.057 29.6282 135.134 29.8711 134.036 29.8711C132.938 29.8711 132.249 29.6574 131.491 29.2202C130.733 28.783 130.131 28.1612 129.684 27.3257C129.402 26.801 129.217 26.189 129.12 25.5186H142.528C142.547 25.402 142.576 25.2077 142.596 24.9357C142.615 24.6636 142.634 24.343 142.634 23.9738C142.634 22.3125 142.294 20.7969 141.614 19.427C140.934 18.0571 139.943 16.969 138.632 16.1432L138.641 16.1626ZM129.315 22.2639C129.412 21.9336 129.519 21.6227 129.664 21.3312C130.082 20.5054 130.665 19.8545 131.403 19.3882C132.142 18.9218 132.948 18.6886 133.842 18.6886C134.736 18.6886 135.124 18.7955 135.649 19.019C136.174 19.2424 136.621 19.5242 137 19.8739C137.369 20.2237 137.67 20.6123 137.874 21.0301C138.088 21.4478 138.204 21.8559 138.224 22.2542H129.315V22.2639Z" fill="white"/>
+  <path d="M154.491 22.7195L151.858 22.088C151.207 21.9229 150.643 21.68 150.177 21.3496C149.711 21.0193 149.478 20.6404 149.478 20.1935C149.478 19.7466 149.711 19.4066 150.177 19.1054C150.643 18.8042 151.275 18.6488 152.072 18.6488C152.868 18.6488 153.383 18.7848 153.986 19.0665C154.578 19.3483 155.064 19.834 155.443 20.5433L159.368 18.8236C158.95 17.9395 158.387 17.2011 157.687 16.6279C156.988 16.0547 156.152 15.6272 155.2 15.3455C154.238 15.0638 153.169 14.9277 151.974 14.9277C150.779 14.9277 149.516 15.1512 148.448 15.5981C147.379 16.045 146.544 16.6668 145.922 17.4538C145.3 18.2504 144.989 19.1831 144.989 20.2615C144.989 21.3399 145.232 22.0686 145.708 22.807C146.184 23.5453 146.816 24.1477 147.583 24.6335C148.351 25.1095 149.176 25.4496 150.041 25.6342L152.149 26.0908C152.645 26.1879 153.121 26.3045 153.587 26.46C154.054 26.6154 154.442 26.8194 154.763 27.0915C155.074 27.3635 155.239 27.7327 155.239 28.199C155.239 28.6654 154.938 29.3066 154.326 29.5495C153.714 29.7924 153.043 29.9187 152.295 29.9187C151.547 29.9187 150.585 29.7049 149.905 29.2677C149.225 28.8305 148.691 28.199 148.292 27.3538L144.192 29.1414C144.523 30.0061 145.018 30.8028 145.698 31.5217C146.378 32.2504 147.262 32.8333 148.351 33.2802C149.439 33.7271 150.75 33.9506 152.295 33.9506C153.84 33.9506 154.977 33.7077 156.123 33.2316C157.269 32.7556 158.183 32.0755 158.863 31.2011C159.543 30.3267 159.883 29.2969 159.883 28.131C159.883 26.9652 159.436 25.7022 158.532 24.7598C157.629 23.8271 156.298 23.147 154.52 22.7292L154.491 22.7195Z" fill="white"/>
+  <path d="M172.222 29.202C171.892 29.3089 171.542 29.3574 171.173 29.3574C170.377 29.3574 169.803 29.1534 169.454 28.7454C169.104 28.3373 168.929 27.6961 168.929 26.8314V19.4282H173.311V15.5032H168.929V10.4512H164.334V15.5032H161.215V19.4282H164.334V27.6669C164.334 29.542 164.858 31.0091 165.907 32.068C166.957 33.1367 168.414 33.6614 170.26 33.6614C172.106 33.6614 171.367 33.6128 171.892 33.5059C172.417 33.3991 172.941 33.2533 173.456 33.0687V28.5802C172.961 28.8814 172.553 29.0854 172.232 29.1923L172.222 29.202Z" fill="white"/>
+  <rect x="49.4377" y="40.923" width="118.177" height="28.7949" rx="14.3974" fill="white" stroke="#202124" stroke-width="1.64685"/>
+  <rect class="pill" x="115.188" y="41.3229" width="52.6992" height="28.8199" rx="14.4099" fill="${pill}" stroke="#202124" stroke-width="1.64685"/>
+  <text x="141.5" y="61.6" text-anchor="middle" font-family="Google Sans Flex, system-ui, sans-serif" font-size="13.6" font-weight="500" fill="white" letter-spacing=".3">2026</text>
+  <text x="84.6" y="61.4" text-anchor="middle" font-family="Google Sans Flex, system-ui, sans-serif" font-size="13.4" font-weight="500" fill="#202124" letter-spacing=".2">Noida</text>
+</svg>`;
+
+  /* ---------- Hero: Figma exports, one pair per track colour, crossfading ---------- */
+  const EXPORTS = [
+    { key: "spectrum", pill: "#FBB000", src: "figma/3150765d-0e15-492d-bd67-21e4027b6213%201.png" },
+    { key: "blue",     pill: "#57CAFF", src: "figma/1e9eca6a-1868-40f5-803b-4265170d8129%204.png" },
+    { key: "red",      pill: "#EA4335", src: "figma/8d63265a-da39-4f7e-9094-b1f987aa2166%202.png" },
+    { key: "yellow",   pill: "#FBB000", src: "figma/99e75f1d-6143-4fdf-a0c4-5a34d38d8d7c%202.png" },
+    { key: "green",    pill: "#34A853", src: "figma/0d4e76e3-3355-4f7a-9d37-3a860e44e79d%202.png" },
+  ];
+  const edgeL = document.getElementById("edgeL"), edgeR = document.getElementById("edgeR");
+  EXPORTS.forEach((e, i) => {
+    edgeL.insertAdjacentHTML("beforeend", `<img src="${e.src}" alt="" data-i="${i}" ${i === 0 ? 'class="on"' : ""} />`);
+    edgeR.insertAdjacentHTML("beforeend", `<img src="${e.src}" alt="" data-i="${i}" ${i === 0 ? 'class="on"' : ""} />`);
+  });
+  const lockup = document.getElementById("lockup"); lockup.innerHTML = LOCKUP(EXPORTS[0].pill);
+  document.getElementById("navlogo").innerHTML = LOCKUP(EXPORTS[0].pill);
+  let cur = 0;
+  function setColor(i) {
+    cur = i;
+    document.querySelectorAll(".edge img").forEach(img => img.classList.toggle("on", +img.dataset.i === i));
+    document.querySelectorAll(".pill").forEach(p => p.setAttribute("fill", EXPORTS[i].pill));
+  }
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) setInterval(() => setColor((cur + 1) % EXPORTS.length), 6500);
+  addEventListener("pointermove", (ev) => {
+    const px = (ev.clientX / innerWidth - .5) * 2, py = (ev.clientY / innerHeight - .5) * 2;
+    document.documentElement.style.setProperty("--px", px.toFixed(3));
+    document.documentElement.style.setProperty("--py", py.toFixed(3));
+  }, { passive: true });
+
+  /* ---------- Procedural glass slabs (SVG). One centreline per slab; lighting = offset copies. ---------- */
+  const PAL = {
+    blue:   { hot: "#EAF2FF", top: "#8AB4F8", mid: "#4285F4", bot: "#1B49B8", spec: "#FFFFFF" },
+    red:    { hot: "#FFE9E6", top: "#FF8A80", mid: "#EA4335", bot: "#9E1F17", spec: "#FFFFFF" },
+    yellow: { hot: "#FFF8DD", top: "#FFE082", mid: "#FBBC04", bot: "#B87800", spec: "#FFFFFF" },
+    green:  { hot: "#E6FAEC", top: "#81C995", mid: "#34A853", bot: "#0F6B33", spec: "#FFFFFF" },
+  };
+  function slabs(side, key, uid) {
+    const p = PAL[key], W = 560, H = 1000, n = 7, w = 52, step = 34, jog = 52;
+    const bendY = side === "left" ? 330 : 640;
+    const dir = side === "left" ? 1 : -1;
+    let defs = `<filter id="bl${uid}" x="-50%" y="-20%" width="200%" height="140%"><feGaussianBlur stdDeviation="7"/></filter>
+      <filter id="bloom${uid}" x="-50%" y="-20%" width="200%" height="140%"><feGaussianBlur stdDeviation="30"/></filter>
+      <linearGradient id="hot${uid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".0"/><stop offset=".38" stop-color="#fff" stop-opacity=".5"/><stop offset=".7" stop-color="#fff" stop-opacity=".05"/><stop offset="1" stop-color="#fff" stop-opacity=".25"/></linearGradient>`;
+    const paths = [];
+    for (let i = 0; i < n; i++) {
+      const x = side === "left" ? 30 + i * step : W - 30 - i * step;
+      const x2 = x + dir * jog;
+      const hotY = (side === "left" ? bendY + 260 : bendY - 220) + i * 38;
+      const s = (y) => Math.max(0, Math.min(1, y / H)).toFixed(3);
+      defs += `<linearGradient id="g${uid}${i}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${p.top}"/><stop offset="${s(hotY - 320)}" stop-color="${p.mid}"/>
+        <stop offset="${s(hotY - 60)}" stop-color="${p.hot}"/><stop offset="${s(hotY + 60)}" stop-color="${p.hot}"/>
+        <stop offset="${s(hotY + 380)}" stop-color="${p.mid}"/><stop offset="1" stop-color="${p.bot}"/></linearGradient>`;
+      paths.push({ i, d: `M${x} -40 V${bendY} C${x} ${bendY + 60} ${x2} ${bendY + 40} ${x2} ${bendY + 110} V${H + 40}` });
+    }
+    let body = `<g filter="url(#bloom${uid})" opacity=".8">${paths.map(({d, i}) => `<path d="${d}" stroke="url(#g${uid}${i})" stroke-width="${w * 1.5}"/>`).join("")}</g>`;
+    for (let k = n - 1; k >= 0; k--) {
+      const { d, i } = paths[k];
+      const depth = i / (n - 1);
+      body += `<g opacity="${(1 - depth * .42).toFixed(2)}">
+        <path d="${d}" stroke="#000" stroke-width="20" opacity=".9" transform="translate(${dir * (w / 2 + 7)} 0)" filter="url(#bl${uid})"/>
+        <path d="${d}" stroke="url(#g${uid}${i})" stroke-width="${w}"/>
+        <path d="${d}" stroke="#000" stroke-width="${w * .5}" opacity=".5" transform="translate(${dir * w * .28} 0)" filter="url(#bl${uid})"/>
+        <path d="${d}" stroke="url(#hot${uid})" stroke-width="${w}" class="sheen" opacity=".3" style="animation-delay:${(-i * .6).toFixed(1)}s"/>
+        <path d="${d}" stroke="${p.spec}" stroke-width="2" opacity=".9" transform="translate(${-dir * (w / 2 - 1)} 0)"/>
+      </g>`;
+    }
+    body += `<rect x="0" y="0" width="${W}" height="${H}" fill="url(#fade${uid})"/>`;
+    defs += `<linearGradient id="fade${uid}" x1="${side === "left" ? 0 : 1}" y1="0" x2="${side === "left" ? 1 : 0}" y2="0"><stop offset=".45" stop-color="#0b0b0d" stop-opacity="0"/><stop offset="1" stop-color="#0b0b0d" stop-opacity="1"/></linearGradient>`;
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="${side === "left" ? "xMinYMid" : "xMaxYMid"} slice" fill="none" stroke-linecap="butt"><defs>${defs}</defs>${body}</svg>`;
+  }
+  document.querySelectorAll(".panel").forEach((panel, idx) => {
+    const key = panel.dataset.color;
+    panel.querySelector(".slabs.l").innerHTML = slabs("left", key, `L${idx}`);
+    panel.querySelector(".slabs.r").innerHTML = slabs("right", key, `R${idx}`);
+  });
+  const y = new URLSearchParams(location.search).get("y");
+  if (y) { document.documentElement.style.scrollBehavior = "auto"; requestAnimationFrame(() => scrollTo(0, +y)); }
+</script>
+</body>
+</html>

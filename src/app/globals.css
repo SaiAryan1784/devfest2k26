@@ -1,26 +1,132 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-canvas: #050505;
+  --color-surface: #0b0b0d;
+  --color-surface-2: #121216;
+  --color-hair: rgb(255 255 255 / 0.09);
+  --color-text: #f5f5f7;
+  --color-muted: #9a9aa3;
+
+  --color-blue: #4285f4;
+  --color-blue-hi: #8ab4f8;
+  --color-blue-lo: #1b49b8;
+  --color-red: #ea4335;
+  --color-red-hi: #ff8a80;
+  --color-red-lo: #9e1f17;
+  --color-yellow: #fbbc04;
+  --color-yellow-hi: #ffe082;
+  --color-yellow-lo: #b87800;
+  --color-green: #34a853;
+  --color-green-hi: #81c995;
+  --color-green-lo: #0f6b33;
+
+  --font-display: var(--font-gs-flex), system-ui, sans-serif;
+  --font-mono: var(--font-gs-code), ui-monospace, monospace;
+
+  --radius-panel: 24px;
+  --radius-card: 20px;
+  --radius-pill: 999px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: dark;
+  scroll-padding-top: 88px;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: var(--font-display);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Width axis carries emphasis in the same family (the optical-size axis is left out to keep the font at 116 KB). */
+.display {
+  letter-spacing: -0.035em;
+}
+.display-em {
+  font-style: normal;
+  font-variation-settings: "wdth" 128, "wght" 640;
+  letter-spacing: -0.02em;
+}
+
+/* Data labels only (date, venue, session counts, times). Never section eyebrows. */
+.label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+/* Web glassmorphism (approximation, not Apple Liquid Glass). */
+.glass {
+  position: relative;
+  background: rgb(255 255 255 / 0.06);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 24px 80px rgb(0 0 0 / 0.45);
+}
+.glass::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: -1px;
+  height: 1px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--color-blue), var(--color-green), var(--color-yellow), var(--color-red));
+  opacity: 0.35;
+  pointer-events: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--color-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Keyboard focus is always visible. */
+:focus-visible {
+  outline: 2px solid var(--color-blue-hi);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Slab sheen: the moving highlight inside GlassSlabs. */
+@keyframes sheen {
+  0%, 100% { transform: translateY(-12%); }
+  50% { transform: translateY(12%); }
+}
+.sheen {
+  animation: sheen 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .sheen { animation: none; }
 }
