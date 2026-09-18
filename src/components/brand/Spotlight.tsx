@@ -1,69 +1,57 @@
 "use client";
 
+import Image from "next/image";
 import { motion, type MotionValue } from "motion/react";
 
 /**
- * Amber stage light: three soft beams (blur on the parent, clip-path on the child
- * so the edges stay soft) plus a hot floor line and reflection. `x` moves the
- * whole rig so it can follow a hovered card.
+ * Amber stage light. The beam is a single pre-rendered texture
+ * (public/brand/spotlight/cone.webp, built by `npm run slabs` from three
+ * concentric blurred cones baked into one canvas) that only ever moves via
+ * the `x` spring: it never resizes and carries no live `filter`, which is
+ * what used to make this section stutter.
+ *
+ * The rig is sized and placed by its caller so the beam *lands on the row of
+ * speaker cards* and pools immediately under them. The earlier version ran
+ * the beam past the cards to a hot line a third of a viewport below, so the
+ * light appeared to belong to nothing.
  */
 export function Spotlight({ x }: { x: MotionValue<number> }) {
-  const beam = (w: string, blur: number, clip: string, opacity = 1, core = false) => (
+  return (
     <motion.div
       aria-hidden="true"
-      className="absolute left-1/2 top-[-14%] h-[104%] -translate-x-1/2"
-      style={{
-        width: w,
-        x,
-        filter: `blur(${blur}px)`,
-        opacity,
-        maskImage: "linear-gradient(to right, transparent, #000 40% 60%, transparent)",
-        WebkitMaskImage: "linear-gradient(to right, transparent, #000 40% 60%, transparent)",
-      }}
+      // Anchored to the card row but reaching well above it, so the narrow tip
+      // starts up near the heading and the wide base lands on the cards.
+      className="pointer-events-none absolute inset-x-0 top-[-38vh] h-[calc(100%+38vh)]"
+      style={{ x }}
     >
-      <i
-        className="absolute inset-0 block"
-        style={{
-          clipPath: clip,
-          background: core
-            ? "linear-gradient(to bottom, rgba(255,230,150,0) 0%, rgba(255,230,150,.26) 45%, rgba(255,242,200,.9) 100%)"
-            : "linear-gradient(to bottom, rgba(251,188,4,0) 0%, rgba(251,188,4,.14) 40%, rgba(255,205,80,.40) 100%)",
-        }}
-      />
+      <div className="absolute left-1/2 top-0 h-full w-[min(56vw,680px)] -translate-x-1/2">
+        <Image src="/brand/spotlight/cone.webp" alt="" fill sizes="680px" className="object-fill" />
+      </div>
     </motion.div>
-  );
-
-  return (
-    <>
-      {beam("max(64vw, 420px)", 34, "polygon(47% 0, 53% 0, 100% 100%, 0 100%)", 0.75)}
-      {beam("max(36vw, 240px)", 18, "polygon(45% 0, 55% 0, 100% 100%, 0 100%)")}
-      {beam("max(15vw, 100px)", 9, "polygon(41% 0, 59% 0, 100% 100%, 0 100%)", 1, true)}
-    </>
   );
 }
 
-export function SpotlightFloor({ x }: { x: MotionValue<number> }) {
+/**
+ * The pool of light where the beam lands: a tight ellipse plus a hot rim,
+ * sitting directly under the card row. Static gradients, moved only by the
+ * same spring as the beam.
+ */
+export function SpotlightPool({ x }: { x: MotionValue<number> }) {
   return (
-    <div aria-hidden="true" className="relative h-[26vh] w-full overflow-hidden">
-      <motion.span
-        className="absolute left-1/2 top-0 h-[3px] w-[30vw] -translate-x-1/2 rounded-pill"
+    <motion.div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-full h-[18vh]" style={{ x }}>
+      <span
+        className="absolute left-1/2 top-0 h-[2px] w-[min(34vw,440px)] -translate-x-1/2 -translate-y-1/2 rounded-pill"
         style={{
-          x,
           background: "#fff1c2",
-          filter: "blur(1px)",
-          boxShadow: "0 0 26px 8px rgba(255,215,90,.8), 0 0 110px 40px rgba(251,188,4,.4), 0 0 260px 110px rgba(251,188,4,.16)",
+          boxShadow: "0 0 24px 6px rgba(255,215,90,.55), 0 0 90px 30px rgba(251,188,4,.25)",
         }}
       />
-      <motion.span
-        className="absolute left-1/2 top-0 h-full w-[60vw] -translate-x-1/2"
+      <span
+        className="absolute left-1/2 top-0 h-full w-[min(62vw,820px)] -translate-x-1/2"
         style={{
-          x,
-          background: "linear-gradient(to bottom, rgba(255,205,80,.34), rgba(251,188,4,.10) 45%, transparent 85%)",
-          maskImage: "radial-gradient(60% 100% at 50% 0%, #000 30%, transparent 100%)",
-          WebkitMaskImage: "radial-gradient(60% 100% at 50% 0%, #000 30%, transparent 100%)",
-          filter: "blur(6px)",
+          background: "radial-gradient(50% 78% at 50% 0%, rgba(255,205,80,.30) 0%, rgba(251,188,4,.09) 45%, transparent 82%)",
         }}
       />
-    </div>
+    </motion.div>
   );
 }

@@ -88,9 +88,14 @@ export function Essentials() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <motion.div {...item} transition={{ duration: 0.6, ease }} className="md:col-span-2">
             <Cell className="h-full">
-              <GlassSlabs side="right" color="blue" intensity={0.5} className="hidden w-[30%] opacity-60 md:block" />
-              <p className="label mb-6">Doors open {EVENT.dateLabel}</p>
-              <Countdown />
+              <GlassSlabs side="right" color="blue" intensity={0.5} className="hidden w-[30%] opacity-50 md:block" />
+              {/* `relative` keeps the copy above the slab: GlassSlabs is absolutely
+                  positioned, and positioned elements paint over static ones whatever
+                  the DOM order. */}
+              <div className="relative md:pr-[32%]">
+                <p className="label mb-6">Doors open {EVENT.dateLabel}</p>
+                <Countdown />
+              </div>
             </Cell>
           </motion.div>
 
@@ -116,7 +121,7 @@ export function Essentials() {
                 referrerPolicy="no-referrer-when-downgrade"
                 className="h-[320px] w-full grayscale invert-[.92] hue-rotate-180 contrast-[.9] md:h-full md:min-h-[360px]"
               />
-              <div className="glass absolute bottom-5 left-5 right-5 rounded-card p-5 md:right-auto md:max-w-[360px]">
+              <div className="glass-live absolute bottom-5 left-5 right-5 rounded-card p-5 md:right-auto md:max-w-[360px]">
                 <p className="display text-2xl font-semibold leading-tight">
                   {EVENT.venue.name}, {EVENT.venue.city}
                 </p>
@@ -130,12 +135,16 @@ export function Essentials() {
 
           <motion.div {...item} transition={{ duration: 0.6, ease, delay: 0.24 }}>
             <Cell className="flex h-full flex-col justify-end">
-              <GlassSlabs side="left" color="green" intensity={0.5} className="w-[40%] opacity-60" />
-              <p className="label mb-3">Last year</p>
-              <p className="display text-[clamp(2.6rem,5vw,4rem)] font-semibold leading-none">
-                <CountUp to={EVENT.counts.registered2025} separator="," duration={1.6} />+
-              </p>
-              <p className="mt-2 text-[15px] text-muted">registered, {EVENT.counts.speakers2025}+ speakers on stage</p>
+              {/* Right side and narrower: the copy owns the left of the cell, so
+                  the number never sits on top of the lit slabs. */}
+              <GlassSlabs side="right" color="green" intensity={0.5} className="w-[32%] opacity-50" />
+              <div className="relative pr-[30%]">
+                <p className="label mb-3">Last year</p>
+                <p className="display text-[clamp(2.6rem,5vw,4rem)] font-semibold leading-none text-text">
+                  <CountUp to={EVENT.counts.registered2025} separator="," duration={1.6} />+
+                </p>
+                <p className="mt-2 text-[15px] text-muted">registered, {EVENT.counts.speakers2025}+ speakers on stage</p>
+              </div>
             </Cell>
           </motion.div>
         </div>

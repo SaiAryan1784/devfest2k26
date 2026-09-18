@@ -65,7 +65,7 @@ export function Footer() {
                 target="_blank"
                 rel="noopener"
                 aria-label={`${label} (opens in new tab)`}
-                className="glass grid size-11 place-items-center rounded-pill text-text transition-colors hover:bg-white/10"
+                className="glass-pill grid size-11 place-items-center rounded-pill text-text transition-colors hover:bg-white/10"
               >
                 <Icon size={20} />
               </a>

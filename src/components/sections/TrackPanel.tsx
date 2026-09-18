@@ -22,9 +22,9 @@ export function TrackPanel({ track, className, sheen = false }: { track: Track; 
       transitionDuration={900}
       style={{ cursor: "default" }}
     >
-      <article className="relative grid min-h-[340px] w-full grid-cols-1 gap-8 p-7 sm:p-10 lg:min-h-[70vh] lg:grid-cols-[1fr_auto] lg:items-end lg:p-12">
-        <GlassSlabs side="left" color={track.color} sheen={sheen} className="hidden w-[34%] lg:block" />
-        <GlassSlabs side="right" color={track.color} sheen={sheen} className="w-[38%] opacity-80 lg:w-[34%] lg:opacity-100" />
+      <article className="relative grid min-h-[340px] w-full grid-cols-1 gap-8 p-7 sm:p-10 lg:min-h-[70vh] lg:grid-cols-[1fr_auto] lg:items-center lg:p-12">
+        <GlassSlabs side="left" color={track.color} sheen={sheen} alive className="hidden w-[34%] lg:block" />
+        <GlassSlabs side="right" color={track.color} sheen={sheen} alive className="w-[38%] opacity-80 lg:w-[34%] lg:opacity-100" />
 
         <div className="relative pr-[24%] lg:pl-[24%] lg:pr-0">
           <Image

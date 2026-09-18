@@ -21,6 +21,11 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/exhaustive-deps": "off",
       "react-hooks/immutability": "off",
+      // These components read a ref's `.current` during render by design
+      // (an imperative, no-re-render animation loop writes to the DOM
+      // directly and reads its own last-written values back) - upstream
+      // architecture, not something we rewrite here.
+      "react-hooks/refs": "off",
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-unused-vars": "off",
       "@next/next/no-img-element": "off",

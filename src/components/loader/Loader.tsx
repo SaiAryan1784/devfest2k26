@@ -100,23 +100,30 @@ export function Loader() {
 
           {choreograph && (
             <>
-              {/* Glow behind the panel shifts from blue toward spectrum as progress fills. */}
+              {/*
+                Glow behind the panel shifts blue toward spectrum. Three static,
+                already-blurred discs cross-fade opacity instead of animating the
+                gradient itself: the blur filter runs once per layer and the
+                compositor handles the rest, so this never repaints per frame.
+              */}
               <motion.div
                 aria-hidden="true"
-                className="absolute h-[60vmin] w-[60vmin] rounded-full"
-                style={{ filter: "blur(70px)" }}
-                initial={{ opacity: 0, background: "radial-gradient(circle, #4285F4 0%, transparent 65%)" }}
-                animate={{
-                  opacity: 0.45,
-                  background: [
-                    "radial-gradient(circle, #4285F4 0%, transparent 65%)",
-                    "radial-gradient(circle, #34A853 0%, transparent 65%)",
-                    "radial-gradient(circle, #FBBC04 0%, transparent 65%)",
-                  ],
-                }}
-                transition={{ opacity: { duration: 0.8 }, background: { duration: 3.2, repeat: Infinity, repeatType: "reverse" } }}
+                className="absolute h-[60vmin] w-[60vmin]"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.8 }}
                 exit={{ opacity: 0, scale: 1.4, transition: { duration: 0.6 } }}
-              />
+              >
+                {["#4285F4", "#34A853", "#FBBC04"].map((color, i) => (
+                  <motion.div
+                    key={color}
+                    className="absolute inset-0 rounded-full"
+                    style={{ background: `radial-gradient(circle, ${color} 0%, transparent 65%)`, filter: "blur(70px)" }}
+                    animate={{ opacity: [0, 0.45, 0] }}
+                    transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut", delay: i * (3.2 / 3) }}
+                  />
+                ))}
+              </motion.div>
 
               <motion.div
                 className="glass relative flex h-[170px] w-[260px] flex-col items-center justify-center gap-5 overflow-hidden rounded-[28px] sm:h-[200px] sm:w-[320px]"

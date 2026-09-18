@@ -356,3 +356,115 @@ Mobile LCP is the hero edge image; the remaining delay is hydration on a throttl
 - Registration link swap when tickets open (`EVENT.links.waitlist`).
 - **Reduced-motion fix (post-commit):** Motion `animate` targets must always be defined. The server renders the hidden `initial` styles (it cannot know the user's preference), so an `animate: undefined` under reduced motion left the nav and hero copy invisible. Now `animate` always has a target and `transition` collapses to `{ duration: 0 }` when reduced motion is on. Verified with `--force-prefers-reduced-motion` in headless Brave.
 - **Anchor navigation with lazy sections:** `AnchorFix` re-aligns the hash target for 1.6 s after any hash change while the document grows (sections above the target mount and push it down). Placeholders are also sized at or above real content height; overestimates never show because a placeholder is replaced before it reaches the viewport.
+
+---
+
+## 16. Smoothness pass and section rework (18 Sep 2026)
+
+Client review of the first build: "the animations are not smooth at all", the Tracks
+card stack "glitching so much", the Stage spotlight not smooth, "not focused" and
+washing out the speaker names, frame rates dropping site-wide, the hero not using
+ReactBits and not distinctive, the floor section "ridiculous", and the nav logo too
+small. This section records what was actually wrong and what replaced it.
+
+### What was costing frames
+
+| # | Cause | Where it was |
+|---|---|---|
+| 1 | Lenis drove the whole window from mid-page and fought `html { scroll-behavior: smooth }` | ReactBits `ScrollStack`, mounted by Tracks |
+| 2 | Every card re-measured with `getBoundingClientRect` on every frame, then rescaled | same |
+| 3 | ~120 live SVG blur-filter regions in the stack (2 `GlassSlabs` per card), re-run whenever a card scaled | `GlassSlabs`, `TrackPanel` |
+| 4 | Full-viewport `mix-blend-overlay` grain, forcing a re-blend against the page on every repaint | `layout.tsx` |
+| 5 | ~25 `backdrop-filter` panels, most over a flat canvas where the blur did nothing visible | `.glass` |
+| 6 | `Prism`: a 100-step raymarch at DPR 2, restarted by any `pointermove` anywhere, on or off screen | hero floor |
+| 7 | `PrismaticBurst` at DPR 2 | final CTA |
+| 8 | Three 64vw beams with live `filter: blur()` + masks, all moving on a spring | `Spotlight` |
+| 9 | `Magnet` running `window.mousemove` → `setState` with the hero off screen | hero CTAs |
+| 10 | Always-on rAF loops (ShinyText repainting a 7rem `background-clip: text` heading off screen) | final CTA |
+
+### What replaced them
+
+- **Tracks now use native `position: sticky`** (`TrackStack.tsx`). Cards pin at 12vh,
+  stepping 24px each, with a higher `z-index` per card so later cards cover earlier
+  ones. One `useScroll` on the section drives every card's shrink through
+  `useTransform`; nothing measures the DOM on scroll. Lenis and `ScrollStack.tsx` are
+  gone, and `lenis` was uninstalled.
+- **Slabs render as posters.** `src/components/brand/slabs.ts` holds the geometry and
+  emits the SVG; `scripts/render-slabs.mts` rasterises one WebP per colour/side into
+  `public/brand/slabs/` (`npm run slabs`, ~40 KB each). `GlassSlabs` takes
+  `poster` (default true) and keeps the live filtered SVG for any future use of the
+  sheen. Node's own type stripping runs the script, so there is no ts-node/tsx dep.
+- **`.glass` is solid; `.glass-live` is the one that blurs**, and it carries the whole
+  recipe so a panel can never end up with a blur and no surface. `.glass-pill` is the
+  pill variant. Only the venue card (over the map) and the mobile menu blur now.
+- **WebGL glows run at DPR 1.** `Prism` is gone; the hero floor is ReactBits
+  `LightRays` (`RaysFloor.tsx`), tinted by the active track and pausing itself
+  off-screen. `PrismaticBurst` capped at 1.
+- **Grain lost `mix-blend-overlay`.** Pointer listeners in the hero (`Magnet`,
+  `EdgeExports` parallax) are gated on `useInView`; `ShinyText` is disabled off-screen.
+
+### Hero: "light parts for you"
+
+The loader's hand-off now opens the hero: the two lit edges slide apart from the
+centre (`EdgeExports`, 1.6s). The headline uses ReactBits `VariableProximity` on
+Google Sans Flex's own width axis, so letters swell toward the cursor; it is plain
+text under reduced motion, on touch, and until the loader is done, so the LCP text is
+never blocked. Four track dots in the facts row preview a track: hovering one sets the
+shared accent, which recolours the edges, the lockup pill and the floor rays, and
+pauses the auto-cycle (`hold` in `lib/accent.ts`). `SplitText` and GSAP left with it.
+
+### Stage
+
+The beam is one pre-rendered texture (`public/brand/spotlight/cone.webp`, same
+script), moved only by the existing spring. It is anchored to the card row and reaches
+up above it, so the light **lands on the speakers** and pools just under them
+(`SpotlightPool`) instead of running past them to a hot line a third of a viewport
+below. Cards are solid (`!bg-surface/85`), the hovered card lifts to full brightness
+with a warm rim and the rest dim to 0.6, and a static vignette keeps the room dark.
+
+### Floor
+
+Was nine identical cards in a 3×3 grid. Now a bento: the two "New for 2026" items lead
+as features (badge, large bleeding glyph, `lg:col-span-3`), six standard tiles follow
+(`lg:col-span-2`), and the photo-ops item closes it as a full-width banner. Each tile
+carries one of the four brand colours, shown on hover as an edge wash, a border tint
+and a soft glow.
+
+### Nav
+
+ReactBits `PillNav` (GSAP: a circle fills each pill from the bottom while the label
+swaps) supplies the links, hamburger and mobile popover. Patched for this project:
+`react-router-dom` dropped (every link here is a hash anchor, which upstream already
+routed to a plain `<a>`), and `logo` takes a ReactNode so the real lockup can be used.
+The lockup is 150px wide (128px on mobile), up from 104px, and the header is 84px tall
+with `scroll-padding-top: 104px` to match. `gsap` is back as a dependency for it;
+`@gsap/react` is not.
+
+### Two hydration bugs found and fixed during this pass
+
+`useReducedMotion()` resolves after mount, so a Motion `initial`/`animate` **value**
+that branches on it renders one thing on the server and another on a client whose OS
+already prefers reduced motion. That is a hydration mismatch, and it only shows in dev
+(production React does not warn), which is why the earlier `next start` verification
+missed it. Both sites are fixed and the rule is in CLAUDE.md: only `transition` may
+branch on `reduce`; state that feeds an animate value gets gated in the handler.
+
+### Measurements (this machine, production build, Playwright Chromium)
+
+| | Performance | A11y | Best practices | SEO | LCP | CLS | TBT |
+|---|---|---|---|---|---|---|---|
+| Desktop | 94 | 100 | 100 | 100 | 1.0 s | 0 | 100 ms |
+| Mobile (Lighthouse default throttling) | 86 | 100 | 100 | 100 | 4.1 s | 0 | 10 ms |
+
+Not directly comparable with the 18 Sep figures above: that run was on a different
+machine with nothing else on it, this one shared a CPU with a dev server and a browser
+harness. The LCP subparts are the useful number here: TTFB 9ms, load delay 5ms, load
+9ms, render delay 151ms, so the hero edge image itself is not slow. Re-run Lighthouse
+on the reference machine before trusting the absolute scores.
+
+### Still open from this pass
+
+- The `VariableProximity` swell has only been checked in screenshots, not with a real
+  cursor on a real display; watch for line reflow at the largest clamp size.
+- Lighthouse desktop moved 98-99 → 94 and mobile 91 → 86 on a noisy machine. Worth one
+  clean re-run before the next handover.

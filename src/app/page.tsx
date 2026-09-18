@@ -19,7 +19,7 @@ export default function Page() {
       <main id="main">
         <Hero />
         {/* Anchor targets stay in the static HTML; the heavy section bodies mount as they approach. */}
-        <LazyMount id="tracks" minHeight="320vh">
+        <LazyMount id="tracks" minHeight="340vh">
           <Tracks />
         </LazyMount>
         <LazyMount id="floor" minHeight="150vh">

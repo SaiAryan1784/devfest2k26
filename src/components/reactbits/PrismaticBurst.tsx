@@ -265,7 +265,9 @@ const PrismaticBurst = ({
     const container = containerRef.current;
     if (!container) return;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Capped at 1: this is a soft background glow behind a gradient mask, not
+    // a detail surface, so device pixel ratio buys nothing but GPU time.
+    const dpr = Math.min(window.devicePixelRatio || 1, 1);
     const renderer = new Renderer({ dpr, alpha: false, antialias: false });
     rendererRef.current = renderer;
 

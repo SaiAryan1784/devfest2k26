@@ -11,6 +11,7 @@ npm install
 npm run dev        # http://localhost:3000
 npm run build && npm run start
 npm run lint
+npm run slabs      # regenerate the glass-slab and spotlight posters
 ```
 
 Append `?noloader=1` to skip the intro loader while testing.

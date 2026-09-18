@@ -30,7 +30,7 @@ export function Button({ href, variant = "primary", size = "md", external, class
         "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-pill font-medium transition-colors duration-300",
         size === "md" ? "h-12 px-6 text-[15px]" : "h-10 px-[18px] text-sm",
         variant === "primary" && "bg-text text-[#0a0a0c] hover:bg-white",
-        variant === "ghost" && "glass text-text [text-shadow:0_1px_12px_rgba(0,0,0,.6)] hover:bg-white/10",
+        variant === "ghost" && "glass-pill text-text [text-shadow:0_1px_12px_rgba(0,0,0,.6)] hover:bg-white/10",
         className,
       )}
     >

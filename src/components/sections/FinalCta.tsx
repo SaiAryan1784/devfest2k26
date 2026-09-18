@@ -48,7 +48,15 @@ export function FinalCta() {
           viewport={{ once: true, amount: 0.4 }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
         >
-          <ShinyText text="See you on October 10." color="#f5f5f7" shineColor="#ffffff" speed={4} spread={90} className="!inline" />
+          <ShinyText
+            text="See you on October 10."
+            color="#f5f5f7"
+            shineColor="#ffffff"
+            speed={4}
+            spread={90}
+            className="!inline"
+            disabled={!inView}
+          />
         </motion.h2>
         <ClickSpark sparkColor="#fff" sparkSize={12} sparkRadius={28} sparkCount={10} duration={500}>
           <Button href={EVENT.links.waitlist} className="h-14 px-8 text-base">
