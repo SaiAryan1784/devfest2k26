@@ -5,20 +5,22 @@ import { animate, motion, useMotionValue, useMotionValueEvent, useReducedMotion,
 import { EVENT } from "@/data/event";
 import { useLoaderState } from "@/lib/loader-state";
 import { Z } from "@/lib/z";
-import { IgnitionStage, type Flip } from "./IgnitionStage";
+import { ConvergenceStage, GLIDE_AT, type Flip } from "./ConvergenceStage";
 import { useAssetProgress } from "./useAssetProgress";
 
 const KEY = "devfestLoaderShown";
 /** Assets ready within this: never show (no flash on a warm cache). */
 const SKIP_WINDOW = 300;
-/** The pacing clock: the line takes at least this long to reach the edges. */
-const HOLD_MS = 2600;
-/** Into the cut: when the hero is told to start its own entrance. */
-const FINISH_AT_MS = 250;
+/** The pacing clock: drawn progress takes at least this long to reach 1. */
+const HOLD_MS = 3000;
 /** Into the cut: when the black backdrop has fully dissolved. */
 const BACKDROP_MS = 600;
-/** Fractions of the clock after which the slate's three words may light. */
-const SLOT_AT = [0.35, 0.6, 0.85];
+/**
+ * Into the cut: when the hero is told to start its own entrance. The glide
+ * begins at GLIDE_AT of the 1.5 s cut and takes 0.9 s; the hero lockup fades
+ * in over 0.9 s from finish(), so it is at about 0.97 when the copy lands.
+ */
+const FINISH_AT_MS = Math.round(1.5 * GLIDE_AT * 1000) + 250;
 
 type Phase = "init" | "show" | "cut" | "fade" | "hide";
 
@@ -32,19 +34,17 @@ function releaseBody() {
 }
 
 /** Where the loader's lockup is now versus where the hero's rests. Null if the hero is not on screen. */
-function measure(el: HTMLElement | null, dollyScale: number): Flip | null {
+function measure(el: HTMLElement | null): Flip | null {
   const target = document.querySelector<HTMLElement>("[data-hero-lockup]");
   if (!el || !target) return null;
   const from = el.getBoundingClientRect();
   const to = target.getBoundingClientRect();
   if (from.width === 0 || to.width === 0 || to.bottom < 0 || to.top > window.innerHeight) return null;
-  // The glide wrapper sits inside the dolly group, so a local translate moves the
-  // screen by dollyScale times as much; the scale is unaffected by the ancestor.
-  return { x: (to.left - from.left) / dollyScale, y: (to.top - from.top) / dollyScale, scale: to.width / from.width };
+  return { x: to.left - from.left, y: to.top - from.top, scale: to.width / from.width };
 }
 
 /**
- * Ignition: the site's title sequence.
+ * Convergence: the site's title sequence.
  *
  * Opaque from the first server-rendered frame so a cold visit never flashes the
  * page, then the client decides within 300 ms whether to run the sequence or
@@ -53,9 +53,10 @@ function measure(el: HTMLElement | null, dollyScale: number): Flip | null {
  * useReducedMotion() only resolves after mount; the phases still run to `hide`.
  *
  * Phases: init → show → cut → hide (the sequence) or init → fade → hide (skip).
- * `show` holds until the line has reached both edges, which by construction is
- * at or after the pacing clock and real asset progress. `cut` dissolves the
- * backdrop, tells the hero to begin, and glides this lockup onto the hero's.
+ * `show` holds until drawn progress reaches 1, which by construction is at or
+ * after the pacing clock and real asset progress. `cut` dissolves the backdrop,
+ * sharpens the mark over the light that traced it, tells the hero to begin,
+ * and glides the mark onto the hero's copy.
  *
  * `?loader=1` forces the sequence (client demos, QA); `?noloader=1` skips it.
  */
@@ -65,14 +66,12 @@ export function Loader() {
   const setShowing = useLoaderState((s) => s.setShowing);
   const { value, tasks, done } = useAssetProgress();
   const [phase, setPhase] = useState<Phase>("init");
-  const [slot, setSlot] = useState(0);
   const [flip, setFlip] = useState<Flip | null>(null);
   const lockupRef = useRef<HTMLDivElement>(null);
   const cutRef = useRef(false);
 
   const progress = useSpring(value, { stiffness: 80, damping: 20 });
   const clock = useMotionValue(0);
-  const dolly = useMotionValue(1);
   // What is drawn: never ahead of what has loaded, never ahead of the choreography.
   const shown = useTransform([progress, clock], (latest: number[]) => Math.min(latest[0], latest[1]));
 
@@ -96,35 +95,23 @@ export function Loader() {
     return () => clearTimeout(t);
   }, [done, phase]);
 
-  // The hold: the pacing clock and the slow push-in run while the stage is up.
-  // Telling the store first lets the hero drop to its hidden state under the
-  // opaque gate, ready to enter on finish().
+  // The hold: the pacing clock runs while the stage is up. Telling the store
+  // first lets the hero drop to its hidden state under the opaque gate, ready
+  // to enter on finish().
   useEffect(() => {
     if (phase !== "show") return;
     setShowing(true);
     clock.set(0);
-    dolly.set(1);
     const c = animate(clock, 1, { duration: HOLD_MS / 1000, ease: "linear" });
-    const d = animate(dolly, 1.03, { duration: HOLD_MS / 1000, ease: "easeOut" });
-    return () => {
-      c.stop();
-      d.stop();
-    };
-  }, [phase, clock, dolly, setShowing]);
+    return () => c.stop();
+  }, [phase, clock, setShowing]);
 
-  // The slate lights on integer slots, never on a float per frame.
-  useMotionValueEvent(clock, "change", (v) => {
-    const s = SLOT_AT.filter((t) => v >= t).length;
-    setSlot((prev) => (prev === s ? prev : s));
-  });
-
-  // The cut: the moment the line reaches both edges. The hero's lockup is
+  // The cut: the moment drawn progress reaches 1. The hero's lockup is
   // measured once, here, before anything moves.
   useMotionValueEvent(shown, "change", (v) => {
     if (v < 0.99 || phase !== "show" || cutRef.current) return;
     cutRef.current = true;
-    dolly.stop();
-    setFlip(measure(lockupRef.current, dolly.get()));
+    setFlip(measure(lockupRef.current));
     setPhase("cut");
   });
 
@@ -169,11 +156,9 @@ export function Loader() {
         transition={{ duration: BACKDROP_MS / 1000, ease: "easeInOut" }}
       />
       {(phase === "show" || phase === "cut") && (
-        <IgnitionStage
+        <ConvergenceStage
           phase={phase}
           shown={shown}
-          dolly={dolly}
-          slot={slot}
           tasks={tasks}
           flip={flip}
           lockupRef={lockupRef}

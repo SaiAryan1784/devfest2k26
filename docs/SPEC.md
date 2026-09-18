@@ -184,26 +184,28 @@ Rules: `page.tsx` and every section are Server Components; anything using Motion
 
 Layout-family check: gate, nav, corridor hero, scroll-stack, catalogue grid, spotlight grid, timeline, bento, logo loop, burst CTA, footer → no repeats, no zigzag, one marquee, one pinned section, zero section eyebrows.
 
-## 7. Loader spec: Ignition (rewritten 19 Sep 2026; the glass-panel gate it replaces is in the git history)
+## 7. Loader spec: Convergence (19 Sep 2026; the glass-panel gate and the "Ignition" line sequence it replaced are in the git history)
 
-Components: `components/loader/Loader.tsx` (state machine, rendered in `layout.tsx` above `{children}`), `IgnitionStage.tsx` (everything on screen), `LockupReveal.tsx` (the mark assembling itself), `useAssetProgress.ts` (real progress as three named tasks). Geometry is shared with the static lockup through `components/brand/lockup-paths.ts`.
+Components: `components/loader/Loader.tsx` (state machine, rendered in `layout.tsx` above `{children}`), `ConvergenceStage.tsx` (frame, captions, readout, the mark and its glide), `Convergence.tsx` (the canvas light field), `useAssetProgress.ts` (real progress as three named tasks). Target geometry comes from `components/brand/lockup-paths.ts`, the same data the static `Lockup` renders from.
 
 Show logic:
 - Runs once per session (`sessionStorage.devfestLoaderShown`) and only when the assets take longer than 300 ms. `?loader=1` forces it (demos, QA); `?noloader=1` skips it.
 - Under `prefers-reduced-motion` the gate never paints: `.loader-gate { display: none }` in the globals.css reduced-motion block, because `useReducedMotion()` resolves after mount. The phases still run to `hide` and `finish()` fires at once.
-- Progress is `useAssetProgress()`: `type` (`document.fonts.ready`), `light` (the hero's spectrum export decoded), `stage` (`window.load`). What is drawn is `min(progress, clock)`, the clock running linearly over 2.6 s from the moment the stage mounts, so the line never finishes before the choreography and never claims more than has loaded.
+- Progress is `useAssetProgress()`: `type` (`document.fonts.ready`), `light` (the hero's spectrum export decoded), `stage` (`window.load`). What is drawn is `min(progress, clock)`, the clock running linearly over 3.0 s from the moment the stage mounts, so the picture never resolves before the choreography and never claims more than has loaded.
 - While visible: body `aria-busy="true"` and `overflow: hidden`; root `role="status" aria-live="polite"` with visually hidden "Loading DevFest Noida 2026"; the stage is `aria-hidden`.
 - The hero is painted under the opaque gate until the loader commits to the sequence (`useLoaderState.showing`), so the browser records the headline's LCP at first paint; it then drops to its hidden state under the gate and enters on `finish()`. On the skip path it never hides and the gate's dissolve is the entrance.
 
-Phases: `init → show → cut → hide` (the sequence) or `init → fade → hide` (skip). No AnimatePresence: the cut runs three things on three clocks.
+Phases: `init → show → cut → hide` (the sequence) or `init → fade → hide` (skip). No AnimatePresence: the cut runs several things on their own clocks.
 
-Sequence (seconds from the stage mounting):
-1. **The line.** A 2 px spectrum hairline draws from the exact centre outward (`scaleX`, origin 50%). A halo (200 px, spectrum, elliptical mask), a near-white core (48 px) and a faint floor reflection sit on it and breathe by opacity (`.loader-breathe`). Static gradients that scale; never a filter.
-2. **The mark**, `w-[min(560px,72vw)]`, 28 px above the line: brackets draw on (`pathLength`, white 1.25-unit stroke, 0.15 to 1.05) and fill solid (0.95 to 1.4); the seven wordmark letters rise in (`staggerChildren 0.045`, from 0.6); the capsule, Noida and the year rise together (0.9 to 1.5); the 2026 pill fills with amber from the same `min(progress, clock)` value, as an HTML div overlay because transforms on SVG children are not composited. At 100% it is pixel-equivalent to the hero's lockup.
-3. **The slate.** `Type · Light · Stage` in `.label` mono under the line; each lights (opacity 0.35 to 1 plus a `DecryptedText` scramble) once its task has resolved and the clock has passed 0.35 / 0.6 / 0.85. Corner captions (`{organiser} presents`, the date, the region), hidden below `sm`. The centre group dollies 1 to 1.03 across the hold.
-4. **The cut**, when the line reaches both edges: halo and core bloom upward (`scaleY` 5 and 16, to opacity 0, within 0.6 s); backdrop 1 to 0 over 0.6 s revealing the hero with its edges still closed; `finish()` at 0.25 s; body released at 0.6 s; the loader's lockup glides onto the hero lockup's measured rect (FLIP, 1.0 s, `[0.16,1,0.3,1]`, fading over its last quarter) and the gate unmounts when it lands. The hero's accent auto-cycle is gated on `done` so the pill colours match at the hand-off.
+The picture (canvas 2D at device-pixel-ratio 1, additive compositing, one translucent fill per frame for the trails; no image files, no WebGL, no filters; different every visit):
+1. **Flow** (drawn progress 0 to 0.5). 340 streaks (170 below 768 px) in the four track colours, each a soft glow under a bright core, travel in two opposing lanes that bend with a slow field: long-exposure night traffic. Wrapping at the edges keeps the lanes full.
+2. **Pull** (0.5 to 0.95, smoothstepped). Every streak owns one point on the lockup's outline (the brackets, the seven letters, the capsule), sampled evenly along the real path data and mapped onto the box the mark will occupy; its colour is chosen by where that point sits, left to right, in the site's spectrum order (blue, green, yellow, red). Attraction toward the point grows with progress and eases as it nears; a swirl about the centre peaks mid-pull and dies away; trails lengthen as the pull tightens.
+3. **Trace** (from 0.8, once within 6 px). A captured streak runs along the outline, so by 1 the mark is drawn in light.
+4. **The cut** (1.5 s). The mark itself (`<Lockup>`, amber pill) fades in over the traced outline during the first 0.375 s while the canvas dissolves (0.2 to 0.65 s) and its loop stops; the backdrop dissolves over 0.6 s revealing the hero with its edges still closed; at 0.6 s the mark glides onto the hero lockup's measured rect (FLIP, 0.9 s, `[0.16,1,0.3,1]`), fading over its last 15%; `finish()` fires at 0.85 s so the hero's copy is at about 0.97 when it lands; body released at 0.6 s; the gate unmounts on landing. The hero's accent auto-cycle is gated on `done` so the pill colours match at the hand-off.
 
-Rules: transform and opacity only; no filter, no backdrop-filter, no WebGL (shader compile stalls first paint); Motion only; `Z.loader` is 55, under the film grain on purpose.
+Frame: three `.label` captions (`{organiser} presents`, the date, the region), hidden below `sm`, and a mono readout `047 / 100` bottom-left written straight to the DOM from the MotionValue (no renders). All fade at the cut. The lockup appears nowhere before the cut.
+
+Rules: transform and opacity only outside the canvas; the canvas loop runs only while the stage is mounted and stops itself 0.8 s after the cut; `Z.loader` is 55, under the film grain on purpose.
 
 ## 8. Data shapes (with placeholder content)
 
@@ -562,26 +564,25 @@ six schedule slots at opacity 1 under `reducedMotion: "reduce"`.
 - Partners will look right once there are more than four logos; the data file takes
   them by slug.
 
-## 18. Ignition loader (19 Sep 2026)
+## 18. Convergence loader (19 Sep 2026)
 
-The glass-panel loader (a 320×200 widget with four pills, a shimmer and three blurred discs) was replaced with a full-bleed title sequence built from light, after the client asked for a premium cinematic loader. The picture is the brand's own: the moodboard's thin horizon of light that blooms upward. Spec in §7.
+The glass-panel loader (a 320×200 widget with four pills, a shimmer and three blurred discs) was replaced twice in one day. The first replacement, "Ignition", staged the moodboard's horizon of light around the lockup; the client's reaction was that it leaned on images and the logo rather than being a loader of its own, and asked for something custom, unique and code-drawn, with the lockup only at the very end. The second, "Convergence", is what shipped. Spec in §7.
 
-- **Everything in the title card becomes something in the hero.** The line blooms into the light that reveals the page; the lit slab edges are revealed closed and open on `finish()`; the lockup glides onto the hero's, measured once at the cut, and lands within 0.02 px at 1440 and 390 (Playwright, rAF-sampled rect against the hero's).
-- **Progress is honest and paced.** Drawn progress is `min(real, clock)`. With the hero image delayed 4 s the line stalls at one third (the load event also waits on that image) and the slate's LIGHT and STAGE stay unlit until it arrives; the cut then runs and the gate leaves at 5.9 s.
-- **Lockup geometry moved to `lockup-paths.ts`**, generated from the original path data. `Lockup` renders from it with byte-identical output (checked by diffing the hero SVG's `outerHTML` before and after).
-- **Two fixes found on the way.** The hero's accent auto-cycle did not know about the loader (`useInView` cannot see the gate), so on a slow network the hero pill could be blue when the amber loader copy landed; it now waits for `done`. And the old gate still painted one black frame under reduced motion; it is now hidden by the stylesheet before it can paint.
-- **LCP.** The hero is painted under the opaque gate until the loader commits to the sequence, so the headline's LCP is recorded at first paint rather than after the hold. Speed Index still sees the sequence on Lighthouse's cold profile; real visitors see it once per session, and `?noloader=1` remains the comparison path.
-- **Not used, and why:** any shader (compile cost on first paint), blurred discs or `GradualBlur` (animated filters), `SplitText` or `Shuffle` (GSAP outside a vendored component), a percentage counter (the tired default for this kind of intro), the old glass panel and pills (a widget, not a title card; the glass here is the lit slab edges the cut reveals).
-- `?loader=1` forces the sequence; `?noloader=1` skips it. README updated, and its stale venue line fixed.
+- **A picture with a story.** Streaks of light in the four track colours flow like night traffic across Delhi, are pulled inward, and trace the DevFest mark: every builder in Delhi NCR converging on one day. Only then does the real lockup sharpen over the light and glide into the hero, landing within 0.02 px (measured, rAF-sampled rect against the hero's).
+- **Nothing here is an image.** The field is Canvas 2D; targets are sampled from the lockup's own path data (`lockup-paths.ts`, also what the static `Lockup` renders); colours come from the slab palette. No WebGL (shader compile stalls first paint), no filters, no ReactBits component in the loader.
+- **Progress is honest and paced.** Drawn progress is `min(real, clock)`. With the hero image delayed 4 s the picture parks in the flow phase at one third (the load event also waits on that image) and the readout with it; the pull and the cut run when it arrives.
+- **Kept from the earlier passes:** the phase machine, the reduced-motion gate hidden by the stylesheet, the hero painted under the gate for LCP, the accent auto-cycle gated on `done`, `Z.loader` under the grain, `EVENT.organiser`, and `?loader=1`.
+- **Removed:** `IgnitionStage`, `LockupReveal`, the vendored `DecryptedText` (no longer used) and the `.loader-breathe` keyframes.
 
 ### Measurements (production build, Playwright Chromium, 19 Sep 2026)
 
 | Check | Result |
 |---|---|
-| Hand-off delta, loader lockup vs hero lockup, 1440 and 390 | 0.00 / 0.00 px left and top, 0.00 width, 0.01 height |
+| Hand-off delta, loader lockup vs hero lockup, 1440 and 390 | 0.00 px left, top and width, 0.01 px height |
 | Gate under reduced motion, first 20 rendering frames | `display: none` on every frame; stage never mounted; hero at opacity 1 within 250 ms |
 | Warm reload | gate gone in about 0.8 s including navigation; stage never mounted |
-| Hero image delayed 4 s | line parked at 0.333, LIGHT and STAGE unlit; cut runs when it arrives; gate gone at 5.9 s |
-| Lighthouse desktop, default / `?noloader=1` / `?loader=1` | 100 / 100 / 100, LCP 0.8 s in all three (the hero is painted under the gate) |
-| Lighthouse mobile, default / `?loader=1` | 88 / 88, LCP 4.0 s from the hero edge image, same band as the last pass (86) |
-| Console and page errors across every run | none |
+| Hero image delayed 4 s | readout parked at 033 in the flow phase; pull, trace and cut run when it arrives; gate gone at 6.5 s |
+| Lighthouse desktop, default / `?loader=1` | 100 / 99, LCP 0.8 s in both (the hero is painted under the gate) |
+| Lighthouse mobile, `?loader=1` | 87, LCP 4.0 s from the hero edge image, same band as before the loader work (86) |
+| Console and page errors across every run | none (two headless-Chromium WebGL driver notices from the hero rays, not page errors) |
+| Cold-visit cost | 0.3 s decide + max(assets, 3.0 s) + 1.5 s cut; once per session |

@@ -178,21 +178,11 @@ body {
   animation: slab-breathe 6s ease-in-out infinite;
 }
 
-/* The loader's halo and core breathe while the line draws. Opacity only. */
-@keyframes loader-breathe {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
-.loader-breathe {
-  animation: loader-breathe 2.4s ease-in-out infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .sheen,
   .slab-travel,
-  .slab-breathe,
-  .loader-breathe {
+  .slab-breathe {
     animation: none;
   }
   /*
