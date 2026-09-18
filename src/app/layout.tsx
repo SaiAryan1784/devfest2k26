@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Google_Sans_Flex, Google_Sans_Code } from "next/font/google";
 import { EVENT } from "@/data/event";
 import { Loader } from "@/components/loader/Loader";
+import { Z } from "@/lib/z";
 import "./globals.css";
 
 // Both fonts are self-hosted by next/font at build time. The width axis alone
@@ -59,8 +60,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Film grain, fixed and inert so it never repaints with scroll. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed inset-0 z-[60] opacity-[.04]"
+          className="pointer-events-none fixed inset-0 opacity-[.04]"
           style={{
+            zIndex: Z.grain,
             backgroundImage:
               "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")",
           }}

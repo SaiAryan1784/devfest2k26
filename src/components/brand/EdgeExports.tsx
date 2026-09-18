@@ -35,15 +35,18 @@ export function EdgeExports({ heroRef }: { heroRef: RefObject<HTMLElement | null
   const shown = useRef<TrackColor>("spectrum");
 
   // Auto-cycle: advances the shared accent forward, paused off-screen, under
-  // reduced motion, or while a track dot is holding the current colour.
+  // reduced motion, while a track dot is holding the current colour, and until
+  // the loader has handed off (useInView cannot see the gate above the hero,
+  // and the loader lands its amber lockup on this one, so the colours must
+  // still match at that moment).
   useEffect(() => {
-    if (reduce || !inView || hold) return;
+    if (reduce || !inView || hold || !ready) return;
     const t = setInterval(() => {
       const i = ORDER.indexOf(accent);
       setAccent(ORDER[(i + 1) % ORDER.length]);
     }, CYCLE_MS);
     return () => clearInterval(t);
-  }, [reduce, inView, hold, accent, setAccent]);
+  }, [reduce, inView, hold, ready, accent, setAccent]);
 
   // Whenever the shared accent changes, from the cycle above or a hovered
   // track dot, decode the next export and cross-fade the hidden slot.

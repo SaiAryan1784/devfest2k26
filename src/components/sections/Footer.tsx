@@ -30,7 +30,7 @@ export function Footer() {
           <p className="mt-6 text-[15px] text-muted">
             Organised by{" "}
             <a href={EVENT.links.community} target="_blank" rel="noopener" className="text-text underline-offset-4 hover:underline">
-              GDG Noida<span className="sr-only"> (opens in new tab)</span>
+              {EVENT.organiser}<span className="sr-only"> (opens in new tab)</span>
             </a>
           </p>
         </div>

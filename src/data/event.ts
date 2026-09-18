@@ -3,6 +3,7 @@ export type TrackColor = "blue" | "red" | "yellow" | "green" | "spectrum";
 export const EVENT = {
   name: "DevFest Noida 2026",
   shortName: "DevFest Noida",
+  organiser: "GDG Noida",
   year: 2026,
   // IST. Doors open at 9:00.
   date: "2026-10-10T09:00:00+05:30",

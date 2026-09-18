@@ -119,7 +119,7 @@ src/
       Button.tsx         variants primary (white pill, near-black text) / ghost (glass pill). Focus ring: 2px offset ring in --color-blue-hi.
       Container.tsx  SectionHeading.tsx  MotionSafe.tsx (wraps useReducedMotion)
   lib/
-    countdown.ts  z.ts (Z = { grain: 60, nav: 40, loader: 70, overlay: 50 })  cn.ts
+    countdown.ts  z.ts (Z = { nav: 40, overlay: 50, loader: 55, grain: 60 })  cn.ts
   fonts/                 GoogleSansFlex-*.woff2, GoogleSansCode-*.woff2
 public/brand/
   exports/{spectrum,blue,red,yellow,green}.webp  (converted from the PNGs, keep PNG originals in docs/reference/)
@@ -170,7 +170,7 @@ Rules: `page.tsx` and every section are Server Components; anything using Motion
 
 | # | Section | Layout family | Motion (library) | ReactBits |
 |---|---|---|---|---|
-| 0 | **Loader** | full-screen glass gate | Motion only (§7) | none |
+| 0 | **Loader** | full-bleed title sequence built from light (§7) | Motion only | `DecryptedText` |
 | 1 | **Nav** | 72px, logo left (40px lockup), 5 links, "Join the waitlist" pill; becomes glass with `backdrop-blur` after 40px scroll (`useScroll` → `useTransform` opacity); mobile: full-screen menu | Motion | `StaggeredMenu` (mobile) |
 | 2 | **Hero** | full-bleed `min-h-[100dvh]`, centred stack: lockup (≤400px) · h1 "One day. **Four tracks.** / Every builder in Delhi NCR." · CTAs "Join the waitlist" + "See the tracks" · bottom facts row (Date / Venue / Last year, mono labels). Edges = `EdgeExports`. Floor = `Prism` at 25% opacity, bottom-centre, pointer-reactive | headline `SplitText` chars (GSAP, once); CTAs `Magnet` | `SplitText`, `Magnet`, `Prism` |
 | 3 | **Tracks** "Pick your track. **Or wander.**" | `ScrollStack` of 4 full-width glass-slab panels (each 70vh desktop): `GlassSlabs` both edges in the track colour, glyph tile from the Figma glyph sheet (`public/brand/glyphs/<glyph>.webp`), name, tagline, description, format label top-right ("Talks", "2 hack spaces", "Hands-on"; never an invented session count). Active card sets `useAccent` so the nav pill follows. Mobile (<1024px): plain stacked panels, no pin | `ScrollStack` (Lenis), `GlareHover` on hover | `ScrollStack`, `GlareHover` |
@@ -184,28 +184,26 @@ Rules: `page.tsx` and every section are Server Components; anything using Motion
 
 Layout-family check: gate, nav, corridor hero, scroll-stack, catalogue grid, spotlight grid, timeline, bento, logo loop, burst CTA, footer → no repeats, no zigzag, one marquee, one pinned section, zero section eyebrows.
 
-## 7. Loader spec (client request: glass elements, several Motion animations)
+## 7. Loader spec: Ignition (rewritten 19 Sep 2026; the glass-panel gate it replaces is in the git history)
 
-Component `components/loader/Loader.tsx`, rendered in `layout.tsx` above `{children}`, `'use client'`.
+Components: `components/loader/Loader.tsx` (state machine, rendered in `layout.tsx` above `{children}`), `IgnitionStage.tsx` (everything on screen), `LockupReveal.tsx` (the mark assembling itself), `useAssetProgress.ts` (real progress as three named tasks). Geometry is shared with the static lockup through `components/brand/lockup-paths.ts`.
 
 Show logic:
-- Runs once per session (`sessionStorage.devfestLoaderShown`). Skip entirely under `prefers-reduced-motion` (render nothing; hero appears directly).
-- `useAssetProgress()` returns 0 → 1 from: `document.fonts.ready`, the two initial hero exports decoded, and `window.load`. If progress hits 1 within 300ms (warm cache), do not show at all (no flash). Otherwise show, and hold for a minimum of 1400ms so the choreography completes.
-- While visible: `document.body` gets `aria-busy="true"` and `overflow:hidden`; loader root is `role="status" aria-live="polite"` with visually-hidden text "Loading DevFest Noida 2026".
+- Runs once per session (`sessionStorage.devfestLoaderShown`) and only when the assets take longer than 300 ms. `?loader=1` forces it (demos, QA); `?noloader=1` skips it.
+- Under `prefers-reduced-motion` the gate never paints: `.loader-gate { display: none }` in the globals.css reduced-motion block, because `useReducedMotion()` resolves after mount. The phases still run to `hide` and `finish()` fires at once.
+- Progress is `useAssetProgress()`: `type` (`document.fonts.ready`), `light` (the hero's spectrum export decoded), `stage` (`window.load`). What is drawn is `min(progress, clock)`, the clock running linearly over 2.6 s from the moment the stage mounts, so the line never finishes before the choreography and never claims more than has loaded.
+- While visible: body `aria-busy="true"` and `overflow: hidden`; root `role="status" aria-live="polite"` with visually hidden "Loading DevFest Noida 2026"; the stage is `aria-hidden`.
+- The hero is painted under the opaque gate until the loader commits to the sequence (`useLoaderState.showing`), so the browser records the headline's LCP at first paint; it then drops to its hidden state under the gate and enters on `finish()`. On the skip path it never hides and the gate's dissolve is the entrance.
 
-Composition (all glass recipe from §3, canvas behind is `--color-canvas`):
-1. **Glass panel**, 320×200 (mobile 260×170), centred, `rounded-[28px]`.
-2. Inside: the **lockup** (white) and under it four **glass pills** (56×14) tinted blue / red / yellow / green at 40% with the specular top edge.
-3. A **progress hairline** along the panel's bottom edge: 2px, spectrum gradient, `scaleX` bound to progress.
-4. Behind the panel: a soft radial **glow** that shifts hue with the progress (blue → spectrum).
+Phases: `init → show → cut → hide` (the sequence) or `init → fade → hide` (skip). No AnimatePresence: the cut runs three things on three clocks.
 
-Animations (Motion, `motion/react`):
-1. Panel entrance: `initial={{ opacity: 0, scale: .92, y: 12 }}` → `animate={{ opacity: 1, scale: 1, y: 0 }}`, `type: "spring", stiffness: 120, damping: 18`.
-2. Lockup reveal: brackets slide in from ±16px, wordmark letters stagger via `variants` + `staggerChildren: .035` (Motion, not GSAP).
-3. Pills: `staggerChildren .08`, each `initial={{ x: -24, opacity: 0 }}` → `{ x: 0, opacity: 1 }` spring, then a continuous **shimmer sweep** (`motion.span` `x: ["-120%", "220%"]`, `repeat: Infinity`, `duration: 2.4`, `ease: "linear"`) across the glass panel. Infinite loops are allowed here because it is a loader.
-4. Progress hairline: `style={{ scaleX: progressMotionValue }}` with `useSpring(progress, { stiffness: 80, damping: 20 })`, `transformOrigin: left`.
-5. Exit (`AnimatePresence`): panel `exit={{ opacity: 0, scale: 1.06, filter: "blur(12px)" }}` `duration .6`, pills fly outward to their hero positions (`x` ± spread) then fade; backdrop `exit={{ opacity: 0 }}` `duration .8` while `EdgeExports` fades its first pair in (the hero's own `initial` opacity 0 → 1 starts on `onExitComplete`).
-6. Reduced motion: never mounted.
+Sequence (seconds from the stage mounting):
+1. **The line.** A 2 px spectrum hairline draws from the exact centre outward (`scaleX`, origin 50%). A halo (200 px, spectrum, elliptical mask), a near-white core (48 px) and a faint floor reflection sit on it and breathe by opacity (`.loader-breathe`). Static gradients that scale; never a filter.
+2. **The mark**, `w-[min(560px,72vw)]`, 28 px above the line: brackets draw on (`pathLength`, white 1.25-unit stroke, 0.15 to 1.05) and fill solid (0.95 to 1.4); the seven wordmark letters rise in (`staggerChildren 0.045`, from 0.6); the capsule, Noida and the year rise together (0.9 to 1.5); the 2026 pill fills with amber from the same `min(progress, clock)` value, as an HTML div overlay because transforms on SVG children are not composited. At 100% it is pixel-equivalent to the hero's lockup.
+3. **The slate.** `Type · Light · Stage` in `.label` mono under the line; each lights (opacity 0.35 to 1 plus a `DecryptedText` scramble) once its task has resolved and the clock has passed 0.35 / 0.6 / 0.85. Corner captions (`{organiser} presents`, the date, the region), hidden below `sm`. The centre group dollies 1 to 1.03 across the hold.
+4. **The cut**, when the line reaches both edges: halo and core bloom upward (`scaleY` 5 and 16, to opacity 0, within 0.6 s); backdrop 1 to 0 over 0.6 s revealing the hero with its edges still closed; `finish()` at 0.25 s; body released at 0.6 s; the loader's lockup glides onto the hero lockup's measured rect (FLIP, 1.0 s, `[0.16,1,0.3,1]`, fading over its last quarter) and the gate unmounts when it lands. The hero's accent auto-cycle is gated on `done` so the pill colours match at the hand-off.
+
+Rules: transform and opacity only; no filter, no backdrop-filter, no WebGL (shader compile stalls first paint); Motion only; `Z.loader` is 55, under the film grain on purpose.
 
 ## 8. Data shapes (with placeholder content)
 
@@ -267,7 +265,7 @@ Copy (final, no dashes):
 - Every interactive element has a visible focus ring (2px, offset 2px, `--color-blue-hi`); no `outline: none` without replacement.
 - Decorative SVG/images (`GlassSlabs`, `EdgeExports`, `Spotlight`, glyphs) are `aria-hidden="true"` with empty `alt`.
 - Contrast: text `#f5f5f7` on `#050505` (≈19:1), muted `#9a9aa3` on `#0b0b0d` (≈7.4:1), primary button `#0a0a0c` on `#f5f5f7` (≈18:1). Ghost button text on glass over bright edges: add `text-shadow 0 1px 12px rgba(0,0,0,.6)`.
-- Loader: `role="status"`, `aria-busy` on body, never blocks longer than assets actually take + 1.4s hold, skipped under reduced motion.
+- Loader: `role="status"`, `aria-busy` on body, never blocks longer than assets actually take + the 2.6 s hold and 1 s cut, never painted under reduced motion (hidden by the stylesheet).
 - All motion gated by `useReducedMotion()`; ScrollStack falls back to normal stacked flow; crossfade stops; sheen stops; WebGL unmounted.
 - Touch targets ≥ 44×44px (nav links get `py-3`), speaker cards ≥ 44px tall, mobile menu items 56px.
 - External links (`waitlist`, socials, maps) `target="_blank" rel="noopener"` with a visually-hidden "(opens in new tab)".
@@ -563,3 +561,27 @@ six schedule slots at opacity 1 under `reducedMotion: "reduce"`.
   that fades in past the hero would close that if it is missed.
 - Partners will look right once there are more than four logos; the data file takes
   them by slug.
+
+## 18. Ignition loader (19 Sep 2026)
+
+The glass-panel loader (a 320×200 widget with four pills, a shimmer and three blurred discs) was replaced with a full-bleed title sequence built from light, after the client asked for a premium cinematic loader. The picture is the brand's own: the moodboard's thin horizon of light that blooms upward. Spec in §7.
+
+- **Everything in the title card becomes something in the hero.** The line blooms into the light that reveals the page; the lit slab edges are revealed closed and open on `finish()`; the lockup glides onto the hero's, measured once at the cut, and lands within 0.02 px at 1440 and 390 (Playwright, rAF-sampled rect against the hero's).
+- **Progress is honest and paced.** Drawn progress is `min(real, clock)`. With the hero image delayed 4 s the line stalls at one third (the load event also waits on that image) and the slate's LIGHT and STAGE stay unlit until it arrives; the cut then runs and the gate leaves at 5.9 s.
+- **Lockup geometry moved to `lockup-paths.ts`**, generated from the original path data. `Lockup` renders from it with byte-identical output (checked by diffing the hero SVG's `outerHTML` before and after).
+- **Two fixes found on the way.** The hero's accent auto-cycle did not know about the loader (`useInView` cannot see the gate), so on a slow network the hero pill could be blue when the amber loader copy landed; it now waits for `done`. And the old gate still painted one black frame under reduced motion; it is now hidden by the stylesheet before it can paint.
+- **LCP.** The hero is painted under the opaque gate until the loader commits to the sequence, so the headline's LCP is recorded at first paint rather than after the hold. Speed Index still sees the sequence on Lighthouse's cold profile; real visitors see it once per session, and `?noloader=1` remains the comparison path.
+- **Not used, and why:** any shader (compile cost on first paint), blurred discs or `GradualBlur` (animated filters), `SplitText` or `Shuffle` (GSAP outside a vendored component), a percentage counter (the tired default for this kind of intro), the old glass panel and pills (a widget, not a title card; the glass here is the lit slab edges the cut reveals).
+- `?loader=1` forces the sequence; `?noloader=1` skips it. README updated, and its stale venue line fixed.
+
+### Measurements (production build, Playwright Chromium, 19 Sep 2026)
+
+| Check | Result |
+|---|---|
+| Hand-off delta, loader lockup vs hero lockup, 1440 and 390 | 0.00 / 0.00 px left and top, 0.00 width, 0.01 height |
+| Gate under reduced motion, first 20 rendering frames | `display: none` on every frame; stage never mounted; hero at opacity 1 within 250 ms |
+| Warm reload | gate gone in about 0.8 s including navigation; stage never mounted |
+| Hero image delayed 4 s | line parked at 0.333, LIGHT and STAGE unlit; cut runs when it arrives; gate gone at 5.9 s |
+| Lighthouse desktop, default / `?noloader=1` / `?loader=1` | 100 / 100 / 100, LCP 0.8 s in all three (the hero is painted under the gate) |
+| Lighthouse mobile, default / `?loader=1` | 88 / 88, LCP 4.0 s from the hero edge image, same band as the last pass (86) |
+| Console and page errors across every run | none |

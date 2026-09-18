@@ -84,6 +84,13 @@ export function Hero() {
   const inView = useInView(ref, { amount: 0.2 });
   const accent = useAccent((s) => s.accent);
   const ready = useLoaderState((s) => s.done);
+  const showing = useLoaderState((s) => s.showing);
+  // Hidden only while the loader is running its sequence. Before that the hero
+  // is painted under the opaque gate, so the browser records the headline's
+  // LCP at first paint instead of after the hold; on the skip path it is never
+  // hidden and the gate's dissolve is the entrance. Both store defaults are
+  // false on the server and the client, so the first render is identical.
+  const hidden = showing && !ready;
 
   // The proximity headline only turns on once ready, with motion allowed,
   // and on a device that actually has a hover-capable pointer to react to.
@@ -111,50 +118,63 @@ export function Hero() {
       {ready && <RaysFloor />}
 
       <div className="grid place-items-center px-5 pb-10 pt-[120px] text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={ready ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
-          transition={reduce ? { duration: 0 } : { duration: 0.9, ease }}
-        >
-          <div className="mx-auto mb-10 w-[min(400px,64vw)]">
-            <Lockup pill={PILL[accent]} />
-          </div>
-
-          <h1
-            ref={headingRef}
-            className="display mx-auto mb-8 text-[clamp(1.8rem,5.6vw,5.4rem)] font-medium leading-[1.02]"
-            aria-label="One day. Four tracks. Every builder in Delhi NCR."
+        <div>
+          {/*
+            Opacity only, no rise: the loader glides its own copy of the lockup
+            onto this one, measuring this element once as the cut starts, so it
+            must already be at its resting position while it fades in.
+          */}
+          <motion.div
+            data-hero-lockup
+            className="mx-auto mb-10 w-[min(400px,64vw)]"
+            initial={false}
+            animate={{ opacity: hidden ? 0 : 1 }}
+            transition={reduce || hidden ? { duration: 0 } : { duration: 0.9, ease }}
           >
-            <span aria-hidden="true">
-              {segment("One day.")} {segment("Four tracks.", true)}
-              <br />
-              {segment("Every builder in Delhi NCR.")}
-            </span>
-          </h1>
+            <Lockup pill={PILL[accent]} />
+          </motion.div>
 
           <motion.div
-            className="flex flex-wrap items-center justify-center gap-3"
-            initial={{ opacity: 0, y: 12 }}
-            animate={ready ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
-            transition={reduce ? { duration: 0 } : { duration: 0.8, ease, delay: 0.9 }}
+            initial={false}
+            animate={hidden ? { opacity: 0, y: 16 } : { opacity: 1, y: 0 }}
+            transition={reduce || hidden ? { duration: 0 } : { duration: 0.9, ease }}
           >
-            <Magnet padding={60} magnetStrength={6} disabled={!inView || !!reduce}>
-              <Button href={EVENT.links.waitlist}>{EVENT.cta.primary}</Button>
-            </Magnet>
-            <Magnet padding={60} magnetStrength={6} disabled={!inView || !!reduce}>
-              <Button href="#tracks" variant="ghost">
-                {EVENT.cta.secondary}
-              </Button>
-            </Magnet>
+            <h1
+              ref={headingRef}
+              className="display mx-auto mb-8 text-[clamp(1.8rem,5.6vw,5.4rem)] font-medium leading-[1.02]"
+              aria-label="One day. Four tracks. Every builder in Delhi NCR."
+            >
+              <span aria-hidden="true">
+                {segment("One day.")} {segment("Four tracks.", true)}
+                <br />
+                {segment("Every builder in Delhi NCR.")}
+              </span>
+            </h1>
+
+            <motion.div
+              className="flex flex-wrap items-center justify-center gap-3"
+              initial={false}
+              animate={hidden ? { opacity: 0, y: 12 } : { opacity: 1, y: 0 }}
+              transition={reduce || hidden ? { duration: 0 } : { duration: 0.8, ease, delay: 0.9 }}
+            >
+              <Magnet padding={60} magnetStrength={6} disabled={!inView || !!reduce}>
+                <Button href={EVENT.links.waitlist}>{EVENT.cta.primary}</Button>
+              </Magnet>
+              <Magnet padding={60} magnetStrength={6} disabled={!inView || !!reduce}>
+                <Button href="#tracks" variant="ghost">
+                  {EVENT.cta.secondary}
+                </Button>
+              </Magnet>
+            </motion.div>
           </motion.div>
-        </motion.div>
+        </div>
       </div>
 
       <motion.dl
         className="grid grid-cols-2 gap-4 px-5 pb-9 sm:grid-cols-4 md:px-10 lg:px-14"
-        initial={{ opacity: 0 }}
-        animate={ready ? { opacity: 1 } : { opacity: 0 }}
-        transition={reduce ? { duration: 0 } : { duration: 1, delay: 1.2 }}
+        initial={false}
+        animate={{ opacity: hidden ? 0 : 1 }}
+        transition={reduce || hidden ? { duration: 0 } : { duration: 1, delay: 1.2 }}
       >
         <div>
           <dt className="label">Date</dt>
