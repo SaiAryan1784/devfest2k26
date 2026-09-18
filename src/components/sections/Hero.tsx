@@ -53,9 +53,9 @@ export function Hero() {
 
       <div className="grid place-items-center px-5 pb-10 pt-[120px] text-center">
         <motion.div
-          initial={reduce ? false : { opacity: 0, y: 16 }}
-          animate={ready ? { opacity: 1, y: 0 } : undefined}
-          transition={{ duration: 0.9, ease }}
+          initial={{ opacity: 0, y: 16 }}
+          animate={ready ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
+          transition={reduce ? { duration: 0 } : { duration: 0.9, ease }}
         >
           <div className="mx-auto mb-10 w-[min(400px,64vw)]">
             <Lockup pill={PILL[accent]} />
@@ -83,9 +83,9 @@ export function Hero() {
 
           <motion.div
             className="flex flex-wrap items-center justify-center gap-3"
-            initial={reduce ? false : { opacity: 0, y: 12 }}
-            animate={ready ? { opacity: 1, y: 0 } : undefined}
-            transition={{ duration: 0.8, ease, delay: 0.9 }}
+            initial={{ opacity: 0, y: 12 }}
+            animate={ready ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
+            transition={reduce ? { duration: 0 } : { duration: 0.8, ease, delay: 0.9 }}
           >
             <Magnet padding={60} magnetStrength={6} disabled={!!reduce}>
               <Button href={EVENT.links.waitlist}>{EVENT.cta.primary}</Button>
@@ -101,9 +101,9 @@ export function Hero() {
 
       <motion.dl
         className="grid grid-cols-1 gap-4 px-5 pb-9 sm:grid-cols-3 md:px-10 lg:px-14"
-        initial={reduce ? false : { opacity: 0 }}
-        animate={ready ? { opacity: 1 } : undefined}
-        transition={{ duration: 1, delay: 1.2 }}
+        initial={{ opacity: 0 }}
+        animate={ready ? { opacity: 1 } : { opacity: 0 }}
+        transition={reduce ? { duration: 0 } : { duration: 1, delay: 1.2 }}
       >
         <div>
           <dt className="label">Date</dt>

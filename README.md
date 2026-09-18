@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DevFest Noida 2026
 
-## Getting Started
+Design-led landing page for GDG Noida's DevFest, 10 October 2026, Expo Inn, Greater Noida.
 
-First, run the development server:
+Next.js 16 (App Router) · Tailwind CSS v4 · Motion · ReactBits (via the shadcn registry) · dark only.
+
+## Run
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
+npm run build && npm run start
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Append `?noloader=1` to skip the intro loader while testing.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Where things live
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| What | Where |
+|---|---|
+| Event facts, links, socials, counts | `src/data/event.ts` |
+| Tracks (4) | `src/data/tracks.ts` |
+| Floor experiences (9) | `src/data/floor.ts` |
+| Speakers, schedule, partners | `src/data/speakers.ts`, `schedule.ts`, `sponsors.ts` |
+| Brand assets (exports, glyphs, lockups) | `public/brand/` |
+| Design tokens | `src/app/globals.css` (`@theme`) |
+| Signature components (glass slabs, hero edges, spotlight, lockup) | `src/components/brand/` |
+| Page sections | `src/components/sections/` |
+| Vendored ReactBits components | `src/components/reactbits/` |
+| Full spec, decisions, build log | `docs/SPEC.md` |
+| Rules for AI-assisted edits | `CLAUDE.md` |
 
-## Learn More
+## Updating content
 
-To learn more about Next.js, take a look at the following resources:
+Everything visible is data. To rename a track, add a speaker, swap the ticket link, or change the date, edit the matching file in `src/data/` and nothing else. Speaker photos go in `public/brand/speakers/` and are referenced by path; `photo: null` renders initials until then.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Adding a ReactBits component
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npx shadcn@latest add @react-bits/<Name>-TS-TW
+```
 
-## Deploy on Vercel
+It lands in `src/components/reactbits/`. Restyle to tokens; do not rewrite its motion logic.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deploy
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Vercel, default settings. The build is fully static (`○` routes), so any static host works too.

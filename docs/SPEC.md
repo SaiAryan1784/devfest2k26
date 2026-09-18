@@ -354,3 +354,5 @@ Mobile LCP is the hero edge image; the remaining delay is hydration on a throttl
 ### Still open (needs client input)
 - Speaker photos (`photo: null` renders initials), venue photo, code-of-conduct URL, X handle confirmation.
 - Registration link swap when tickets open (`EVENT.links.waitlist`).
+- **Reduced-motion fix (post-commit):** Motion `animate` targets must always be defined. The server renders the hidden `initial` styles (it cannot know the user's preference), so an `animate: undefined` under reduced motion left the nav and hero copy invisible. Now `animate` always has a target and `transition` collapses to `{ duration: 0 }` when reduced motion is on. Verified with `--force-prefers-reduced-motion` in headless Brave.
+- **Anchor navigation with lazy sections:** `AnchorFix` re-aligns the hash target for 1.6 s after any hash change while the document grows (sections above the target mount and push it down). Placeholders are also sized at or above real content height; overestimates never show because a placeholder is replaced before it reaches the viewport.

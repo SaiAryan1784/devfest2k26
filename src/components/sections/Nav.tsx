@@ -39,9 +39,9 @@ export function Nav() {
           scrolled ? "border-b border-hair bg-canvas/70 backdrop-blur-xl" : "border-b border-transparent",
         )}
         style={{ zIndex: Z.nav }}
-        initial={reduce ? false : { y: -16, opacity: 0 }}
-        animate={loaderDone ? { y: 0, opacity: 1 } : undefined}
-        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+        initial={{ y: -16, opacity: 0 }}
+        animate={loaderDone ? { y: 0, opacity: 1 } : { y: -16, opacity: 0 }}
+        transition={reduce ? { duration: 0 } : { duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
       >
         <Link href="#top" aria-label={EVENT.name} className="block w-[104px] py-3">
           <Lockup pill={PILL[accent]} />
