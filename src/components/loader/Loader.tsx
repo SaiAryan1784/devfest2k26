@@ -9,7 +9,7 @@ import { ConvergenceStage, GLIDE_AT, type Flip } from "./ConvergenceStage";
 import { useAssetProgress } from "./useAssetProgress";
 
 /** The pacing clock: drawn progress takes at least this long to reach 1. */
-const HOLD_MS = 3000;
+const HOLD_MS = 3600;
 /** Into the cut: when the black backdrop has fully dissolved. */
 const BACKDROP_MS = 600;
 /**

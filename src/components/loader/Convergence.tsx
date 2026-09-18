@@ -133,8 +133,8 @@ export function Convergence({
         vx: 0,
         vy: 0,
         dir: Math.random() < 0.5 ? 1 : -1,
-        speed: 2.2 + Math.random() * 2.6,
-        weight: 0.8 + Math.random() * 1.2,
+        speed: 2.0 + Math.random() * 2.2,
+        weight: 1.5 + Math.random() * 1.9,
         seed: Math.random() * Math.PI * 2,
         glow: pal.mid,
         core: pal.hi,
@@ -154,7 +154,8 @@ export function Convergence({
       last = now;
       time += dt * 0.016;
       const p = shown.get();
-      const pull = smooth(0.5, 0.95, p);
+      // The pull owns more than half the hold, and eases in and out.
+      const pull = smooth(0.4, 0.96, p);
       const cut = cuttingRef.current;
       if (cut && cutAt < 0) cutAt = now;
       const sinceCut = cut ? (now - cutAt) / 1000 : 0;
@@ -162,12 +163,12 @@ export function Convergence({
       // Trails: one translucent fill of canvas colour per frame. Longer as the
       // pull tightens, longest once the outline is being traced.
       ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = `rgba(5,5,5,${cut ? 0.05 : 0.14 - 0.07 * pull})`;
+      ctx.fillStyle = `rgba(5,5,5,${cut ? 0.05 : 0.13 - 0.06 * pull})`;
       ctx.fillRect(0, 0, w, h);
       ctx.globalCompositeOperation = "lighter";
       ctx.lineCap = "round";
 
-      const drift = (1 + 1.4 * p) * dt;
+      const drift = (1 + 0.9 * p) * dt;
       const cx = w / 2;
       const cy = h / 2;
 
@@ -177,7 +178,7 @@ export function Convergence({
         if (cut) q.captured = true;
 
         if (q.captured) {
-          q.s += (1.6 + 2.4 * p) * dt;
+          q.s += (1.4 + 1.8 * p) * dt;
           const [nx, ny] = pointAt(q);
           const jump = Math.hypot(nx - q.x, ny - q.y);
           q.x = nx;
@@ -199,8 +200,9 @@ export function Convergence({
             const d = Math.hypot(dx, dy) || 1;
             // Toward the target, slowing as it nears, plus a swirl around the
             // centre that peaks mid-pull and dies away as the streaks settle.
-            const mag = Math.min(d * 0.25, 3 + 9 * pull);
-            const swirl = pull * (1 - pull) * 4;
+            // Kept gentle on purpose: the turns should read as lazy arcs.
+            const mag = Math.min(d * 0.18, 2.5 + 6 * pull);
+            const swirl = pull * (1 - pull) * 3.2;
             const rx = q.x - cx;
             const ry = q.y - cy;
             const rd = Math.hypot(rx, ry) || 1;
@@ -208,8 +210,8 @@ export function Convergence({
             fy = fy * (1 - pull) + (dy / d) * mag + (rx / rd) * swirl;
             if (pull > 0.8 && d < 6) q.captured = true;
           }
-          q.vx += (fx - q.vx) * 0.12 * dt;
-          q.vy += (fy - q.vy) * 0.12 * dt;
+          q.vx += (fx - q.vx) * 0.085 * dt;
+          q.vy += (fy - q.vy) * 0.085 * dt;
           q.x += q.vx * drift;
           q.y += q.vy * drift;
           // Free flow wraps at the edges, so the lanes never run dry.
@@ -223,8 +225,8 @@ export function Convergence({
 
         // Soft glow under a bright core.
         ctx.strokeStyle = q.glow;
-        ctx.globalAlpha = 0.16;
-        ctx.lineWidth = q.weight * 4;
+        ctx.globalAlpha = 0.15;
+        ctx.lineWidth = q.weight * 3.6;
         ctx.beginPath();
         ctx.moveTo(q.px, q.py);
         ctx.lineTo(q.x, q.y);
