@@ -19,22 +19,22 @@ export default function Page() {
       <main id="main">
         <Hero />
         {/* Anchor targets stay in the static HTML; the heavy section bodies mount as they approach. */}
-        <LazyMount id="tracks" minHeight="340vh">
+        <LazyMount id="tracks" minHeight="300vh">
           <Tracks />
         </LazyMount>
-        <LazyMount id="floor" minHeight="150vh">
+        <LazyMount id="floor" minHeight="170vh">
           <Floor />
         </LazyMount>
-        <LazyMount id="speakers" minHeight="110vh">
+        <LazyMount id="speakers" minHeight="100vh">
           <Stage />
         </LazyMount>
-        <LazyMount id="schedule" minHeight="70vh">
+        <LazyMount id="schedule" minHeight="80vh">
           <Schedule />
         </LazyMount>
-        <LazyMount id="venue" minHeight="130vh">
+        <LazyMount id="venue" minHeight="110vh">
           <Essentials />
         </LazyMount>
-        <LazyMount id="partners" minHeight="60vh">
+        <LazyMount id="partners" minHeight="70vh">
           <Partners />
         </LazyMount>
         <LazyMount minHeight="90vh">

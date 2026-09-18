@@ -48,7 +48,7 @@ export function Stage() {
   };
 
   return (
-    <section className="relative isolate overflow-hidden pt-24 md:pt-32 lg:pt-40">
+    <section className="relative isolate overflow-hidden pt-20 md:pt-24 lg:pt-28">
       {/* Darker at the edges so the narrow beam reads as a light in a dark
           room, not a bright rectangle. Static: a plain radial gradient. */}
       <div
@@ -121,7 +121,7 @@ export function Stage() {
       </Container>
 
       {/* Room for the pool of light to fall away under the card row. */}
-      <div aria-hidden="true" className="h-[18vh]" />
+      <div aria-hidden="true" className="h-[12vh]" />
     </section>
   );
 }

@@ -23,12 +23,15 @@ const gsCode = Google_Sans_Code({
   adjustFontFallback: false,
 });
 
+// Venue is TBD, so the description carries the date and the region only.
+const DESCRIPTION = `One day, ${EVENT.counts.tracks} tracks, and thousands of developers from across ${EVENT.venue.region}. ${EVENT.dateLabel}.`;
+
 export const metadata: Metadata = {
   title: EVENT.name,
-  description: `One day, five tracks, and thousands of developers from across Delhi NCR. ${EVENT.dateLabel}, ${EVENT.venue.name}, ${EVENT.venue.city}.`,
+  description: DESCRIPTION,
   openGraph: {
     title: EVENT.name,
-    description: `One day, five tracks, and thousands of developers from across Delhi NCR. ${EVENT.dateLabel}, ${EVENT.venue.name}, ${EVENT.venue.city}.`,
+    description: DESCRIPTION,
     type: "website",
   },
 };

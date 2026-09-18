@@ -35,7 +35,7 @@
 
 html {
   color-scheme: dark;
-  scroll-padding-top: 104px;
+  scroll-padding-top: 96px;
   scroll-behavior: smooth;
 }
 
@@ -184,5 +184,18 @@ body {
   .slab-travel,
   .slab-breathe {
     animation: none;
+  }
+  /*
+   * Scroll-linked reveals resolve to their finished state. Done here rather
+   * than by branching a Motion value on useReducedMotion(), which resolves
+   * after mount and would differ between the server's render and a client
+   * that already prefers reduced motion.
+   */
+  .schedule-slot {
+    opacity: 1 !important;
+  }
+  .schedule-pipe {
+    stroke-dasharray: none !important;
+    stroke-dashoffset: 0 !important;
   }
 }

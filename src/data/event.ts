@@ -7,12 +7,13 @@ export const EVENT = {
   // IST. Doors open at 9:00.
   date: "2026-10-10T09:00:00+05:30",
   dateLabel: "10 October 2026",
+  // The 2026 venue is not settled. Only the region is public for now, so the
+  // name, address and map come back here once it is confirmed and every
+  // surface that shows a venue follows this one object.
   venue: {
-    name: "Expo Inn",
-    city: "Greater Noida",
-    address: "25-29, Knowledge Park II, Greater Noida, Uttar Pradesh 201310",
-    mapsLink: "https://maps.google.com/?q=Expo+Inn+Knowledge+Park+II+Greater+Noida",
-    mapsEmbedUrl: "https://www.google.com/maps?q=Expo+Inn+Knowledge+Park+II+Greater+Noida&output=embed",
+    status: "tbd",
+    label: "Announced soon",
+    region: "Delhi NCR",
   },
   links: {
     waitlist: "https://www.commudle.com/fill-form/5096",

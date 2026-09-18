@@ -25,7 +25,7 @@ export function Footer() {
         <div>
           <p className="display text-2xl font-semibold">{EVENT.name}</p>
           <p className="mt-2 max-w-[40ch] text-[15px] leading-relaxed text-muted">
-            {EVENT.dateLabel}. {EVENT.venue.name}, {EVENT.venue.city}.
+            {EVENT.dateLabel}. {EVENT.venue.region}. Venue {EVENT.venue.label.toLowerCase()}.
           </p>
           <p className="mt-6 text-[15px] text-muted">
             Organised by{" "}

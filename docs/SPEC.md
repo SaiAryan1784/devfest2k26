@@ -468,3 +468,98 @@ on the reference machine before trusting the absolute scores.
   cursor on a real display; watch for line reflow at the largest clamp size.
 - Lighthouse desktop moved 98-99 → 94 and mobile 91 → 86 on a noisy machine. Worth one
   clean re-run before the next handover.
+
+---
+
+## 17. Empty stretches, centred nav, venue TBD (19 Sep 2026)
+
+Client review after the smoothness pass: several stretches "feel empty", the nav
+should sit in the middle without its CTA, and the venue is now TBD.
+
+### The voids were spacing, not missing content
+
+Measured at 1040px tall, before: Tracks to Floor **590px** (`TrackStack`
+`lg:pb-[26vh]` 270 + `lg:pb-40` 160 + `lg:pt-40` 160), Schedule to Essentials
+**320px**, Stage to Schedule **347px**. `lg:py-40` is art-gallery spacing; this page
+sits at a density that wants `py-16`-`py-24`.
+
+Section rhythm is now `py-20 md:py-24 lg:py-28`, the Tracks stack's trailing hold is
+`lg:pb-[12vh]` and Stage's is `h-[12vh]`. Measured after: Tracks to Floor **371px**,
+Floor to Speakers **224px**, Schedule to Essentials **224px**, Essentials to Partners
+**264px**.
+
+No filler band was added between sections. The page already spends its one-marquee
+budget, and ReactBits `GradualBlur` was rejected for the boundaries: it stacks five or
+more `backdrop-filter` layers over scrolling content, recomputed every frame, which is
+the cost class section 16 removed.
+
+### Nav
+
+Header is a three-column grid so the pills centre on the viewport rather than on the
+space beside the lockup; `PillNav`'s wrappers are `display: contents` so the pill bar
+and the hamburger land in their own columns without touching its GSAP. Height 84px to
+76px, `scroll-padding-top` to 96px. The right-hand CTA is gone at the client's
+request: the mobile menu still carries it, and the hero and final CTA carry the
+intent, but there is now no persistent conversion path on desktop once the hero
+scrolls away. `useActiveSection` (one IntersectionObserver, no scroll listener) drives
+`activeHref`, so the current section's pill is marked.
+
+### Venue TBD
+
+`EVENT.venue` is now `{ status, label, region }`. The name, address, maps link and
+embed are gone until it is confirmed, and every surface follows that one object: hero
+facts row, footer, page description, and Essentials. The `#venue` anchor and the nav
+label are unchanged so links still work. The page description also said "five tracks"
+where the data and the hero both say four; fixed.
+
+### Essentials, rebuilt around the empty state
+
+Removing the map left three items in a grid shaped for four, and Floor owns the bento
+family, so the section changed family instead of growing an empty cell. It is a stat
+band now: the countdown full width as the anchor, then three hairline-divided blocks
+with no card boxes. The venue block states what is known, what is not, and that the
+waitlist hears it first, which turns the gap into the reason to act.
+
+### Schedule
+
+Content is unchanged (the six factual slots). Presence comes from large mono times, a
+Phosphor glyph per slot driven by the `kind` field that was already in the data and
+unused, and a pipe with real weight whose nodes light as the fill passes.
+
+**The pipe's gradient had never once rendered.** `<linearGradient>` defaults to
+`gradientUnits="objectBoundingBox"`, and a horizontal line has a zero-height bounding
+box, so the gradient degenerated and painted nothing; the line had always been the
+grey track alone. Fixed with `userSpaceOnUse` and separate horizontal and vertical
+gradients.
+
+### Partners
+
+`LogoLoop` removed. Four logos is not the "many things that need no individual
+attention" case a marquee is for, and looping them was what made the section read as
+filler. Now a static row at a larger size beside a sponsor panel, so the section's one
+conversion element has a home. `npx shadcn@latest add @react-bits/LogoLoop-TS-TW`
+restores the loop if more logos arrive.
+
+### ScrollReveal, with two patches
+
+Added for the Floor intro, which now resolves word by word as the section opens.
+Patched twice, documented in the file: `as` for the wrapper element, because upstream
+hardcodes `<h2>` and would have put a second heading in a section that has one; and
+scoped cleanup, because upstream's `ScrollTrigger.getAll().forEach(kill)` tears down
+every trigger on the page. Always used with `enableBlur={false}`: its default scrubs a
+filter per word on scroll.
+
+### Reduced motion
+
+Scroll-linked reveals resolve to their finished state through the globals.css
+`prefers-reduced-motion` block (`.schedule-slot`, `.schedule-pipe`) rather than a JS
+branch on `useReducedMotion()`, which resolves after mount and would differ between
+the server's render and a client that already prefers reduced motion. Verified: all
+six schedule slots at opacity 1 under `reducedMotion: "reduce"`.
+
+### Still open
+
+- No persistent desktop CTA between the hero and the final CTA, by request. A button
+  that fades in past the hero would close that if it is missed.
+- Partners will look right once there are more than four logos; the data file takes
+  them by slug.

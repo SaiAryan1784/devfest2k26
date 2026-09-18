@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
+import ScrollReveal from "@/components/reactbits/ScrollReveal";
 import { GLOW } from "@/components/brand/slabs";
 import { Container } from "@/components/ui/Container";
 import { FLOOR, type FloorItem } from "@/data/floor";
@@ -25,14 +26,25 @@ export function Floor() {
   const reduce = useReducedMotion();
 
   return (
-    <section className="py-24 md:py-32 lg:py-40">
+    <section className="py-20 md:py-24 lg:py-28">
       <Container>
         <h2 className="display mb-4 text-[clamp(2.2rem,5vw,4.5rem)] font-medium leading-none">
           <em className="display-em">…and the floor.</em>
         </h2>
-        <p className="mb-12 max-w-[52ch] text-[17px] leading-relaxed text-muted">
+        {/* The intro resolves word by word as the section opens, so the floor
+            arrives as a list of things rather than a wall of copy. Blur is off:
+            its default scrubs a filter per word, which this page does not do on
+            scroll. */}
+        <ScrollReveal
+          as="div"
+          enableBlur={false}
+          baseOpacity={0.12}
+          baseRotation={1.5}
+          containerClassName="mb-12 max-w-[46ch]"
+          textClassName="!text-[clamp(1.1rem,1.9vw,1.45rem)] !font-normal !leading-relaxed text-muted"
+        >
           Between sessions the floor is the programme: hack spaces, booths, a robot track, creators recording live, and community demos on open display all day.
-        </p>
+        </ScrollReveal>
 
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
           {FLOOR.map((item, i) => (

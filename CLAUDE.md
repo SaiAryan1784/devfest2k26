@@ -21,7 +21,12 @@ Full spec: docs/SPEC.md (copy of the approved plan). Reference glimpse: docs/ref
 - Tokens only from globals.css @theme. Radius: panels 24, cards 20, buttons pill. Icons: Phosphor regular, one family.
 - Every animation honours useReducedMotion(). Loader is skipped under reduced motion.
 - Fonts come from next/font/google (Google Sans Flex with the wdth axis only, 116 KB; adding opsz or slnt balloons it to 300-500 KB. Google Sans Code for mono). No <link> to Google Fonts.
-- ReactBits components are added with the shadcn CLI into src/components/reactbits/ and restyled to tokens; do not rewrite their motion logic. A documented perf/correctness patch (with a comment explaining why) is fine; see VariableProximity.tsx and LightRays.tsx for the pattern.
+- ReactBits components are added with the shadcn CLI into src/components/reactbits/ and restyled to tokens; do not rewrite their motion logic. A documented perf/correctness patch (with a comment explaining why) is fine; see VariableProximity.tsx, LightRays.tsx, PillNav.tsx and ScrollReveal.tsx for the pattern.
+- One marquee on the page, at most. A marquee is for many things that do not need individual attention; a handful of logos is not that.
+- Section rhythm is `py-20 md:py-24 lg:py-28`. Anything looser reads as unfinished on a wide screen.
+- Reduced-motion fallbacks for scroll-linked reveals go in the globals.css `prefers-reduced-motion` block (see `.schedule-slot`, `.schedule-pipe`), not in a JS branch on `useReducedMotion()`.
+- SVG gradients on a stroked line need `gradientUnits="userSpaceOnUse"`. A horizontal or vertical line has a zero-height or zero-width bounding box, so the default objectBoundingBox gradient degenerates and paints nothing.
+- Venue is TBD: `EVENT.venue` carries `status`, `label` and `region` only. Put the name, address and map back in that one object when it is confirmed.
 - Before claiming done: run the section 12 checks in docs/SPEC.md.
 
 ## Commands

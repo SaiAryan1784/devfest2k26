@@ -39,7 +39,7 @@ export function TrackStack({ tracks }: { tracks: Track[] }) {
   });
 
   return (
-    <div ref={ref} className="flex flex-col gap-10 lg:block lg:space-y-6 lg:pb-[26vh]">
+    <div ref={ref} className="flex flex-col gap-10 lg:block lg:space-y-6 lg:pb-[12vh]">
       {tracks.map((track, i) => (
         <TrackCard key={track.id} track={track} index={i} total={n} progress={scrollYProgress} />
       ))}

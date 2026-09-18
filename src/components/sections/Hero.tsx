@@ -163,7 +163,8 @@ export function Hero() {
         <div>
           <dt className="label">Venue</dt>
           <dd className="label !text-text">
-            {EVENT.venue.name}, {EVENT.venue.city}
+            {EVENT.venue.label}
+            <span className="block opacity-60 sm:ml-2 sm:inline">{EVENT.venue.region}</span>
           </dd>
         </div>
         <div className="sm:text-right">

@@ -6,23 +6,26 @@
  * top: 1em` is dropped and the bar flows in the header's flex row.
  */
 
+/*
+ * Both wrappers are `display: contents` so the pill bar and the hamburger
+ * become direct children of the header's three-column grid: the pills can
+ * then centre on the viewport while the hamburger stays hard right. The
+ * fixed-position popover is unaffected by this.
+ */
 .pill-nav-container {
-  position: relative;
-  z-index: 1;
+  display: contents;
 }
 
 .pill-nav {
   --nav-h: 44px;
   --pill-pad-x: 18px;
   --pill-gap: 4px;
-  width: max-content;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  box-sizing: border-box;
+  display: contents;
 }
 
 .pill-nav-items {
+  grid-column: 2;
+  justify-self: center;
   position: relative;
   display: flex;
   align-items: center;
@@ -35,6 +38,8 @@
 
 /* The logo is our own lockup, so it is a plain block, not a round badge. */
 .pill-logo {
+  grid-column: 1;
+  justify-self: start;
   display: inline-flex;
   align-items: center;
   width: 150px;
@@ -159,6 +164,8 @@
 }
 
 .mobile-menu-button {
+  grid-column: 3;
+  justify-self: end;
   width: 44px;
   height: 44px;
   border-radius: 9999px;
@@ -191,7 +198,7 @@
 
 .mobile-menu-popover {
   position: fixed;
-  top: 92px;
+  top: 84px;
   left: 20px;
   right: 20px;
   background: rgb(11 11 13 / 0.97);
