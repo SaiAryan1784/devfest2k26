@@ -189,7 +189,7 @@ Layout-family check: gate, nav, corridor hero, scroll-stack, catalogue grid, spo
 Components: `components/loader/Loader.tsx` (state machine, rendered in `layout.tsx` above `{children}`), `ConvergenceStage.tsx` (frame, captions, readout, the mark and its glide), `Convergence.tsx` (the canvas light field), `useAssetProgress.ts` (real progress as three named tasks). Target geometry comes from `components/brand/lockup-paths.ts`, the same data the static `Lockup` renders from.
 
 Show logic:
-- Runs once per session (`sessionStorage.devfestLoaderShown`) and only when the assets take longer than 300 ms. `?loader=1` forces it (demos, QA); `?noloader=1` skips it.
+- Plays on every load, including reloads; the one navigation it skips is a back/forward return (`PerformanceNavigationTiming.type === "back_forward"`), which is not an arrival. `?noloader=1` skips it (QA, Lighthouse comparisons); `?loader=1` is kept as an explicit force.
 - Under `prefers-reduced-motion` the gate never paints: `.loader-gate { display: none }` in the globals.css reduced-motion block, because `useReducedMotion()` resolves after mount. The phases still run to `hide` and `finish()` fires at once.
 - Progress is `useAssetProgress()`: `type` (`document.fonts.ready`), `light` (the hero's spectrum export decoded), `stage` (`window.load`). What is drawn is `min(progress, clock)`, the clock running linearly over 3.0 s from the moment the stage mounts, so the picture never resolves before the choreography and never claims more than has loaded.
 - While visible: body `aria-busy="true"` and `overflow: hidden`; root `role="status" aria-live="polite"` with visually hidden "Loading DevFest Noida 2026"; the stage is `aria-hidden`.
@@ -573,6 +573,7 @@ The glass-panel loader (a 320×200 widget with four pills, a shimmer and three b
 - **Progress is honest and paced.** Drawn progress is `min(real, clock)`. With the hero image delayed 4 s the picture parks in the flow phase at one third (the load event also waits on that image) and the readout with it; the pull and the cut run when it arrives.
 - **Kept from the earlier passes:** the phase machine, the reduced-motion gate hidden by the stylesheet, the hero painted under the gate for LCP, the accent auto-cycle gated on `done`, `Z.loader` under the grain, `EVENT.organiser`, and `?loader=1`.
 - **Removed:** `IgnitionStage`, `LockupReveal`, the vendored `DecryptedText` (no longer used) and the `.loader-breathe` keyframes.
+- **Plays on every load** (follow-up the same day). The original once-per-session rule plus the 300 ms fast-cache skip meant that on localhost or a Vercel edge the loader never showed at all, which the client read as broken. Now only a back/forward return and reduced motion skip it.
 
 ### Measurements (production build, Playwright Chromium, 19 Sep 2026)
 

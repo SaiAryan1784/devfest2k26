@@ -14,7 +14,7 @@ npm run lint
 npm run slabs      # regenerate the glass-slab and spotlight posters
 ```
 
-Append `?noloader=1` to skip the intro loader while testing, or `?loader=1` to force it on a warm cache (it otherwise runs once per session, and only when assets take longer than 300 ms).
+The intro loader plays on every load (a back/forward return and reduced motion skip it). Append `?noloader=1` to skip it while testing.
 
 ## Where things live
 

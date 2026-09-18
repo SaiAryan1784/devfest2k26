@@ -8,9 +8,6 @@ import { Z } from "@/lib/z";
 import { ConvergenceStage, GLIDE_AT, type Flip } from "./ConvergenceStage";
 import { useAssetProgress } from "./useAssetProgress";
 
-const KEY = "devfestLoaderShown";
-/** Assets ready within this: never show (no flash on a warm cache). */
-const SKIP_WINDOW = 300;
 /** The pacing clock: drawn progress takes at least this long to reach 1. */
 const HOLD_MS = 3000;
 /** Into the cut: when the black backdrop has fully dissolved. */
@@ -46,11 +43,12 @@ function measure(el: HTMLElement | null): Flip | null {
 /**
  * Convergence: the site's title sequence.
  *
- * Opaque from the first server-rendered frame so a cold visit never flashes the
- * page, then the client decides within 300 ms whether to run the sequence or
- * drop the gate. Under prefers-reduced-motion the gate is hidden by the
- * stylesheet (`.loader-gate` in globals.css) before it can paint, because
- * useReducedMotion() only resolves after mount; the phases still run to `hide`.
+ * Opaque from the first server-rendered frame so a visit never flashes the
+ * page. It plays on every load, including reloads: the one visit it skips is a
+ * back/forward return, which is not an arrival. Under prefers-reduced-motion
+ * the gate is hidden by the stylesheet (`.loader-gate` in globals.css) before
+ * it can paint, because useReducedMotion() only resolves after mount; the
+ * phases still run to `hide`.
  *
  * Phases: init → show → cut → hide (the sequence) or init → fade → hide (skip).
  * `show` holds until drawn progress reaches 1, which by construction is at or
@@ -64,7 +62,7 @@ export function Loader() {
   const reduce = useReducedMotion();
   const finish = useLoaderState((s) => s.finish);
   const setShowing = useLoaderState((s) => s.setShowing);
-  const { value, tasks, done } = useAssetProgress();
+  const { value, tasks } = useAssetProgress();
   const [phase, setPhase] = useState<Phase>("init");
   const [flip, setFlip] = useState<Flip | null>(null);
   const lockupRef = useRef<HTMLDivElement>(null);
@@ -75,25 +73,17 @@ export function Loader() {
   // What is drawn: never ahead of what has loaded, never ahead of the choreography.
   const shown = useTransform([progress, clock], (latest: number[]) => Math.min(latest[0], latest[1]));
 
-  // Decide: skip (reduced motion, already shown this session, ?noloader) or show.
+  // Decide: skip (reduced motion, ?noloader, a back/forward return) or show.
   // Runs on a timer so it never sets state synchronously inside the effect.
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const returning = nav?.type === "back_forward";
     const force = params.has("loader") && !reduce;
-    const skip = !force && (reduce || Boolean(sessionStorage.getItem(KEY)) || params.has("noloader"));
-    const t = setTimeout(
-      () => setPhase((p) => (p !== "init" ? p : skip ? "fade" : "show")),
-      skip || force ? 0 : SKIP_WINDOW,
-    );
+    const skip = !force && (reduce || params.has("noloader") || returning);
+    const t = setTimeout(() => setPhase((p) => (p !== "init" ? p : skip ? "fade" : "show")), 0);
     return () => clearTimeout(t);
   }, [reduce]);
-
-  // Assets finished while still deciding: skip silently.
-  useEffect(() => {
-    if (!done || phase !== "init") return;
-    const t = setTimeout(() => setPhase((p) => (p === "init" ? "fade" : p)), 0);
-    return () => clearTimeout(t);
-  }, [done, phase]);
 
   // The hold: the pacing clock runs while the stage is up. Telling the store
   // first lets the hero drop to its hidden state under the opaque gate, ready
@@ -120,11 +110,10 @@ export function Loader() {
     if (phase === "init" || phase === "show") lockBody();
   }, [phase]);
 
-  // Leaving: remember, hand the page to the hero, and let it scroll once the
-  // backdrop is gone. The skip path does all three at once.
+  // Leaving: hand the page to the hero, and let it scroll once the backdrop
+  // is gone. The skip path does both at once.
   useEffect(() => {
     if (phase !== "cut" && phase !== "fade") return;
-    sessionStorage.setItem(KEY, "1");
     const cut = phase === "cut";
     const timers = [setTimeout(finish, cut ? FINISH_AT_MS : 0), setTimeout(releaseBody, cut ? BACKDROP_MS : 0)];
     if (!cut) timers.push(setTimeout(() => setPhase("hide"), BACKDROP_MS));
