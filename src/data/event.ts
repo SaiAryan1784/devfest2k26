@@ -42,12 +42,15 @@ export const EVENT = {
     sponsor: "Become a sponsor",
   },
   // The billboard: one line under the headline, and the silent loop behind it
-  // (a 46 s cut of the 2025 aftermovie, encoded by scripts/encode-hero-video.sh).
+  // (a 46 s cut of the 2025 aftermovie, encoded by scripts/encode-hero-video.sh:
+  // HEVC for browsers that decode it in hardware, H.264 for the rest).
   hero: {
     description: "Four tracks of talks and hands-on labs, two hack spaces, and a floor full of builders. One day in Delhi NCR.",
     video: {
       desktop: "/video/hero-1080.mp4",
+      desktopHevc: "/video/hero-1080.hevc.mp4",
       mobile: "/video/hero-720.mp4",
+      mobileHevc: "/video/hero-720.hevc.mp4",
       poster: "/video/hero-poster.webp",
       posterMobile: "/video/hero-poster-720.webp",
     },

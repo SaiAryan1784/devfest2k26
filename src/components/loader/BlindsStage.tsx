@@ -2,10 +2,11 @@
 
 import { useRef, type ReactNode, type RefObject } from "react";
 import { motion, useMotionValueEvent, useTransform, type MotionValue } from "motion/react";
+import { MARK, OPEN_S } from "@/components/brand/blinds-field";
 import { Lockup, PILL } from "@/components/brand/Lockup";
 import { EVENT } from "@/data/event";
 import { CUT_S, GLIDE_AT, type Flip } from "./cut";
-import { SpectrumField } from "./SpectrumField";
+import { BlindsField } from "./BlindsField";
 import type { AssetTasks } from "./useAssetProgress";
 
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -34,17 +35,18 @@ function Caption({ className, show, children }: { className: string; show: boole
 }
 
 /**
- * Everything on screen during the hold and the cut. The shelf is the whole
- * picture; the frame carries three captions and a mono readout. The mark is
- * invisible until the lines have drawn it: it fades in over its own barcode
- * (same box, same geometry), holds while the bars extend and rush, then glides
- * onto the billboard's lockup.
+ * Everything on screen during the hold and the cut. The blinds are the whole
+ * picture; the frame carries three captions and a mono readout. The mark
+ * fades in front of the glass as the light passes the centre, holds while
+ * the blinds open, then glides onto the billboard's lockup. The canvas fades
+ * only once every gap has closed, when it holds the same picture as the
+ * video underneath.
  */
-export function SpectrumStage({ phase, shown, tasks, flip, lockupRef, onLanded }: Props) {
+export function BlindsStage({ phase, shown, tasks, flip, lockupRef, onLanded }: Props) {
   const cut = phase === "cut";
   const frame = tasks.type && !cut;
   const readout = useRef<HTMLSpanElement>(null);
-  const sharpen = useTransform(shown, [0.42, 0.55], [0, 1]);
+  const sharpen = useTransform(shown, MARK, [0, 1]);
 
   // The readout writes straight to the DOM: a hundred text changes, no renders.
   useMotionValueEvent(shown, "change", (v) => {
@@ -53,7 +55,9 @@ export function SpectrumStage({ phase, shown, tasks, flip, lockupRef, onLanded }
 
   return (
     <div data-loader-stage aria-hidden="true" className="absolute inset-0 overflow-hidden">
-      <SpectrumField shown={shown} cutting={cut} lockupRef={lockupRef} />
+      <motion.div className="absolute inset-0" initial={false} animate={{ opacity: cut ? 0 : 1 }} transition={cut ? { duration: 0.4, delay: OPEN_S } : { duration: 0 }}>
+        <BlindsField shown={shown} cutting={cut} />
+      </motion.div>
 
       <Caption className="left-6 top-6" show={frame}>
         {EVENT.organiser} presents
@@ -74,7 +78,7 @@ export function SpectrumStage({ phase, shown, tasks, flip, lockupRef, onLanded }
         <span className="opacity-60"> / 100</span>
       </motion.p>
 
-      {/* The mark: drawn by the lines, sharpened over them, then the glide. */}
+      {/* The mark: lit by the light pass, held in front of the glass, then the glide. */}
       <div className="absolute inset-0 grid place-items-center">
         <motion.div
           ref={lockupRef}

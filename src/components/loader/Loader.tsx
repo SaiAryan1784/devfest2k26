@@ -5,20 +5,20 @@ import { animate, motion, useMotionValue, useMotionValueEvent, useReducedMotion,
 import { EVENT } from "@/data/event";
 import { useLoaderState } from "@/lib/loader-state";
 import { Z } from "@/lib/z";
-import { GLIDE_AT, type Flip } from "./cut";
-import { SpectrumStage } from "./SpectrumStage";
+import { CUT_S, GLIDE_AT, type Flip } from "./cut";
+import { BlindsStage } from "./BlindsStage";
 import { useAssetProgress } from "./useAssetProgress";
 
 /** The pacing clock: drawn progress takes at least this long to reach 1. */
-const HOLD_MS = 3600;
-/** Into the cut: when the black backdrop has fully dissolved. */
+const HOLD_MS = 6500;
+/** Into the cut: when the page may scroll again (the backdrop itself dissolves later, see below). */
 const BACKDROP_MS = 600;
 /**
  * Into the cut: when the hero is told to start its own entrance. The glide
- * begins at GLIDE_AT of the 1.5 s cut and takes 0.9 s; the hero lockup fades
- * in over 0.9 s from finish(), so it is at about 0.97 when the copy lands.
+ * begins at GLIDE_AT of the cut; the hero lockup fades in over 0.9 s from
+ * finish(), so it is whole by the time the copy lands.
  */
-const FINISH_AT_MS = Math.round(1.5 * GLIDE_AT * 1000) + 250;
+const FINISH_AT_MS = Math.round(CUT_S * GLIDE_AT * 1000) + 250;
 
 type Phase = "init" | "show" | "cut" | "fade" | "hide";
 
@@ -42,7 +42,7 @@ function measure(el: HTMLElement | null): Flip | null {
 }
 
 /**
- * The shelf: the site's title sequence.
+ * The blinds: the site's title sequence.
  *
  * Opaque from the first server-rendered frame so a visit never flashes the
  * page. It plays on every load, including reloads: the one visit it skips is a
@@ -53,10 +53,10 @@ function measure(el: HTMLElement | null): Flip | null {
  *
  * Phases: init → show → cut → hide (the sequence) or init → fade → hide (skip).
  * `show` holds until drawn progress reaches 1, which by construction is at or
- * after the pacing clock and real asset progress. `cut` dissolves the backdrop
- * under the (transparent) canvas while the bars rush past, revealing the video
- * already playing, tells the hero to begin, and glides the mark onto the
- * billboard's lockup.
+ * after the pacing clock and real asset progress. `cut` opens the blinds over
+ * the video already playing, dissolves the backdrop once they have closed the
+ * gaps, tells the hero to begin, and glides the mark onto the billboard's
+ * lockup.
  *
  * `?loader=1` forces the sequence (client demos, QA); `?noloader=1` skips it.
  */
@@ -144,10 +144,11 @@ export function Loader() {
         className="absolute inset-0 bg-canvas"
         initial={false}
         animate={{ opacity: exiting ? 0 : 1 }}
-        transition={{ duration: BACKDROP_MS / 1000, ease: "easeInOut" }}
+        // In the sequence the black stays until the blinds have all but closed; on the skip path it is the entrance.
+        transition={phase === "cut" ? { duration: 0.6, delay: 0.7, ease: "easeInOut" } : { duration: BACKDROP_MS / 1000, ease: "easeInOut" }}
       />
       {(phase === "show" || phase === "cut") && (
-        <SpectrumStage
+        <BlindsStage
           phase={phase}
           shown={shown}
           tasks={tasks}

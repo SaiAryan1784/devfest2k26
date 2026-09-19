@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Encodes the billboard loop from the aftermovie source (never committed):
-# five segments joined in order, two sizes, no audio, plus two poster frames.
+# five segments joined in order, two sizes in H.264 and HEVC, no audio, plus two poster frames.
 # Usage: scripts/encode-hero-video.sh [source]   (default: docs/reference/video/GDG Noida 2025.mp4)
 set -euo pipefail
 SRC="${1:-docs/reference/video/GDG Noida 2025.mp4}"
@@ -17,6 +17,14 @@ ffmpeg -y -loglevel error -stats -i "$SRC" -filter_complex "$SEG;[v]scale=1920:-
 echo "720p"
 ffmpeg -y -loglevel error -stats -i "$SRC" -filter_complex "$SEG;[v]scale=1280:-2:flags=lanczos[o]" -map "[o]" \
   -c:v libx264 -preset slow -crf 28 -maxrate 1100k -bufsize 2200k -profile:v main -pix_fmt yuv420p -movflags +faststart -an "$OUT/hero-720.mp4"
+
+echo "1080p HEVC (hvc1, hardware-decoded on Apple and most Windows machines). CRF chosen by SSIM against a near-lossless loop to match the H.264 files quality for quality: 26.5 at 1080p, 31 at 720p"
+ffmpeg -y -loglevel error -stats -i "$SRC" -filter_complex "$SEG;[v]scale=1920:-2:flags=lanczos[o]" -map "[o]" \
+  -c:v libx265 -preset slow -crf 26.5 -x265-params log-level=error -tag:v hvc1 -pix_fmt yuv420p -movflags +faststart -an "$OUT/hero-1080.hevc.mp4"
+
+echo "720p HEVC"
+ffmpeg -y -loglevel error -stats -i "$SRC" -filter_complex "$SEG;[v]scale=1280:-2:flags=lanczos[o]" -map "[o]" \
+  -c:v libx265 -preset slow -crf 31 -x265-params log-level=error -tag:v hvc1 -pix_fmt yuv420p -movflags +faststart -an "$OUT/hero-720.hevc.mp4"
 
 echo "posters (the loop's first frame, 0:07 in the source): PNG from ffmpeg, WebP via sharp (this ffmpeg has no libwebp)"
 ffmpeg -y -loglevel error -ss 7 -i "$SRC" -frames:v 1 -vf "scale=1920:-2:flags=lanczos" "$OUT/hero-poster.png"

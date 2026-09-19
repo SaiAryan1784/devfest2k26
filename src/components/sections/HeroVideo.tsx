@@ -3,6 +3,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 import { useInView, useReducedMotion } from "motion/react";
 import { EVENT } from "@/data/event";
+import { useHeroView } from "@/lib/hero-view";
 import { useLoaderState } from "@/lib/loader-state";
 
 const NARROW = "(max-width: 767px)";
@@ -13,29 +14,58 @@ const NARROW = "(max-width: 767px)";
  * waits for video. The source is chosen on the client (720p on phones), so the
  * server markup carries no `src` and nothing can mismatch. It never loads
  * under reduced motion (the stylesheet hides the element too) or Save-Data,
- * plays only while the hero is on screen, and starts the moment the loader
- * commits to its sequence so it is already moving when the gate dissolves.
+ * plays only while at least half the hero is on screen (so it never decodes
+ * under the scrolled nav or behind the tracks), and starts the moment the
+ * loader commits to its sequence so the blinds have a picture to show.
  */
 export function HeroVideo({ heroRef }: { heroRef: RefObject<HTMLElement | null> }) {
   const reduce = useReducedMotion();
   const showing = useLoaderState((s) => s.showing);
   const done = useLoaderState((s) => s.done);
-  const inView = useInView(heroRef, { amount: 0.1 });
+  const inView = useInView(heroRef, { amount: 0.5 });
+  const setHeroInView = useHeroView((s) => s.setInView);
   const ref = useRef<HTMLVideoElement>(null);
   const { video } = EVENT.hero;
 
+  // The source is attached only after the fonts are in and the main thread is
+  // idle, so the loop's megabytes never share the line with the headline's
+  // font on a slow connection. The blinds draw dark glass until it is ready.
   useEffect(() => {
     const v = ref.current;
     if (!v || reduce) return;
     const nav = navigator as Navigator & { connection?: { saveData?: boolean } };
     if (nav.connection?.saveData) return;
-    const src = window.matchMedia(NARROW).matches ? video.mobile : video.desktop;
-    if (v.getAttribute("src") !== src) {
-      v.muted = true;
-      v.src = src;
-      v.load();
-    }
+    let cancelled = false;
+    let idle: number | undefined;
+    let timer: number | undefined;
+    const start = () => {
+      if (cancelled) return;
+      // HEVC where the browser decodes it in hardware (Safari, Chrome and Edge on Apple and on Windows with the codec), H.264 elsewhere.
+      const hevc = v.canPlayType('video/mp4; codecs="hvc1.1.6.L120.B0"') !== "";
+      const narrow = window.matchMedia(NARROW).matches;
+      const src = narrow ? (hevc ? video.mobileHevc : video.mobile) : hevc ? video.desktopHevc : video.desktop;
+      if (v.getAttribute("src") !== src) {
+        v.muted = true;
+        v.src = src;
+        v.load();
+      }
+    };
+    const whenFonts = document.fonts?.ready ?? Promise.resolve();
+    whenFonts.then(() => {
+      if (cancelled) return;
+      if (typeof window.requestIdleCallback === "function") idle = window.requestIdleCallback(start, { timeout: 800 });
+      else timer = window.setTimeout(start, 200);
+    });
+    return () => {
+      cancelled = true;
+      if (idle !== undefined) window.cancelIdleCallback(idle);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [reduce, video]);
+
+  useEffect(() => {
+    setHeroInView(inView);
+  }, [inView, setHeroInView]);
 
   useEffect(() => {
     const v = ref.current;

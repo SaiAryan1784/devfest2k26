@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { EVENT } from "@/data/event";
 import { useAccent } from "@/lib/accent";
 import { useActiveSection } from "@/lib/use-active-section";
+import { useHeroView } from "@/lib/hero-view";
 import { useLoaderState } from "@/lib/loader-state";
 import { Z } from "@/lib/z";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ export function Nav() {
   const reduce = useReducedMotion();
   const accent = useAccent((s) => s.accent);
   const loaderDone = useLoaderState((s) => s.done);
+  const heroInView = useHeroView((s) => s.inView);
   const activeId = useActiveSection(SECTION_IDS);
   const [scrolled, setScrolled] = useState(false);
   const { scrollY } = useScroll();
@@ -49,7 +51,8 @@ export function Nav() {
       aria-label="Primary"
       className={cn(
         "fixed inset-x-0 top-0 grid h-[76px] grid-cols-[1fr_auto_1fr] items-center px-5 transition-[background-color,backdrop-filter,border-color] duration-500 md:px-10 lg:px-14",
-        scrolled ? "border-b border-hair bg-canvas/70 backdrop-blur-xl" : "border-b border-transparent",
+        // No backdrop blur while the billboard's video is under the nav: blurring a moving picture every frame is the one thing a weak GPU cannot afford.
+        scrolled ? (heroInView ? "border-b border-hair bg-canvas/85" : "border-b border-hair bg-canvas/70 backdrop-blur-xl") : "border-b border-transparent",
       )}
       style={{ zIndex: Z.nav }}
       initial={{ y: -16, opacity: 0 }}

@@ -139,7 +139,7 @@ export function Hero() {
           >
             <h1
               ref={headingRef}
-              className="display mb-5 text-[clamp(1.9rem,3.7vw,3.8rem)] font-medium leading-[1.04]"
+              className="display mb-5 text-[clamp(1.7rem,3.7vw,3.8rem)] font-medium leading-[1.04]"
               aria-label="One day. Four tracks. Every builder in Delhi NCR."
             >
               <span aria-hidden="true">
