@@ -1,3 +1,4 @@
+import type { PipeShape } from "@/components/brand/pipes";
 import type { TrackColor } from "./event";
 
 export type Track = {
@@ -8,8 +9,8 @@ export type Track = {
   description: string;
   /** Format label shown on the panel. Never a made-up session count. */
   format: string;
-  /** Cell on the Figma glyph sheet used as this track's mark. */
-  glyph: string;
+  /** The track's light-pipe mark, one of the shapes in src/components/brand/pipes.ts. */
+  glyph: PipeShape;
 };
 
 export const TRACKS: Track[] = [

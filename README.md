@@ -11,7 +11,7 @@ npm install
 npm run dev        # http://localhost:3000
 npm run build && npm run start
 npm run lint
-npm run slabs      # regenerate the glass-slab and spotlight posters
+npm run spotlight  # regenerate the stage spotlight poster
 ```
 
 The intro loader plays on every load (a back/forward return and reduced motion skip it). Append `?noloader=1` to skip it while testing.
@@ -24,9 +24,10 @@ The intro loader plays on every load (a back/forward return and reduced motion s
 | Tracks (4) | `src/data/tracks.ts` |
 | Floor experiences (9) | `src/data/floor.ts` |
 | Speakers, schedule, partners | `src/data/speakers.ts`, `schedule.ts`, `sponsors.ts` |
-| Brand assets (exports, glyphs, lockups) | `public/brand/` |
+| Brand light, drawn in code (hero wall, pipe marks, palettes) | `src/components/brand/` |
+| Lockup SVGs and the spotlight poster | `public/brand/` |
 | Design tokens | `src/app/globals.css` (`@theme`) |
-| Signature components (glass slabs, hero edges, spotlight, lockup) | `src/components/brand/` |
+| Signature components (light wall, light pipes, spotlight, lockup) | `src/components/brand/` |
 | Page sections | `src/components/sections/` |
 | Vendored ReactBits components | `src/components/reactbits/` |
 | Full spec, decisions, build log | `docs/SPEC.md` |

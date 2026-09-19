@@ -45,9 +45,6 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`dark ${gsFlex.variable} ${gsCode.variable}`}>
-      <head>
-        <link rel="preload" as="image" href="/brand/exports/spectrum.webp" />
-      </head>
       <body className="min-h-dvh bg-canvas text-text">
         <a
           href="#main"

@@ -20,9 +20,8 @@ export function FinalCta() {
     <section ref={ref} className="relative isolate overflow-hidden py-32 md:py-44 lg:py-56">
       <div aria-hidden="true" className="absolute inset-0 -z-10">
         {reduce ? (
-          // Static fallback: the spectrum export, dimmed.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src="/brand/exports/spectrum.webp" alt="" className="h-full w-full object-cover opacity-30" />
+          // Static fallback: the spectrum as a still gradient, dimmed.
+          <div className="h-full w-full opacity-30" style={{ background: "linear-gradient(90deg, #4285F4, #33C6F5, #34A853, #FBBC04, #FF7A1A, #EA4335)" }} />
         ) : (
           <div className="h-full w-full opacity-90 [&>div]:h-full">
             <PrismaticBurst

@@ -1,11 +1,13 @@
+import type { PipeShape } from "@/components/brand/pipes";
+
 export type FloorItem = {
   id: string;
   /** Short category label shown above the title. */
   kind: string;
   title: string;
   description: string;
-  /** Cell on the Figma glyph sheet used as this item's mark. */
-  glyph: string;
+  /** The item's light-pipe mark, one of the shapes in src/components/brand/pipes.ts. Distinct from the four track marks. */
+  glyph: PipeShape;
   isNew?: boolean;
 };
 
@@ -53,7 +55,7 @@ export const FLOOR: FloorItem[] = [
     kind: "Community",
     title: "Community Demos",
     description: "Projects from GDG Noida and GDGoC builders, on open display all day.",
-    glyph: "plus",
+    glyph: "corner",
   },
   {
     id: "small-business-fair",

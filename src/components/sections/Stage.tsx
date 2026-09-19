@@ -34,7 +34,7 @@ export function Stage() {
   // card `animate` target stays the same shape either way. Branching the
   // animate *value* itself on `reduce` would make it differ between the
   // server's render and a client whose OS already prefers reduced motion,
-  // which is a hydration mismatch (see the note in EdgeExports.tsx).
+  // which is a hydration mismatch (see the rule in CLAUDE.md).
   const aim = (el: HTMLElement | null, i: number) => {
     if (reduce || !el || !gridRef.current) return;
     setLit(i);

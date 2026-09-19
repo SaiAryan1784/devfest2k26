@@ -76,7 +76,7 @@ function TrackCard({
         zIndex: index + 1,
       }}
     >
-      <TrackPanel track={track} />
+      <TrackPanel track={track} index={index} total={total} />
     </motion.div>
   );
 }

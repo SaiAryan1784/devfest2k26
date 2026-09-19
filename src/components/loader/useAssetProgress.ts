@@ -3,20 +3,18 @@
 import { useEffect, useState } from "react";
 import { useMotionValue, type MotionValue } from "motion/react";
 
-const CRITICAL_IMAGES = ["/brand/exports/spectrum.webp"];
-
-/** The three things the first paint actually waits for, in the order the slate names them. */
-export type AssetTask = "type" | "light" | "stage";
+/** The things the first paint actually waits for, in the order the loader names them. */
+export type AssetTask = "type" | "stage";
 export type AssetTasks = Record<AssetTask, boolean>;
 
-const NONE: AssetTasks = { type: false, light: false, stage: false };
+const NONE: AssetTasks = { type: false, stage: false };
 
 /**
- * Real progress for the first paint, as three named tasks: `type` (fonts ready),
- * `light` (the hero's first lit edge decoded) and `stage` (window load). Returns a
- * MotionValue (0..1) for whatever draws the progress, the per-task booleans for
- * the loader's slate (three discrete state changes, never one per frame), and a
- * done flag.
+ * Real progress for the first paint, as named tasks: `type` (fonts ready) and
+ * `stage` (window load). The hero is drawn in code, so there is no image to
+ * wait for. Returns a MotionValue (0..1) for whatever draws the progress, the
+ * per-task booleans (discrete state changes, never one per frame), and a done
+ * flag.
  */
 export function useAssetProgress(): { value: MotionValue<number>; tasks: AssetTasks; done: boolean } {
   const value = useMotionValue(0);
@@ -26,16 +24,6 @@ export function useAssetProgress(): { value: MotionValue<number>; tasks: AssetTa
     let cancelled = false;
     const entries: [AssetTask, Promise<unknown>][] = [
       ["type", document.fonts?.ready ?? Promise.resolve()],
-      [
-        "light",
-        Promise.all(
-          CRITICAL_IMAGES.map((src) => {
-            const img = new Image();
-            img.src = src;
-            return img.decode().catch(() => undefined);
-          }),
-        ),
-      ],
       [
         "stage",
         document.readyState === "complete"
@@ -57,5 +45,5 @@ export function useAssetProgress(): { value: MotionValue<number>; tasks: AssetTa
     };
   }, [value]);
 
-  return { value, tasks, done: tasks.type && tasks.light && tasks.stage };
+  return { value, tasks, done: tasks.type && tasks.stage };
 }

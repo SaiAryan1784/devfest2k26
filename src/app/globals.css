@@ -147,42 +147,31 @@ body {
   border: 0;
 }
 
-/* Slab sheen: the moving highlight inside the live (non-poster) GlassSlabs. */
-@keyframes sheen {
-  0%, 100% { transform: translateY(-12%); }
-  50% { transform: translateY(12%); }
-}
-.sheen {
-  animation: sheen 7s ease-in-out infinite;
-}
-
 /*
- * Light travelling down a slab poster, and the slow breath of its bloom.
- * Both animate transform/opacity only, so they stay on the compositor and
- * never re-run a filter (which is what made the old live-SVG slabs stutter
- * once four of them were stacked and scaling).
+ * The hero wall's hot bands breathe, and a pulse of light runs through the
+ * active track's pipe. The breath is transform only; the pulse advances a
+ * dash offset on one small SVG stroke, the one paint-animated layer in a card.
  */
-@keyframes slab-travel {
-  0% { transform: translate3d(0, -60%, 0); }
-  100% { transform: translate3d(0, 160%, 0); }
+@keyframes band-drift {
+  0%, 100% { transform: translate3d(0, -6%, 0); }
+  50% { transform: translate3d(0, 6%, 0); }
 }
-.slab-travel {
-  animation: slab-travel 9s linear infinite;
+.band-drift {
+  animation: band-drift 7s ease-in-out infinite;
 }
 
-@keyframes slab-breathe {
-  0%, 100% { opacity: 0.75; }
-  50% { opacity: 1; }
+@keyframes pipe-run {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
 }
-.slab-breathe {
-  animation: slab-breathe 6s ease-in-out infinite;
+.pipe-run {
+  animation: pipe-run 3s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .sheen,
-  .slab-travel,
-  .slab-breathe {
+  .band-drift,
+  .pipe-run {
     animation: none;
   }
   /*

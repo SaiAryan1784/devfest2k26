@@ -1,8 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
 import ScrollReveal from "@/components/reactbits/ScrollReveal";
+import { LightPipe } from "@/components/brand/LightPipe";
+import type { PipeShape } from "@/components/brand/pipes";
 import { GLOW } from "@/components/brand/slabs";
 import { Container } from "@/components/ui/Container";
 import { FLOOR, type FloorItem } from "@/data/floor";
@@ -101,13 +102,7 @@ function Tile({ item, index, reduce }: { item: FloorItem; index: number; reduce:
           <>
             {/* The mark sits large and bleeding off the corner on features. */}
             <div className="pointer-events-none absolute -right-8 -top-8 size-48 opacity-60 transition-[opacity,transform] duration-700 ease-out group-hover:scale-105 group-hover:opacity-85 lg:size-60">
-              <Image
-                src={`/brand/glyphs/${item.glyph}.webp`}
-                alt=""
-                fill
-                sizes="240px"
-                className="object-contain [mask-image:radial-gradient(72%_72%_at_35%_65%,#000,transparent)]"
-              />
+              <LightPipe shape={item.glyph} color={accent} className="h-full w-full [mask-image:radial-gradient(72%_72%_at_35%_65%,#000,transparent)]" />
             </div>
             <span className="label mb-auto w-fit rounded-pill border border-hair px-3 py-1.5 !text-text">{item.kind}</span>
             <h3 className="display mt-6 text-[clamp(1.6rem,2.6vw,2.2rem)] font-semibold leading-tight">{item.title}</h3>
@@ -116,7 +111,7 @@ function Tile({ item, index, reduce }: { item: FloorItem; index: number; reduce:
         ) : size === "wide" ? (
           <>
             <div className="flex items-center gap-5">
-              <Glyph glyph={item.glyph} />
+              <Glyph glyph={item.glyph} color={accent} />
               <div>
                 <p className="label mb-2">{item.kind}</p>
                 <h3 className="display text-2xl font-semibold leading-tight">{item.title}</h3>
@@ -126,7 +121,7 @@ function Tile({ item, index, reduce }: { item: FloorItem; index: number; reduce:
           </>
         ) : (
           <>
-            <Glyph glyph={item.glyph} />
+            <Glyph glyph={item.glyph} color={accent} />
             <p className="label mb-2 mt-5">{item.kind}</p>
             <h3 className="display mb-2 text-xl font-semibold leading-tight">{item.title}</h3>
             <p className="text-[15px] leading-relaxed text-muted">{item.description}</p>
@@ -137,16 +132,14 @@ function Tile({ item, index, reduce }: { item: FloorItem; index: number; reduce:
   );
 }
 
-/** Small glyph mark: grey at rest, the tile's own colour on hover or focus. */
-function Glyph({ glyph }: { glyph: string }) {
+/** Small light-pipe mark in a chip: dimmed at rest, the tile's own colour at full on hover or focus. */
+function Glyph({ glyph, color }: { glyph: PipeShape; color: Exclude<TrackColor, "spectrum"> }) {
   return (
-    <div className="relative size-12 shrink-0 overflow-hidden rounded-[14px] border border-hair bg-canvas">
-      <Image
-        src={`/brand/glyphs/${glyph}.webp`}
-        alt=""
-        fill
-        sizes="48px"
-        className="object-cover grayscale-[.55] brightness-125 transition-[filter,transform] duration-700 ease-out group-hover:scale-105 group-hover:grayscale-0 group-focus-within:grayscale-0"
+    <div className="relative size-12 shrink-0 rounded-[14px] border border-hair bg-canvas p-1.5">
+      <LightPipe
+        shape={glyph}
+        color={color}
+        className="h-full w-full opacity-60 transition-[opacity,transform] duration-700 ease-out group-hover:scale-105 group-hover:opacity-100 group-focus-within:opacity-100"
       />
     </div>
   );

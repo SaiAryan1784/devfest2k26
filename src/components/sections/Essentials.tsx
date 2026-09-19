@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import SplitFlapText from "@/components/reactbits/SplitFlapText";
 import CountUp from "@/components/reactbits/CountUp";
-import { GlassSlabs } from "@/components/brand/GlassSlabs";
+import { LightPipe } from "@/components/brand/LightPipe";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { EVENT } from "@/data/event";
@@ -73,7 +73,7 @@ export function Essentials() {
 
         <motion.div {...item} transition={{ duration: 0.6, ease }}>
           <div className="relative isolate overflow-hidden rounded-panel border border-hair bg-surface p-7 md:p-10">
-            <GlassSlabs side="right" color="blue" intensity={0.5} alive className="hidden w-[28%] opacity-50 md:block" />
+            <LightPipe shape="s-wave" color="blue" className="pointer-events-none absolute right-[4%] top-1/2 hidden w-[15%] -translate-y-1/2 opacity-60 md:block" />
             <div className="relative md:pr-[30%]">
               <p className="label mb-7">Doors open {EVENT.dateLabel}</p>
               <Countdown />
@@ -113,7 +113,7 @@ export function Essentials() {
           </motion.div>
 
           <motion.div {...item} transition={{ duration: 0.6, ease, delay: 0.18 }} className="relative isolate overflow-hidden bg-surface p-7 md:p-9">
-            <GlassSlabs side="right" color="green" intensity={0.45} alive className="w-[30%] opacity-40" />
+            <LightPipe shape="arc" color="green" className="pointer-events-none absolute right-[6%] top-1/2 w-[22%] -translate-y-1/2 opacity-50" />
             <div className="relative pr-[26%]">
               <dt className="label mb-3">Last year</dt>
               <dd>

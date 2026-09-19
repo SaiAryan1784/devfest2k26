@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
-import { EdgeExports } from "@/components/brand/EdgeExports";
-import { RaysFloor } from "@/components/brand/RaysFloor";
+import { LightWall } from "@/components/brand/LightWall";
 import { Lockup, PILL } from "@/components/brand/Lockup";
 import { GLOW } from "@/components/brand/slabs";
 import VariableProximity from "@/components/reactbits/VariableProximity";
@@ -30,7 +29,7 @@ function useFinePointer() {
 }
 
 /** Four dots, one per track: hovering or focusing one lights the whole hero
- *  in that track's colour (edges, lockup pill, floor rays) and pauses the
+ *  in that track's colour (the wall, the lockup pill) and pauses the
  *  auto-cycle; leaving resumes it. Clicking jumps to the track. */
 function TrackDots() {
   const accent = useAccent((s) => s.accent);
@@ -114,8 +113,9 @@ export function Hero() {
 
   return (
     <section ref={ref} id="top" className="relative isolate grid min-h-dvh grid-rows-[1fr_auto] overflow-hidden">
-      <EdgeExports heroRef={ref} />
-      {ready && <RaysFloor />}
+      <LightWall heroRef={ref} />
+      {/* Settles the wall under the facts row. Same z-plane as the wall, later in the tree, so it paints over it. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-[34%]" style={{ background: "linear-gradient(to top, var(--color-canvas) 18%, transparent)" }} />
 
       <div className="grid place-items-center px-5 pb-10 pt-[120px] text-center">
         <div>
