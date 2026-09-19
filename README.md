@@ -24,7 +24,7 @@ The intro loader plays on every load (a back/forward return and reduced motion s
 | Tracks (4) | `src/data/tracks.ts` |
 | Floor experiences (9) | `src/data/floor.ts` |
 | Speakers, schedule, partners | `src/data/speakers.ts`, `schedule.ts`, `sponsors.ts` |
-| Brand light, drawn in code (the loader's blinds, pipe marks, palettes) | `src/components/brand/` |
+| Brand light, drawn in code (the loader's frost, pipe marks, palettes) | `src/components/brand/` |
 | Lockup SVGs and the spotlight poster | `public/brand/` |
 | Design tokens | `src/app/globals.css` (`@theme`) |
 | Signature components (light pipes, spotlight, lockup) | `src/components/brand/` |

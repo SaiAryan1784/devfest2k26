@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useInView, useReducedMotion } from "motion/react";
 import { EVENT } from "@/data/event";
 import { useHeroView } from "@/lib/hero-view";
@@ -16,7 +16,7 @@ const NARROW = "(max-width: 767px)";
  * under reduced motion (the stylesheet hides the element too) or Save-Data,
  * plays only while at least half the hero is on screen (so it never decodes
  * under the scrolled nav or behind the tracks), and starts the moment the
- * loader commits to its sequence so the blinds have a picture to show.
+ * loader commits to its sequence so the frost has a picture to show.
  */
 export function HeroVideo({ heroRef }: { heroRef: RefObject<HTMLElement | null> }) {
   const reduce = useReducedMotion();
@@ -25,11 +25,16 @@ export function HeroVideo({ heroRef }: { heroRef: RefObject<HTMLElement | null> 
   const inView = useInView(heroRef, { amount: 0.5 });
   const setHeroInView = useHeroView((s) => s.setInView);
   const ref = useRef<HTMLVideoElement>(null);
+  // Whether a source has been attached. `load()` pauses the element, so the
+  // play effect below has to run again once this flips, or a play() called
+  // before the source arrived is silently lost and the loop sits on its first
+  // frame until the loader is done.
+  const [attached, setAttached] = useState(false);
   const { video } = EVENT.hero;
 
   // The source is attached only after the fonts are in and the main thread is
   // idle, so the loop's megabytes never share the line with the headline's
-  // font on a slow connection. The blinds draw dark glass until it is ready.
+  // font on a slow connection. The frost draws dark glass until it is ready.
   useEffect(() => {
     const v = ref.current;
     if (!v || reduce) return;
@@ -49,6 +54,7 @@ export function HeroVideo({ heroRef }: { heroRef: RefObject<HTMLElement | null> 
         v.src = src;
         v.load();
       }
+      setAttached(true);
     };
     const whenFonts = document.fonts?.ready ?? Promise.resolve();
     whenFonts.then(() => {
@@ -70,14 +76,14 @@ export function HeroVideo({ heroRef }: { heroRef: RefObject<HTMLElement | null> 
   useEffect(() => {
     const v = ref.current;
     if (!v) return;
-    if (reduce || !inView || !(showing || done)) {
+    if (reduce || !attached || !inView || !(showing || done)) {
       v.pause();
       return;
     }
     v.muted = true;
     const p = v.play();
     if (p) p.catch(() => {});
-  }, [reduce, inView, showing, done]);
+  }, [reduce, attached, inView, showing, done]);
 
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden bg-canvas">
