@@ -16,7 +16,7 @@ const NARROW = "(max-width: 767px)";
  * under reduced motion (the stylesheet hides the element too) or Save-Data,
  * plays only while at least half the hero is on screen (so it never decodes
  * under the scrolled nav or behind the tracks), and starts the moment the
- * loader commits to its sequence so the frost has a picture to show.
+ * loader commits to its sequence, so the opening lands on a moving picture.
  */
 export function HeroVideo({ heroRef }: { heroRef: RefObject<HTMLElement | null> }) {
   const reduce = useReducedMotion();
@@ -34,7 +34,7 @@ export function HeroVideo({ heroRef }: { heroRef: RefObject<HTMLElement | null> 
 
   // The source is attached only after the fonts are in and the main thread is
   // idle, so the loop's megabytes never share the line with the headline's
-  // font on a slow connection. The frost draws dark glass until it is ready.
+  // font on a slow connection. It plays under the gate as soon as it is ready.
   useEffect(() => {
     const v = ref.current;
     if (!v || reduce) return;

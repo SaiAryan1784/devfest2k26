@@ -2,11 +2,11 @@
 
 import { useRef, type ReactNode, type RefObject } from "react";
 import { motion, useMotionValueEvent, useTransform, type MotionValue } from "motion/react";
-import { MARK, OPEN_S } from "@/components/brand/frost-field";
+import { MARK } from "@/components/brand/ident-field";
 import { Lockup, PILL } from "@/components/brand/Lockup";
 import { EVENT } from "@/data/event";
 import { CUT_S, GLIDE_AT, type Flip } from "./cut";
-import { FrostField } from "./FrostField";
+import { IdentField } from "./IdentField";
 import type { AssetTasks } from "./useAssetProgress";
 
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -21,13 +21,10 @@ type Props = {
   onLanded: () => void;
 };
 
-/** The captions sit over a bright, moving picture; a soft dark halo keeps them legible whatever frame is behind. */
-const HALO = "[text-shadow:0_0_14px_rgba(0,0,0,0.95),0_1px_2px_rgba(0,0,0,0.8)]";
-
 function Caption({ className, show, children }: { className: string; show: boolean; children: ReactNode }) {
   return (
     <motion.p
-      className={`label absolute hidden sm:block ${HALO} ${className}`}
+      className={`label absolute hidden sm:block ${className}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: show ? 1 : 0 }}
       transition={{ duration: 0.6 }}
@@ -38,14 +35,13 @@ function Caption({ className, show, children }: { className: string; show: boole
 }
 
 /**
- * Everything on screen during the hold and the cut. The fog and the rods are
- * the whole picture; the frame carries three captions and a mono readout. The
- * mark fades in front of the glass as the light passes the centre, holds
- * while the rods fly and the fog clears, then glides onto the billboard's
- * lockup. The canvas fades only once the fog has cleared, when it holds the
- * same picture as the video underneath.
+ * Everything on screen during the hold and the cut. The stripes are the whole
+ * picture; the frame carries three captions and a mono readout. The mark
+ * sharpens over its barcode as the rows light up, holds while the field
+ * rushes past the camera, then glides onto the billboard's lockup. The canvas
+ * dissolves itself during the rush; the wrapper's fade is a backstop.
  */
-export function FrostStage({ phase, shown, tasks, flip, lockupRef, onLanded }: Props) {
+export function IdentStage({ phase, shown, tasks, flip, lockupRef, onLanded }: Props) {
   const cut = phase === "cut";
   const frame = tasks.type && !cut;
   const readout = useRef<HTMLSpanElement>(null);
@@ -58,8 +54,8 @@ export function FrostStage({ phase, shown, tasks, flip, lockupRef, onLanded }: P
 
   return (
     <div data-loader-stage aria-hidden="true" className="absolute inset-0 overflow-hidden">
-      <motion.div className="absolute inset-0" initial={false} animate={{ opacity: cut ? 0 : 1 }} transition={cut ? { duration: 0.4, delay: OPEN_S } : { duration: 0 }}>
-        <FrostField shown={shown} cutting={cut} />
+      <motion.div className="absolute inset-0" initial={false} animate={{ opacity: cut ? 0 : 1 }} transition={cut ? { duration: 0.3, delay: 0.9 } : { duration: 0 }}>
+        <IdentField shown={shown} cutting={cut} />
       </motion.div>
 
       <Caption className="left-6 top-6" show={frame}>
@@ -72,7 +68,7 @@ export function FrostStage({ phase, shown, tasks, flip, lockupRef, onLanded }: P
         {EVENT.venue.region}
       </Caption>
       <motion.p
-        className={`label absolute bottom-6 left-6 tabular-nums ${HALO}`}
+        className="label absolute bottom-6 left-6 tabular-nums"
         initial={{ opacity: 0 }}
         animate={{ opacity: frame ? 1 : 0 }}
         transition={{ duration: 0.6 }}
@@ -81,7 +77,7 @@ export function FrostStage({ phase, shown, tasks, flip, lockupRef, onLanded }: P
         <span className="opacity-60"> / 100</span>
       </motion.p>
 
-      {/* The mark: lit by the light pass, held in front of the glass, then the glide. */}
+      {/* The mark: built as a barcode by the stripes, sharpened here, then the glide. */}
       <div className="absolute inset-0 grid place-items-center">
         <motion.div
           ref={lockupRef}

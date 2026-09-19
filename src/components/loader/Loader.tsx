@@ -6,12 +6,12 @@ import { EVENT } from "@/data/event";
 import { useLoaderState } from "@/lib/loader-state";
 import { Z } from "@/lib/z";
 import { CUT_S, GLIDE_AT, type Flip } from "./cut";
-import { FrostStage } from "./FrostStage";
+import { IdentStage } from "./IdentStage";
 import { useAssetProgress } from "./useAssetProgress";
 
 /** The pacing clock: drawn progress takes at least this long to reach 1. */
 const HOLD_MS = 6500;
-/** Into the cut: when the black backdrop is gone and the page may scroll again. */
+/** Into the cut: when the page may scroll again (the backdrop's own dissolve is timed below). */
 const BACKDROP_MS = 600;
 /**
  * Into the cut: when the hero is told to start its own entrance. The glide
@@ -42,7 +42,7 @@ function measure(el: HTMLElement | null): Flip | null {
 }
 
 /**
- * The frost: the site's title sequence.
+ * The ident: the site's title sequence.
  *
  * Opaque from the first server-rendered frame so a visit never flashes the
  * page. It plays on every load, including reloads: the one visit it skips is a
@@ -53,10 +53,10 @@ function measure(el: HTMLElement | null): Flip | null {
  *
  * Phases: init → show → cut → hide (the sequence) or init → fade → hide (skip).
  * `show` holds until drawn progress reaches 1, which by construction is at or
- * after the pacing clock and real asset progress. `cut` flies the rods past
- * the edges and clears the fog into the video already playing (the canvas is
- * opaque throughout, so the black backdrop under it can go at once), tells
- * the hero to begin, and glides the mark onto the billboard's lockup.
+ * after the pacing clock and real asset progress. `cut` rushes the stripes
+ * past the camera while the black behind them dissolves onto the video, which
+ * has been playing under the gate since `show`; tells the hero to begin; and
+ * glides the mark onto the billboard's lockup.
  *
  * `?loader=1` forces the sequence (client demos, QA); `?noloader=1` skips it.
  */
@@ -144,11 +144,11 @@ export function Loader() {
         className="absolute inset-0 bg-canvas"
         initial={false}
         animate={{ opacity: exiting ? 0 : 1 }}
-        // The canvas above is opaque for the whole sequence, so the black under it can go as the cut starts; on the skip path it is the entrance.
-        transition={{ duration: BACKDROP_MS / 1000, ease: "easeInOut" }}
+        // In the sequence the black dissolves under the rushing stripes, so they fly out over the video; on the skip path it is the entrance.
+        transition={phase === "cut" ? { duration: 0.7, delay: 0.25, ease: "easeInOut" } : { duration: BACKDROP_MS / 1000, ease: "easeInOut" }}
       />
       {(phase === "show" || phase === "cut") && (
-        <FrostStage
+        <IdentStage
           phase={phase}
           shown={shown}
           tasks={tasks}

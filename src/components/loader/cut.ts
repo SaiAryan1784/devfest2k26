@@ -1,4 +1,4 @@
-/** The cut, in seconds: the rods fly past the edges and the fog clears while the mark holds, then it glides to the billboard. */
+/** The cut, in seconds: the stripes rush past the camera and the black dissolves while the mark holds, then it glides to the billboard. */
 export const CUT_S = 2.2;
 /** Fraction of the cut at which the glide begins (about 1.0 s). Loader.tsx times finish() to it. */
 export const GLIDE_AT = 0.45;
