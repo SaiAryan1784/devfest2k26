@@ -5,7 +5,8 @@ import { animate, motion, useMotionValue, useMotionValueEvent, useReducedMotion,
 import { EVENT } from "@/data/event";
 import { useLoaderState } from "@/lib/loader-state";
 import { Z } from "@/lib/z";
-import { ConvergenceStage, GLIDE_AT, type Flip } from "./ConvergenceStage";
+import { GLIDE_AT, type Flip } from "./cut";
+import { PrismStage } from "./PrismStage";
 import { useAssetProgress } from "./useAssetProgress";
 
 /** The pacing clock: drawn progress takes at least this long to reach 1. */
@@ -41,7 +42,7 @@ function measure(el: HTMLElement | null): Flip | null {
 }
 
 /**
- * Convergence: the site's title sequence.
+ * Prism: the site's title sequence.
  *
  * Opaque from the first server-rendered frame so a visit never flashes the
  * page. It plays on every load, including reloads: the one visit it skips is a
@@ -52,15 +53,18 @@ function measure(el: HTMLElement | null): Flip | null {
  *
  * Phases: init → show → cut → hide (the sequence) or init → fade → hide (skip).
  * `show` holds until drawn progress reaches 1, which by construction is at or
- * after the pacing clock and real asset progress. `cut` dissolves the backdrop,
- * sharpens the mark over the light that traced it, tells the hero to begin,
- * and glides the mark onto the hero's copy.
+ * after the pacing clock and real asset progress. `cut` dissolves the backdrop
+ * under the (transparent) light canvas, tells the hero to begin, and glides the
+ * mark onto the hero's copy while the light follows it; on landing, `land()`
+ * and `hide` go out in one commit, so the hero's canvas draws the same picture
+ * in the frame this one disappears.
  *
  * `?loader=1` forces the sequence (client demos, QA); `?noloader=1` skips it.
  */
 export function Loader() {
   const reduce = useReducedMotion();
   const finish = useLoaderState((s) => s.finish);
+  const land = useLoaderState((s) => s.land);
   const setShowing = useLoaderState((s) => s.setShowing);
   const { value, tasks } = useAssetProgress();
   const [phase, setPhase] = useState<Phase>("init");
@@ -115,10 +119,10 @@ export function Loader() {
   useEffect(() => {
     if (phase !== "cut" && phase !== "fade") return;
     const cut = phase === "cut";
-    const timers = [setTimeout(finish, cut ? FINISH_AT_MS : 0), setTimeout(releaseBody, cut ? BACKDROP_MS : 0)];
+    const timers = [setTimeout(cut ? finish : land, cut ? FINISH_AT_MS : 0), setTimeout(releaseBody, cut ? BACKDROP_MS : 0)];
     if (!cut) timers.push(setTimeout(() => setPhase("hide"), BACKDROP_MS));
     return () => timers.forEach(clearTimeout);
-  }, [phase, finish]);
+  }, [phase, finish, land]);
 
   // Whatever path got here, and on unmount, the page scrolls.
   useEffect(() => {
@@ -145,13 +149,16 @@ export function Loader() {
         transition={{ duration: BACKDROP_MS / 1000, ease: "easeInOut" }}
       />
       {(phase === "show" || phase === "cut") && (
-        <ConvergenceStage
+        <PrismStage
           phase={phase}
           shown={shown}
           tasks={tasks}
           flip={flip}
           lockupRef={lockupRef}
-          onLanded={() => setPhase("hide")}
+          onLanded={() => {
+            land();
+            setPhase("hide");
+          }}
         />
       )}
     </div>
