@@ -5,11 +5,10 @@ import type { MotionValue } from "motion/react";
 import { buildField, drawField, type Field } from "@/components/brand/ident-field";
 
 /**
- * The loader's canvas: the ident's stripes. It reads `shown` every frame,
- * measures the stage's lockup once per layout so the stripes know which rows
- * of the mark to light, and lets `ident-field.ts` draw. During the cut it
- * keeps the seconds since the cut so the field can rush, and it stops itself
- * once the field has dissolved.
+ * The loader's canvas: the ident's stripes. It reads `shown` every frame and
+ * lets `ident-field.ts` draw. During the cut it keeps the seconds since the
+ * cut so the field can rush, and it stops itself once the field has
+ * dissolved.
  */
 export function IdentField({ shown, cutting }: { shown: MotionValue<number>; cutting: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,10 +28,7 @@ export function IdentField({ shown, cutting }: { shown: MotionValue<number>; cut
     const resize = () => {
       w = canvas.width = canvas.clientWidth;
       h = canvas.height = canvas.clientHeight;
-      const el = document.querySelector<HTMLElement>("[data-loader-lockup]");
-      const r = el?.getBoundingClientRect();
-      const rect = r && r.width > 0 ? { left: r.left, top: r.top, width: r.width } : { left: w / 2, top: h / 2, width: 0 };
-      field = buildField(w, h, rect);
+      field = buildField(w, h);
     };
     resize();
     window.addEventListener("resize", resize);

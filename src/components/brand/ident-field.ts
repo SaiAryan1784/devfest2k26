@@ -1,62 +1,63 @@
-import { BRACKET_L, BRACKET_R, CAPSULE, LOCKUP_H, LOCKUP_W, WORDMARK } from "./lockup-paths";
 import { SPECTRUM } from "./slabs";
 
 /**
- * The ident: the opening as the Netflix title card, taken as a reference
- * rather than copied. Black. One line of light draws down the centre, then
- * splits into a spectrum of vertical stripes that fan outward like records
- * on a shelf, two fainter layers behind them for depth. The stripes are dark
- * glass in the site's spectrum by x, each with a hot band drifting in it and
- * a hairline of white at its edge. Where the stripes cross the mark, they
- * light up in the rows the mark occupies, left to right, so the lockup builds
- * as a barcode of light before the real one sharpens over it. At the cut the
- * whole field is pushed past the camera while the black behind it dissolves,
- * so the stripes fly out over the billboard's video, already playing.
+ * The ident: the opening as one physical idea, a prism. Black. A soft seam
+ * of white light comes up at the centre like a dimmer, swells once, and
+ * disperses into vertical stripes in a single continuous expansion, every
+ * stripe leaving together, the outer ones travelling further and settling
+ * later. Colour comes from the separation: stripes stay near white at the
+ * centre and take on their hue as they move away, blue one way, red the
+ * other, two fainter layers behind for depth. Each stripe is a soft-edged
+ * beam with bloom, its hot band riding one slow wave across the field. The
+ * mark pulls into focus out of the light (the stage does that) while the
+ * stripes behind it dim into a soft halo, as if the mark takes the light.
+ * At the cut the field rushes past the camera and the black dissolves onto
+ * the billboard's video, already playing.
+ *
+ * Reference, not copy: the Netflix ident's ribbon splitting into a spectrum
+ * the camera flies through. Ours is also the site's story: one light, four
+ * tracks.
  *
  * Pure drawing, no React. Canvas 2D on a transparent canvas over the gate's
- * black backdrop, DPR 1, no filters, no images. Drawn in passes so the canvas
- * state changes a handful of times per frame, not once per stripe.
+ * black backdrop, DPR 1, no filters, no images: everything is light added
+ * (`lighter`) from a handful of 1-D sprites blitted stretched, drawn in
+ * passes so the canvas state changes a few times per frame, not per stripe.
  */
 
-export type Rect = { left: number; top: number; width: number };
-export type Run = [number, number];
-
-/** Front to back: stripe pitch, stripe width, first stripe's offset, brightness, and the share of the push each layer gets. */
+/** Front to back: stripe pitch, core width, first stripe's offset, brightness, and the share of the push each layer gets. */
 export const PITCH = [30, 30, 22];
-export const BAR_W = [12, 6, 3];
+export const BAR_W = [12, 7, 4];
 export const OFFSET = [0, 15, 7];
-export const LAYER_ALPHA = [1, 0.45, 0.25];
+export const LAYER_ALPHA = [1, 0.42, 0.24];
 export const LAYER_PUSH = [1, 0.55, 0.3];
 /** Below this width the pitch and widths scale by NARROW_K. */
 export const NARROW = 768;
 export const NARROW_K = 0.6;
-/** Drawn progress over which the centre line draws down the screen. */
-export const FIRST: [number, number] = [0.02, 0.12];
-/** Drawn progress over which the front stripes leave the centre line, nearest first. */
-export const FAN: [number, number] = [0.1, 0.45];
-/** Drawn progress one stripe takes to slide to its rest. */
-export const SLIDE = 0.14;
+/** Drawn progress over which the seam of light comes up. */
+export const SEAM: [number, number] = [0.02, 0.14];
+/** Drawn progress over which the seam disperses into the stripes. */
+export const SPLIT: [number, number] = [0.16, 0.5];
 /** Drawn progress over which the two far layers come up. */
-export const DEPTH: [number, number] = [0.3, 0.5];
-/** Drawn progress over which the mark's rows light up in the stripes, left to right. */
-export const BUILD: [number, number] = [0.45, 0.62];
-/** The mark's fade, used by the stage; the barcode rows hand over to it here. */
-export const MARK: [number, number] = [0.58, 0.72];
+export const DEPTH: [number, number] = [0.3, 0.56];
+/** The mark's focus pull, used by the stage; the halo behind it is drawn here. */
+export const MARK: [number, number] = [0.52, 0.7];
+/** Distance from the centre (0..1 of half the width) by which a front stripe is fully in its hue. */
+export const SAT_D = 0.55;
 /** Extra scale reached by the end of the hold (the camera starting to move), and the scale the rush reaches during the cut. */
-export const HOLD_PUSH = 0.15;
+export const HOLD_PUSH = 0.12;
 export const CUT_PUSH = 7;
 export const RUSH_S = 0.9;
 /** The field dissolves between these two moments of the cut, in seconds. */
 export const FADE_S: [number, number] = [0.3, 0.9];
-/** Hot band height as a fraction of the canvas. */
-export const BAND_H = 0.22;
+/** Hot band height as a fraction of the canvas, and the wave it rides: amplitude (of the height), cycles across the width, speed. */
+export const BAND_H = 0.26;
+export const WAVE = { amp: 0.1, cycles: 1.15, speed: 0.2 };
 
 const smooth = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const easeOutQuint = (t: number) => 1 - (1 - t) ** 5;
 const easeIn = (t: number) => t * t * t;
 /** A bump that rises and falls between a and b. */
 const bump = (a: number, b: number, x: number) => Math.sin(Math.PI * smooth(a, b, x));
@@ -73,20 +74,17 @@ export type Bar = {
   w: number;
   layer: number;
   hue: number;
-  /** Drawn progress at which the stripe starts to leave the centre. */
-  arrive: number;
-  /** Where the hot band rests, as a fraction of the height. */
-  band: number;
+  /** Distance from the centre, 0..1 of half the width. */
+  d: number;
+  /** How far into its hue the stripe goes; the centre stays white. */
+  sat: number;
+  /** Ease exponent of its dispersion: inner stripes settle first. */
+  k: number;
   seed: number;
-  /** Drawn progress at which this column of the mark lights up. Front layer only, -1 elsewhere. */
-  buildAt: number;
-  /** The rows of the mark this column lights, in canvas y. Front layer only. */
-  runs: Run[];
-  /** Width of the lit rows: the pitch less a hairline, so the barcode reads as the mark's silhouette. */
-  runW: number;
 };
 
-export type Field = { bars: Bar[]; sprites: HTMLCanvasElement[]; lo: string[]; scratch: Float32Array };
+export type Sprites = { body: HTMLCanvasElement[]; bloom: HTMLCanvasElement[]; band: HTMLCanvasElement[]; white: HTMLCanvasElement; whiteBand: HTMLCanvasElement; seam: HTMLCanvasElement };
+export type Field = { bars: Bar[]; sprites: Sprites; scratch: Float32Array };
 
 /** Seeded, so a rebuild on resize keeps the same picture. */
 function prng(seed: number) {
@@ -100,66 +98,70 @@ function prng(seed: number) {
   };
 }
 
-/**
- * Rasterise the mark once at its on-screen size and read, for each column
- * asked for, the runs of rows it covers. Same paths the static Lockup draws.
- */
-function silhouette(rect: Rect, columns: number[]): Run[][] {
-  const k = rect.width / LOCKUP_W;
-  const W = Math.ceil(rect.width);
-  const H = Math.ceil(LOCKUP_H * k);
+function strip(w: number, h: number, paint: (g: CanvasRenderingContext2D) => void) {
   const c = document.createElement("canvas");
-  c.width = W;
-  c.height = H;
+  c.width = w;
+  c.height = h;
   const g = c.getContext("2d");
-  if (!g || W < 1 || H < 1) return columns.map(() => []);
-  g.scale(k, k);
-  g.fillStyle = "#fff";
-  for (const d of [BRACKET_L, BRACKET_R, ...WORDMARK]) g.fill(new Path2D(d));
-  g.beginPath();
-  g.roundRect(CAPSULE.x, CAPSULE.y, CAPSULE.width, CAPSULE.height, CAPSULE.rx);
-  g.fill();
-  const data = g.getImageData(0, 0, W, H).data;
-  return columns.map((cx) => {
-    const x = Math.round(cx - rect.left);
-    if (x < 0 || x >= W) return [];
-    const runs: Run[] = [];
-    let start = -1;
-    for (let y = 0; y < H; y += 1) {
-      const on = data[(y * W + x) * 4 + 3] > 128;
-      if (on && start < 0) start = y;
-      if (!on && start >= 0) {
-        runs.push([rect.top + start, rect.top + y]);
-        start = -1;
-      }
-    }
-    if (start >= 0) runs.push([rect.top + start, rect.top + H]);
-    return runs;
-  });
+  if (g) paint(g);
+  return c;
 }
 
-/** One 1×256 sprite per hue: the hot band's vertical profile, blitted stretched. */
-function bandSprites(): HTMLCanvasElement[] {
-  return SPECTRUM.map((p) => {
-    const c = document.createElement("canvas");
-    c.width = 1;
-    c.height = 256;
-    const g = c.getContext("2d");
-    if (!g) return c;
+/** A horizontal profile: soft shoulders, flat core. The beam. */
+function bodySprite(rgb: string) {
+  return strip(64, 1, (g) => {
+    const grad = g.createLinearGradient(0, 0, 64, 0);
+    grad.addColorStop(0, rgba(rgb, 0));
+    grad.addColorStop(0.18, rgba(rgb, 0.8));
+    grad.addColorStop(0.34, rgba(rgb, 1));
+    grad.addColorStop(0.66, rgba(rgb, 1));
+    grad.addColorStop(0.82, rgba(rgb, 0.8));
+    grad.addColorStop(1, rgba(rgb, 0));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 1);
+  });
+}
+/** A horizontal gaussian-ish falloff. The bloom around a beam, and the seam's glow. */
+function bloomSprite(rgb: string) {
+  return strip(64, 1, (g) => {
+    const grad = g.createLinearGradient(0, 0, 64, 0);
+    grad.addColorStop(0, rgba(rgb, 0));
+    grad.addColorStop(0.25, rgba(rgb, 0.12));
+    grad.addColorStop(0.5, rgba(rgb, 1));
+    grad.addColorStop(0.75, rgba(rgb, 0.12));
+    grad.addColorStop(1, rgba(rgb, 0));
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 1);
+  });
+}
+/** A vertical profile: the hot band, hot at the centre falling to the hue. */
+function bandSprite(mid: string, hot: string) {
+  return strip(1, 256, (g) => {
     const grad = g.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, rgba(hexRgb(p.mid), 0));
-    grad.addColorStop(0.32, rgba(hexRgb(p.mid), 0.75));
-    grad.addColorStop(0.5, rgba(hexRgb(p.hot), 1));
-    grad.addColorStop(0.68, rgba(hexRgb(p.mid), 0.75));
-    grad.addColorStop(1, rgba(hexRgb(p.mid), 0));
+    grad.addColorStop(0, rgba(mid, 0));
+    grad.addColorStop(0.3, rgba(mid, 0.6));
+    grad.addColorStop(0.5, rgba(hot, 1));
+    grad.addColorStop(0.7, rgba(mid, 0.6));
+    grad.addColorStop(1, rgba(mid, 0));
     g.fillStyle = grad;
     g.fillRect(0, 0, 1, 256);
-    return c;
   });
 }
 
-/** Lay the stripes out for a canvas of this size around the mark's box. */
-export function buildField(w: number, h: number, rect: Rect): Field {
+function sprites(): Sprites {
+  const white = "255,255,255";
+  return {
+    body: SPECTRUM.map((p) => bodySprite(hexRgb(p.mid))),
+    bloom: SPECTRUM.map((p) => bloomSprite(hexRgb(p.hi))),
+    band: SPECTRUM.map((p) => bandSprite(hexRgb(p.mid), hexRgb(p.hot))),
+    white: bodySprite(white),
+    whiteBand: bandSprite("230,236,255", white),
+    seam: bloomSprite(white),
+  };
+}
+
+/** Lay the stripes out for a canvas of this size. */
+export function buildField(w: number, h: number): Field {
   const rnd = prng(11);
   const cx = w / 2;
   const k = w < NARROW ? NARROW_K : 1;
@@ -175,24 +177,15 @@ export function buildField(w: number, h: number, rect: Rect): Field {
         w: BAR_W[layer] * k,
         layer,
         hue: Math.min(SPECTRUM.length - 1, Math.max(0, Math.floor((x / w) * SPECTRUM.length))),
-        arrive: FAN[0] + (FAN[1] - FAN[0] - SLIDE) * d + rnd() * 0.02,
-        band: 0.28 + 0.44 * rnd(),
+        d,
+        sat: layer === 0 ? Math.min(1, d / SAT_D) : 1,
+        k: 4.6 - 1.8 * d + rnd() * 0.3,
         seed: rnd() * Math.PI * 2,
-        buildAt: -1,
-        runs: [],
-        runW: pitch - 2,
       });
     }
   }
-  const front = bars.filter((b) => b.layer === 0 && b.x >= rect.left && b.x <= rect.left + rect.width);
-  const runs = silhouette(rect, front.map((b) => b.x));
-  const span = BUILD[1] - BUILD[0] - 0.06;
-  front.forEach((b, i) => {
-    b.runs = runs[i];
-    b.buildAt = BUILD[0] + span * ((b.x - rect.left) / Math.max(1, rect.width));
-  });
   void h;
-  return { bars, sprites: bandSprites(), lo: SPECTRUM.map((p) => p.lo), scratch: new Float32Array(bars.length * 6) };
+  return { bars, sprites: sprites(), scratch: new Float32Array(bars.length * 5) };
 }
 
 export type FieldState = {
@@ -203,121 +196,112 @@ export type FieldState = {
   t: number;
 };
 
-/**
- * Passes: geometry and alphas into a scratch array; the dark glass bodies
- * (source-over, grouped by hue); then everything that adds light (lighter):
- * the edges, the mark's rows, the hot bands, the centre line and the glow
- * behind the mark. Alpha goes through `globalAlpha`, so no colour strings are
- * built per frame.
- */
 export function drawField(ctx: CanvasRenderingContext2D, w: number, h: number, field: Field, s: FieldState) {
   const { p, since, t } = s;
   const cx = w / 2;
   const cy = h / 2;
   const cut = since >= 0;
-  const holdZ = 1 + HOLD_PUSH * smooth(0.75, 1, p);
+  const holdZ = 1 + HOLD_PUSH * smooth(0.72, 1, p);
   const z0 = cut ? holdZ + (CUT_PUSH - holdZ) * easeIn(Math.min(1, since / RUSH_S)) : holdZ;
   const fade = cut ? 1 - smooth(FADE_S[0], FADE_S[1], since) : 1;
-  // The dark bodies clear ahead of the light, so nothing muddy lingers over the video as the stripes fly out.
-  const fadeBody = cut ? 1 - smooth(FADE_S[0] - 0.15, FADE_S[1] - 0.3, since) : 1;
-  const bright = (1 + 0.35 * smooth(0.8, 1, p)) * (1 + 0.5 * bump(BUILD[0], BUILD[1] + 0.05, p)) * (cut ? 1 + 0.8 * smooth(0, 0.35, since) : 1);
+  const flare = cut ? 1 + 0.9 * smooth(0, 0.35, since) : 1;
+  const split = smooth(SPLIT[0], SPLIT[1], p);
+  const splitT = Math.min(1, Math.max(0, (p - SPLIT[0]) / (SPLIT[1] - SPLIT[0])));
   const bandH = BAND_H * h;
-  const { bars, scratch: sc } = field;
+  const { bars, scratch: sc, sprites: sp } = field;
   const zs = [1 + (z0 - 1) * LAYER_PUSH[0], 1 + (z0 - 1) * LAYER_PUSH[1], 1 + (z0 - 1) * LAYER_PUSH[2]];
   const layerIn = [1, smooth(DEPTH[0], DEPTH[1], p), smooth(DEPTH[0] + 0.06, DEPTH[1] + 0.06, p)];
-  // The barcode rows hand over to the real mark as it sharpens.
-  const rowsOut = 1 - smooth(MARK[0] + 0.04, MARK[1] + 0.04, p);
+  // The stripes take their light from the seam as they leave it.
+  const arrive = smooth(0, 0.18, splitT);
 
   ctx.clearRect(0, 0, w, h);
   if (fade <= 0) return;
-
-  // Pass 0: geometry. Per stripe: drawn flag, x, w, alpha, rows alpha, spare.
-  for (let i = 0; i < bars.length; i += 1) {
-    const b = bars[i];
-    const o = i * 6;
-    sc[o] = 0;
-    const base = LAYER_ALPHA[b.layer] * layerIn[b.layer] * fade;
-    if (base <= 0.003) continue;
-    const a = smooth(b.arrive, b.arrive + SLIDE, p);
-    if (a <= 0) continue;
-    const e = easeOutQuint(a);
-    const z = zs[b.layer];
-    const xs = cx + (b.x - cx) * e * z;
-    const ws = Math.max(1, b.w * lerp(0.5, 1, e) * Math.sqrt(z));
-    if (xs + ws < 0 || xs - ws > w) continue;
-    sc[o] = 1;
-    sc[o + 1] = xs - ws / 2;
-    sc[o + 2] = ws;
-    sc[o + 3] = Math.min(1, base * Math.min(1, a * 2));
-    sc[o + 4] = b.buildAt < 0 ? 0 : smooth(b.buildAt, b.buildAt + 0.06, p) * rowsOut * fade;
-  }
-
-  // Pass 1: dark glass bodies, grouped by hue.
-  ctx.globalCompositeOperation = "source-over";
-  let hue = -1;
-  for (let i = 0; i < bars.length; i += 1) {
-    const o = i * 6;
-    if (sc[o] === 0) continue;
-    const b = bars[i];
-    if (b.hue !== hue) {
-      hue = b.hue;
-      ctx.fillStyle = field.lo[hue];
-    }
-    ctx.globalAlpha = Math.min(1, 0.4 * sc[o + 3] * fadeBody * Math.min(1.5, bright));
-    ctx.fillRect(sc[o + 1], 0, sc[o + 2], h);
-  }
-
-  // Pass 2: everything that adds light.
   ctx.globalCompositeOperation = "lighter";
-  ctx.fillStyle = "#ffffff";
+
+  // Pass 0: geometry. Per stripe: drawn flag, x, w, alpha, band y.
   for (let i = 0; i < bars.length; i += 1) {
-    const o = i * 6;
+    const b = bars[i];
+    const o = i * 5;
+    sc[o] = 0;
+    const base = LAYER_ALPHA[b.layer] * layerIn[b.layer] * arrive * fade;
+    if (base <= 0.003 || split <= 0) continue;
+    const z = zs[b.layer];
+    // Dispersion: everyone leaves together; the inner stripes settle first, the outer ones travel on.
+    const e = 1 - (1 - splitT) ** b.k;
+    const xs = cx + (b.x - cx) * e * z;
+    const ws = Math.max(1, b.w * lerp(0.7, 1, e) * Math.sqrt(z));
+    if (xs + 2 * ws < 0 || xs - 2 * ws > w) continue;
+    // A slow breath travelling across the field.
+    const breath = 1 + 0.08 * Math.sin(t * 0.7 - (b.x / w) * 4 + b.seed * 0.2);
+    sc[o] = 1;
+    sc[o + 1] = xs;
+    sc[o + 2] = ws;
+    sc[o + 3] = Math.min(1, base * breath);
+    sc[o + 4] = cy + WAVE.amp * h * Math.sin((b.x / w) * Math.PI * 2 * WAVE.cycles - t * WAVE.speed * Math.PI * 2 + b.layer * 0.9) + 0.02 * h * Math.sin(t * 0.5 + b.seed);
+  }
+
+  // Pass 1: bloom around the front stripes.
+  for (let i = 0; i < bars.length; i += 1) {
+    const o = i * 5;
+    if (sc[o] === 0 || bars[i].layer !== 0) continue;
+    const b = bars[i];
+    const ws = sc[o + 2] * 2.6;
+    ctx.globalAlpha = 0.16 * sc[o + 3] * Math.min(1.6, flare);
+    ctx.drawImage(b.sat < 1 ? sp.seam : sp.bloom[b.hue], sc[o + 1] - ws / 2, 0, ws, h);
+  }
+
+  // Pass 2: the beams. Hue by how far the stripe has moved from the centre; white where it has not.
+  for (let i = 0; i < bars.length; i += 1) {
+    const o = i * 5;
     if (sc[o] === 0) continue;
     const b = bars[i];
-    // A hairline of white at the left edge; the front layer's is brighter.
-    ctx.globalAlpha = (b.layer === 0 ? 0.3 : 0.16) * sc[o + 3] * Math.min(1.4, bright);
-    ctx.fillRect(sc[o + 1], 0, 1, h);
-    // The mark's rows.
-    if (sc[o + 4] > 0.003 && b.runs.length) {
-      const rx = sc[o + 1] + sc[o + 2] / 2 - b.runW / 2;
-      ctx.globalAlpha = Math.min(1, 0.95 * sc[o + 4]);
-      for (const [y0, y1] of b.runs) ctx.fillRect(rx, y0, b.runW, y1 - y0);
-      ctx.globalAlpha = 0.12 * sc[o + 4];
-      ctx.fillRect(sc[o + 1], 0, sc[o + 2], h);
+    const x0 = sc[o + 1] - sc[o + 2] / 2;
+    const a = 0.38 * sc[o + 3] * Math.min(1.5, flare);
+    if (b.sat > 0.003) {
+      ctx.globalAlpha = a * b.sat;
+      ctx.drawImage(sp.body[b.hue], x0, 0, sc[o + 2], h);
+    }
+    if (b.sat < 0.997) {
+      ctx.globalAlpha = a * (1 - b.sat);
+      ctx.drawImage(sp.white, x0, 0, sc[o + 2], h);
     }
   }
-  // The hot bands, one stretched blit each.
+
+  // Pass 3: the hot bands, riding the wave.
   for (let i = 0; i < bars.length; i += 1) {
-    const o = i * 6;
+    const o = i * 5;
     if (sc[o] === 0) continue;
     const b = bars[i];
-    const bandY = b.band * h + 0.03 * h * Math.sin(t * 0.7 + b.seed);
-    ctx.globalAlpha = Math.min(1, sc[o + 3] * Math.min(1, bright));
-    ctx.drawImage(field.sprites[b.hue], sc[o + 1], bandY - bandH / 2, sc[o + 2], bandH);
+    const x0 = sc[o + 1] - sc[o + 2] / 2;
+    const y0 = sc[o + 4] - bandH / 2;
+    ctx.globalAlpha = Math.min(1, 0.85 * sc[o + 3] * Math.min(1.3, flare));
+    ctx.drawImage(b.sat < 0.5 ? sp.whiteBand : sp.band[b.hue], x0, y0, sc[o + 2], bandH);
   }
 
-  // The centre line: draws down from the middle, then hands over to the stripes as they leave it.
-  const draw = smooth(FIRST[0], FIRST[1], p);
-  const lineOut = 1 - smooth(FAN[0], FAN[0] + 0.1, p);
-  if (draw > 0 && lineOut > 0.003) {
-    const half = draw * (h / 2 + 0.02 * h);
-    ctx.fillStyle = "#ffffff";
-    ctx.globalAlpha = 0.9 * lineOut * fade;
-    ctx.fillRect(cx - 1, cy - half, 2, 2 * half);
-    ctx.globalAlpha = 0.25 * lineOut * fade;
-    ctx.fillRect(cx - 4, cy - half, 8, 2 * half);
+  // The seam: comes up like a dimmer, swells once, and gives its light to the stripes.
+  const seamUp = smooth(SEAM[0], SEAM[1], p);
+  const swell = 1 + 0.6 * bump(SPLIT[0] - 0.06, SPLIT[0] + 0.05, p);
+  const seamOut = 1 - smooth(SPLIT[0] + 0.02, SPLIT[0] + 0.16, p);
+  const seamA = seamUp * swell * seamOut * fade;
+  if (seamA > 0.003) {
+    const glowW = lerp(24, 110, seamUp) * swell;
+    ctx.globalAlpha = Math.min(1, 0.55 * seamA);
+    ctx.drawImage(sp.seam, cx - glowW / 2, 0, glowW, h);
+    ctx.globalAlpha = Math.min(1, 0.95 * seamA);
+    ctx.drawImage(sp.white, cx - 3, 0, 6, h);
   }
 
-  // The glow behind the mark, rising with it and gone as the field rushes.
-  const glow = smooth(MARK[0], MARK[1], p) * (cut ? 1 - smooth(0.2, 0.7, since) : 1);
-  if (glow > 0.01) {
-    const r = 0.3 * Math.min(w, h);
+  // The halo: the stripes behind the mark dim as it takes the light.
+  const halo = smooth(MARK[0], MARK[1], p) * (cut ? 1 - smooth(0, 0.3, since) : 1);
+  if (halo > 0.01) {
+    const r = 0.42 * Math.min(w, h) * 1.15;
+    ctx.globalCompositeOperation = "source-over";
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, `rgba(255,255,255,${(0.16 * glow).toFixed(3)})`);
-    g.addColorStop(0.5, `rgba(255,255,255,${(0.05 * glow).toFixed(3)})`);
-    g.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = g;
+    g.addColorStop(0, `rgba(0,0,0,${(0.72 * halo).toFixed(3)})`);
+    g.addColorStop(0.45, `rgba(0,0,0,${(0.45 * halo).toFixed(3)})`);
+    g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.globalAlpha = 1;
+    ctx.fillStyle = g;
     ctx.fillRect(cx - r, cy - r, 2 * r, 2 * r);
   }
 

@@ -1,7 +1,7 @@
 /**
  * DevFest Noida 2026 lockup geometry, outlined from the supplied Figma SVG.
  * One source for every renderer: the static Lockup (hero, nav, footer, 404,
- * and the loader's mark, which the ident's stripes also build as a barcode).
+ * and the loader's mark).
  * Generated from the original Lockup.tsx path data; do not retype by hand.
  */
 

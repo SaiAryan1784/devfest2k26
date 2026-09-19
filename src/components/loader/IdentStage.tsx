@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, type ReactNode, type RefObject } from "react";
-import { motion, useMotionValueEvent, useTransform, type MotionValue } from "motion/react";
+import { cubicBezier, motion, useMotionValueEvent, useTransform, type MotionValue } from "motion/react";
 import { MARK } from "@/components/brand/ident-field";
 import { Lockup, PILL } from "@/components/brand/Lockup";
 import { EVENT } from "@/data/event";
@@ -37,15 +37,21 @@ function Caption({ className, show, children }: { className: string; show: boole
 /**
  * Everything on screen during the hold and the cut. The stripes are the whole
  * picture; the frame carries three captions and a mono readout. The mark
- * sharpens over its barcode as the rows light up, holds while the field
- * rushes past the camera, then glides onto the billboard's lockup. The canvas
- * dissolves itself during the rush; the wrapper's fade is a backstop.
+ * pulls into focus out of the light (blur, scale and opacity settling on the
+ * same clock the canvas draws to), holds while the field rushes past the
+ * camera, then glides onto the billboard's lockup. The canvas dissolves
+ * itself during the rush; the wrapper's fade is a backstop.
  */
 export function IdentStage({ phase, shown, tasks, flip, lockupRef, onLanded }: Props) {
   const cut = phase === "cut";
   const frame = tasks.type && !cut;
   const readout = useRef<HTMLSpanElement>(null);
-  const sharpen = useTransform(shown, MARK, [0, 1]);
+  // The focus pull: one ease, three properties, off the drawn-progress clock.
+  const focus = useTransform(shown, MARK, [0, 1], { ease: cubicBezier(0.16, 1, 0.3, 1) });
+  const markOpacity = useTransform(focus, [0, 0.6, 1], [0, 1, 1]);
+  const markScale = useTransform(focus, [0, 1], [1.06, 1]);
+  const markBlur = useTransform(focus, [0, 1], [16, 0]);
+  const markFilter = useTransform(markBlur, (v) => (v < 0.05 ? "none" : `blur(${v.toFixed(2)}px)`));
 
   // The readout writes straight to the DOM: a hundred text changes, no renders.
   useMotionValueEvent(shown, "change", (v) => {
@@ -77,7 +83,7 @@ export function IdentStage({ phase, shown, tasks, flip, lockupRef, onLanded }: P
         <span className="opacity-60"> / 100</span>
       </motion.p>
 
-      {/* The mark: built as a barcode by the stripes, sharpened here, then the glide. */}
+      {/* The mark: pulled into focus out of the light, held, then the glide. */}
       <div className="absolute inset-0 grid place-items-center">
         <motion.div
           ref={lockupRef}
@@ -108,7 +114,7 @@ export function IdentStage({ phase, shown, tasks, flip, lockupRef, onLanded }: P
             if (cut) onLanded();
           }}
         >
-          <motion.div style={{ opacity: sharpen }}>
+          <motion.div style={{ opacity: markOpacity, scale: markScale, filter: markFilter }}>
             <Lockup pill={PILL.spectrum} />
           </motion.div>
         </motion.div>
