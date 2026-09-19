@@ -14,7 +14,7 @@ npm run lint
 npm run spotlight  # regenerate the stage spotlight poster
 ```
 
-The intro loader plays on every load (a back/forward return and reduced motion skip it). Append `?noloader=1` to skip it while testing.
+The intro loader plays on every load (a back/forward return and reduced motion skip it). Append `?noloader=1` to skip it while testing. The hero's video loop is built by `scripts/encode-hero-video.sh` from a source file that is not in the repo (`docs/reference/video/`, gitignored).
 
 ## Where things live
 
@@ -24,10 +24,10 @@ The intro loader plays on every load (a back/forward return and reduced motion s
 | Tracks (4) | `src/data/tracks.ts` |
 | Floor experiences (9) | `src/data/floor.ts` |
 | Speakers, schedule, partners | `src/data/speakers.ts`, `schedule.ts`, `sponsors.ts` |
-| Brand light, drawn in code (hero wall, pipe marks, palettes) | `src/components/brand/` |
+| Brand light, drawn in code (the loader's shelf of bars, pipe marks, palettes) | `src/components/brand/` |
 | Lockup SVGs and the spotlight poster | `public/brand/` |
 | Design tokens | `src/app/globals.css` (`@theme`) |
-| Signature components (light wall, light pipes, spotlight, lockup) | `src/components/brand/` |
+| Signature components (light pipes, spotlight, lockup) | `src/components/brand/` |
 | Page sections | `src/components/sections/` |
 | Vendored ReactBits components | `src/components/reactbits/` |
 | Full spec, decisions, build log | `docs/SPEC.md` |

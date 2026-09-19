@@ -1,20 +1,14 @@
 "use client";
 
 import { useRef, type ReactNode, type RefObject } from "react";
-import { motion, useMotionValueEvent, type MotionValue } from "motion/react";
+import { motion, useMotionValueEvent, useTransform, type MotionValue } from "motion/react";
 import { Lockup, PILL } from "@/components/brand/Lockup";
 import { EVENT } from "@/data/event";
-import { Convergence } from "./Convergence";
+import { CUT_S, GLIDE_AT, type Flip } from "./cut";
+import { SpectrumField } from "./SpectrumField";
 import type { AssetTasks } from "./useAssetProgress";
 
-/** Where the loader's lockup has to travel to land on the hero's. */
-export type Flip = { x: number; y: number; scale: number };
-
 const ease = [0.16, 1, 0.3, 1] as const;
-/** The cut, in seconds: the mark sharpens at the centre, holds, then glides up to the hero. */
-const CUT_S = 1.5;
-/** Fraction of the cut at which the glide begins (0.6 s). Loader.tsx times finish() to it. */
-export const GLIDE_AT = 0.4;
 
 type Props = {
   phase: "show" | "cut";
@@ -40,16 +34,17 @@ function Caption({ className, show, children }: { className: string; show: boole
 }
 
 /**
- * Everything on screen during the hold and the cut. The light field is the
- * whole picture; the frame carries three captions and a mono readout. The
- * lockup itself is invisible until the cut: it fades in exactly over the
- * outline the streaks have traced (same box, same geometry), holds for a
- * beat while the light dissolves under it, then glides onto the hero's copy.
+ * Everything on screen during the hold and the cut. The shelf is the whole
+ * picture; the frame carries three captions and a mono readout. The mark is
+ * invisible until the lines have drawn it: it fades in over its own barcode
+ * (same box, same geometry), holds while the bars extend and rush, then glides
+ * onto the billboard's lockup.
  */
-export function ConvergenceStage({ phase, shown, tasks, flip, lockupRef, onLanded }: Props) {
+export function SpectrumStage({ phase, shown, tasks, flip, lockupRef, onLanded }: Props) {
   const cut = phase === "cut";
   const frame = tasks.type && !cut;
   const readout = useRef<HTMLSpanElement>(null);
+  const sharpen = useTransform(shown, [0.42, 0.55], [0, 1]);
 
   // The readout writes straight to the DOM: a hundred text changes, no renders.
   useMotionValueEvent(shown, "change", (v) => {
@@ -58,14 +53,7 @@ export function ConvergenceStage({ phase, shown, tasks, flip, lockupRef, onLande
 
   return (
     <div data-loader-stage aria-hidden="true" className="absolute inset-0 overflow-hidden">
-      <motion.div
-        className="absolute inset-0"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: cut ? 0 : 1 }}
-        transition={cut ? { duration: 0.45, delay: 0.2 } : { duration: 0.6 }}
-      >
-        <Convergence shown={shown} cutting={cut} targetRef={lockupRef} />
-      </motion.div>
+      <SpectrumField shown={shown} cutting={cut} lockupRef={lockupRef} />
 
       <Caption className="left-6 top-6" show={frame}>
         {EVENT.organiser} presents
@@ -86,7 +74,7 @@ export function ConvergenceStage({ phase, shown, tasks, flip, lockupRef, onLande
         <span className="opacity-60"> / 100</span>
       </motion.p>
 
-      {/* The mark: hidden through the hold, sharpened over the traced outline at the cut, then the glide. */}
+      {/* The mark: drawn by the lines, sharpened over them, then the glide. */}
       <div className="absolute inset-0 grid place-items-center">
         <motion.div
           ref={lockupRef}
@@ -96,10 +84,10 @@ export function ConvergenceStage({ phase, shown, tasks, flip, lockupRef, onLande
           initial={false}
           animate={
             cut && flip
-              ? { x: [0, 0, flip.x], y: [0, 0, flip.y], scale: [1, 1, flip.scale], opacity: [0, 1, 1, 0] }
+              ? { x: [0, 0, flip.x], y: [0, 0, flip.y], scale: [1, 1, flip.scale], opacity: [1, 1, 1, 0] }
               : cut
-                ? { opacity: [0, 1, 0] }
-                : { x: 0, y: 0, scale: 1, opacity: 0 }
+                ? { opacity: [1, 1, 0] }
+                : { x: 0, y: 0, scale: 1, opacity: 1 }
           }
           transition={
             cut && flip
@@ -117,7 +105,9 @@ export function ConvergenceStage({ phase, shown, tasks, flip, lockupRef, onLande
             if (cut) onLanded();
           }}
         >
-          <Lockup pill={PILL.spectrum} />
+          <motion.div style={{ opacity: sharpen }}>
+            <Lockup pill={PILL.spectrum} />
+          </motion.div>
         </motion.div>
       </div>
     </div>

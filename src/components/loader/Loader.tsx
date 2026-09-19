@@ -5,7 +5,8 @@ import { animate, motion, useMotionValue, useMotionValueEvent, useReducedMotion,
 import { EVENT } from "@/data/event";
 import { useLoaderState } from "@/lib/loader-state";
 import { Z } from "@/lib/z";
-import { ConvergenceStage, GLIDE_AT, type Flip } from "./ConvergenceStage";
+import { GLIDE_AT, type Flip } from "./cut";
+import { SpectrumStage } from "./SpectrumStage";
 import { useAssetProgress } from "./useAssetProgress";
 
 /** The pacing clock: drawn progress takes at least this long to reach 1. */
@@ -41,7 +42,7 @@ function measure(el: HTMLElement | null): Flip | null {
 }
 
 /**
- * Convergence: the site's title sequence.
+ * The shelf: the site's title sequence.
  *
  * Opaque from the first server-rendered frame so a visit never flashes the
  * page. It plays on every load, including reloads: the one visit it skips is a
@@ -52,9 +53,10 @@ function measure(el: HTMLElement | null): Flip | null {
  *
  * Phases: init → show → cut → hide (the sequence) or init → fade → hide (skip).
  * `show` holds until drawn progress reaches 1, which by construction is at or
- * after the pacing clock and real asset progress. `cut` dissolves the backdrop,
- * sharpens the mark over the light that traced it, tells the hero to begin,
- * and glides the mark onto the hero's copy.
+ * after the pacing clock and real asset progress. `cut` dissolves the backdrop
+ * under the (transparent) canvas while the bars rush past, revealing the video
+ * already playing, tells the hero to begin, and glides the mark onto the
+ * billboard's lockup.
  *
  * `?loader=1` forces the sequence (client demos, QA); `?noloader=1` skips it.
  */
@@ -145,7 +147,7 @@ export function Loader() {
         transition={{ duration: BACKDROP_MS / 1000, ease: "easeInOut" }}
       />
       {(phase === "show" || phase === "cut") && (
-        <ConvergenceStage
+        <SpectrumStage
           phase={phase}
           shown={shown}
           tasks={tasks}

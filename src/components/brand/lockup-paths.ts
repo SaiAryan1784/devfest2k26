@@ -1,7 +1,8 @@
 /**
  * DevFest Noida 2026 lockup geometry, outlined from the supplied Figma SVG.
  * One source for every renderer: the static Lockup (hero, nav, footer, 404)
- * and the loader's LockupReveal, which draws the same shapes in stages.
+ * and the loader's shelf, which rasterises the same shapes to read which rows
+ * each of its bars should light.
  * Generated from the original Lockup.tsx path data; do not retype by hand.
  */
 

@@ -148,18 +148,9 @@ body {
 }
 
 /*
- * The hero wall's hot bands breathe, and a pulse of light runs through the
- * active track's pipe. The breath is transform only; the pulse advances a
- * dash offset on one small SVG stroke, the one paint-animated layer in a card.
+ * A pulse of light runs through the active track's pipe: a dash offset on one
+ * small SVG stroke, the one paint-animated layer in a card.
  */
-@keyframes band-drift {
-  0%, 100% { transform: translate3d(0, -6%, 0); }
-  50% { transform: translate3d(0, 6%, 0); }
-}
-.band-drift {
-  animation: band-drift 7s ease-in-out infinite;
-}
-
 @keyframes pipe-run {
   from { stroke-dashoffset: 1; }
   to { stroke-dashoffset: 0; }
@@ -170,9 +161,12 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .band-drift,
   .pipe-run {
     animation: none;
+  }
+  /* The billboard shows its poster and never plays. */
+  .hero-video {
+    display: none !important;
   }
   /*
    * The loader gate is server-rendered opaque so a cold visit never flashes
