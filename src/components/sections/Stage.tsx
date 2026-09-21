@@ -66,57 +66,71 @@ export function Stage() {
           <Spotlight x={x} />
           <SpotlightPool x={x} />
 
-          <ul
-            ref={gridRef}
-            onMouseLeave={reset}
-            onBlur={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) reset();
-            }}
-            className="relative -mx-5 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 lg:grid-cols-4"
-          >
-          {SPEAKERS_2025.map((s, i) => (
-            <motion.li
-              key={s.name}
-              className="min-w-[78%] shrink-0 snap-start sm:min-w-[46%] md:min-w-0"
-              initial={reduce ? false : { opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.3 }}
-              transition={{ duration: 0.6, delay: (i % 4) * 0.06, ease }}
+          {/* Bleeds to the true viewport edge (cancelling Container's own
+              padding, then re-adding it) so the scroll row and its fade can
+              share one coordinate box. */}
+          <div className="relative -mx-5 px-5 md:mx-0 md:px-0">
+            <ul
+              ref={gridRef}
+              onMouseLeave={reset}
+              onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) reset();
+              }}
+              className="relative flex snap-x snap-mandatory gap-4 overflow-x-auto pb-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-2 md:overflow-visible md:pb-0 lg:grid-cols-4"
             >
-              <motion.div
-                tabIndex={0}
-                onMouseEnter={(e) => aim(e.currentTarget, i)}
-                onFocus={(e) => aim(e.currentTarget, i)}
-                animate={{
-                  opacity: lit === null || lit === i ? 1 : 0.6,
-                  boxShadow:
-                    lit === i
-                      ? "0 0 0 1px rgba(255,224,130,.4), 0 0 40px -10px rgba(251,188,4,.5)"
-                      : "0 0 0 1px rgba(255,255,255,0), 0 0 0px 0px rgba(251,188,4,0)",
-                }}
-                whileHover={reduce ? undefined : { y: -4 }}
-                transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                className="glass !bg-surface/85 flex min-h-[112px] items-center gap-4 rounded-card p-4 pr-5"
-              >
-                {s.photo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.photo} alt="" className="size-16 shrink-0 rounded-full object-cover" />
-                ) : (
-                  <span aria-hidden="true" className="display grid size-16 shrink-0 place-items-center rounded-full bg-surface-2 text-lg font-semibold text-muted">
-                    {initials(s.name)}
-                  </span>
-                )}
-                <div className="min-w-0">
-                  <p className="truncate text-[17px] font-semibold tracking-[-0.01em]">{s.name}</p>
-                  <p className="text-sm leading-snug text-muted">
-                    {s.role}
-                    {s.company ? `, ${s.company}` : ""}
-                  </p>
-                </div>
-              </motion.div>
-            </motion.li>
-          ))}
-          </ul>
+              {SPEAKERS_2025.map((s, i) => (
+                <motion.li
+                  key={s.name}
+                  // A cap, not a floor: the old min-w let a card's own unwrapped
+                  // role/company text grow it well past 78% (measured up to 97%
+                  // of a 390px viewport), so a phone visitor saw one full-screen
+                  // card and nothing hinting seven more were a swipe away. A hard
+                  // width forces that text to wrap instead.
+                  className="w-[78%] shrink-0 snap-start sm:w-[46%] md:w-full"
+                  initial={reduce ? false : { opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.3 }}
+                  transition={{ duration: 0.6, delay: (i % 4) * 0.06, ease }}
+                >
+                  <motion.div
+                    tabIndex={0}
+                    onMouseEnter={(e) => aim(e.currentTarget, i)}
+                    onFocus={(e) => aim(e.currentTarget, i)}
+                    animate={{
+                      opacity: lit === null || lit === i ? 1 : 0.6,
+                      boxShadow:
+                        lit === i
+                          ? "0 0 0 1px rgba(255,224,130,.4), 0 0 40px -10px rgba(251,188,4,.5)"
+                          : "0 0 0 1px rgba(255,255,255,0), 0 0 0px 0px rgba(251,188,4,0)",
+                    }}
+                    whileHover={reduce ? undefined : { y: -4 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 24 }}
+                    className="glass !bg-surface/85 flex min-h-[112px] items-center gap-4 rounded-card p-4 pr-5"
+                  >
+                    {s.photo ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={s.photo} alt="" className="size-16 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span aria-hidden="true" className="display grid size-16 shrink-0 place-items-center rounded-full bg-surface-2 text-lg font-semibold text-muted">
+                        {initials(s.name)}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-[17px] font-semibold tracking-[-0.01em]">{s.name}</p>
+                      <p className="text-sm leading-snug text-muted">
+                        {s.role}
+                        {s.company ? `, ${s.company}` : ""}
+                      </p>
+                    </div>
+                  </motion.div>
+                </motion.li>
+              ))}
+            </ul>
+            {/* Hints that a card continues past the edge rather than cutting
+                off starkly; a plain gradient, no backdrop-filter, matching
+                HeroVideo's scrims. Grid mode (md+) doesn't scroll, so hidden there. */}
+            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-16 bg-gradient-to-l from-canvas to-transparent md:hidden" />
+          </div>
         </div>
       </Container>
 
