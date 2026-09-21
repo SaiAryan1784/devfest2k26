@@ -64,7 +64,8 @@ export function Gallery() {
                   alt={photo.caption}
                   fill
                   sizes={photo.feature ? "(min-width: 1024px) 66vw, 100vw" : "(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"}
-                  className={`rounded-card object-cover ${photo.focus === "top" ? "object-top" : photo.focus === "bottom" ? "object-bottom" : ""}`}
+                  className="rounded-card object-cover"
+                  style={{ objectPosition: `50% ${photo.focusY ?? "50%"}` }}
                 />
               </GlareHover>
               <figcaption className="label mt-3 shrink-0">{photo.caption}</figcaption>
