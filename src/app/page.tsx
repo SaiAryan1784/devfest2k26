@@ -6,6 +6,7 @@ import { Stage } from "@/components/sections/Stage";
 import { Schedule } from "@/components/sections/Schedule";
 import { Essentials } from "@/components/sections/Essentials";
 import { Partners } from "@/components/sections/Partners";
+import { Gallery } from "@/components/sections/Gallery";
 import { FinalCta } from "@/components/sections/FinalCta";
 import { Footer } from "@/components/sections/Footer";
 import { LazyMount } from "@/components/ui/LazyMount";
@@ -36,6 +37,9 @@ export default function Page() {
         </LazyMount>
         <LazyMount id="partners" minHeight="70vh">
           <Partners />
+        </LazyMount>
+        <LazyMount id="gallery" minHeight="90vh">
+          <Gallery />
         </LazyMount>
         <LazyMount minHeight="90vh">
           <FinalCta />

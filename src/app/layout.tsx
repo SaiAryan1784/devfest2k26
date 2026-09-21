@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Google_Sans_Flex, Google_Sans_Code } from "next/font/google";
 import { EVENT } from "@/data/event";
 import { Loader } from "@/components/loader/Loader";
+import { CursorFx } from "@/components/ui/CursorFx";
+import { ExcitedButton } from "@/components/ui/ExcitedButton";
 import { Z } from "@/lib/z";
 import "./globals.css";
 
@@ -24,8 +26,7 @@ const gsCode = Google_Sans_Code({
   adjustFontFallback: false,
 });
 
-// Venue is TBD, so the description carries the date and the region only.
-const DESCRIPTION = `One day, ${EVENT.counts.tracks} tracks, and thousands of developers from across ${EVENT.venue.region}. ${EVENT.dateLabel}.`;
+const DESCRIPTION = `One day, ${EVENT.counts.tracks} tracks, at ${EVENT.venue.shortLabel}. ${EVENT.dateLabel}.`;
 
 export const metadata: Metadata = {
   title: EVENT.name,
@@ -54,6 +55,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </a>
         <Loader />
         {children}
+        <CursorFx />
+        <ExcitedButton />
         {/* Film grain, fixed and inert so it never repaints with scroll. */}
         <div
           aria-hidden="true"

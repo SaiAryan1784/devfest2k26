@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
 import { Lockup, PILL } from "@/components/brand/Lockup";
 import { GLOW } from "@/components/brand/slabs";
@@ -11,37 +11,41 @@ import { EVENT } from "@/data/event";
 import { TRACKS } from "@/data/tracks";
 import { useAccent, useAccentCycle } from "@/lib/accent";
 import { useLoaderState } from "@/lib/loader-state";
+import { useFinePointer } from "@/lib/use-fine-pointer";
 import { HeroVideo } from "./HeroVideo";
+import { STACK_STEP_PX, STACK_TOP_VH } from "./TrackStack";
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
-/** True only for devices with an actual mouse: gates the proximity headline off touch/coarse pointers. */
-function useFinePointer() {
-  const [fine, setFine] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
-    const update = () => setFine(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-  return fine;
-}
-
 /** Four dots, one per track: hovering or focusing one lights the lockup pill
  *  in that track's colour and pauses the auto-cycle; leaving resumes it.
- *  Clicking jumps to the track. */
+ *  Clicking jumps to that track's card in the pinned stack below. */
 function TrackDots() {
+  const reduce = useReducedMotion();
   const accent = useAccent((s) => s.accent);
   const setAccent = useAccent((s) => s.setAccent);
   const setHold = useAccent((s) => s.setHold);
 
   return (
     <div className="flex items-center gap-3" role="group" aria-label="Preview a track">
-      {TRACKS.map((t) => (
+      {TRACKS.map((t, i) => (
         <a
           key={t.id}
           href="#tracks"
+          onClick={(e) => {
+            const el = document.getElementById(`track-${t.id}`);
+            // Tracks sits behind a LazyMount; if it hasn't mounted yet (rare:
+            // its 800px root margin means this is normally instant), fall
+            // through to the native #tracks jump plus AnchorFix's realignment
+            // instead of scrolling nowhere.
+            if (!el) return;
+            e.preventDefault();
+            setAccent(t.color);
+            const desktop = window.matchMedia("(min-width: 1024px)").matches;
+            const offset = desktop ? window.innerHeight * (STACK_TOP_VH / 100) + i * STACK_STEP_PX : 96;
+            const targetY = window.scrollY + el.getBoundingClientRect().top - offset;
+            window.scrollTo({ top: targetY, behavior: reduce ? "auto" : "smooth" });
+          }}
           onMouseEnter={() => {
             setAccent(t.color);
             setHold(true);
@@ -180,10 +184,7 @@ export function Hero() {
             </div>
             <div className="flex items-baseline gap-2">
               <dt className="label">Venue</dt>
-              <dd className="label !text-text">
-                {EVENT.venue.label}
-                <span className="ml-2 opacity-60">{EVENT.venue.region}</span>
-              </dd>
+              <dd className="label !text-text">{EVENT.venue.shortLabel}</dd>
             </div>
             <div className="flex items-baseline gap-2">
               <dt className="label">Last year</dt>

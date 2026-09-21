@@ -8,13 +8,18 @@ export const EVENT = {
   // IST. Doors open at 9:00.
   date: "2026-10-10T09:00:00+05:30",
   dateLabel: "10 October 2026",
-  // The 2026 venue is not settled. Only the region is public for now, so the
-  // name, address and map come back here once it is confirmed and every
-  // surface that shows a venue follows this one object.
+  // Confirmed 21 Sep 2026. Every surface that shows a venue follows this one
+  // object; shortLabel is for tight spaces (hero facts row, footer), label
+  // and address for the full reveal (Essentials), mapsEmbedUrl needs no
+  // Google Maps API key (the keyless `?output=embed` form).
   venue: {
-    status: "tbd",
-    label: "Announced soon",
+    status: "confirmed",
+    label: "ExpoInn Suites & Convention",
+    shortLabel: "ExpoInn, Greater Noida",
+    address: "India Exposition Mart, Gate 11, 25-29, Knowledge Park II, Greater Noida, Uttar Pradesh 201310",
     region: "Delhi NCR",
+    mapsLink: "https://maps.google.com/?q=ExpoInn+Suites+%26+Convention+Knowledge+Park+II+Greater+Noida",
+    mapsEmbedUrl: "https://www.google.com/maps?q=ExpoInn+Suites+%26+Convention%2C+Greater+Noida&output=embed",
   },
   links: {
     waitlist: "https://www.commudle.com/fill-form/5096",

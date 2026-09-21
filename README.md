@@ -1,6 +1,6 @@
 # DevFest Noida 2026
 
-Design-led landing page for GDG Noida's DevFest, 10 October 2026, Delhi NCR (venue to be announced).
+Design-led landing page for GDG Noida's DevFest, 10 October 2026, at ExpoInn Suites & Convention, Greater Noida.
 
 Next.js 16 (App Router) · Tailwind CSS v4 · Motion · ReactBits (via the shadcn registry) · dark only.
 

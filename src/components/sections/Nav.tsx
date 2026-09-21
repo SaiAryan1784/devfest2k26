@@ -20,6 +20,7 @@ const LINKS = [
   { href: "#schedule", label: "Schedule" },
   { href: "#venue", label: "Venue" },
   { href: "#partners", label: "Partners" },
+  { href: "#gallery", label: "Gallery" },
 ];
 
 // Stable reference: the hook observes these ids once.

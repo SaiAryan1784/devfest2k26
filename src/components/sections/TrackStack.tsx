@@ -6,8 +6,10 @@ import type { Track } from "@/data/tracks";
 import { useAccent } from "@/lib/accent";
 import { TrackPanel } from "./TrackPanel";
 
-const STACK_TOP_VH = 12; // sticky offset from the viewport top
-const STACK_STEP_PX = 24; // extra offset per card, so pinned cards visibly step down
+// Exported so a hero track dot's click handler can land a scroll exactly on
+// the moment a card sticks (see Hero.tsx's TrackDots).
+export const STACK_TOP_VH = 12; // sticky offset from the viewport top
+export const STACK_STEP_PX = 24; // extra offset per card, so pinned cards visibly step down
 const MIN_SCALE = 0.94; // how small a card gets once fully buried under later ones
 
 /**
@@ -68,6 +70,7 @@ function TrackCard({
 
   return (
     <motion.div
+      id={`track-${track.id}`}
       className="lg:sticky lg:[transform:scale(var(--s,1))] lg:will-change-transform"
       style={{
         ["--s" as string]: scale,
