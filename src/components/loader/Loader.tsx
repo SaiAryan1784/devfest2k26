@@ -114,13 +114,23 @@ export function Loader() {
 
   // Leaving: hand the page to the hero, and let it scroll once the backdrop
   // is gone. The skip path does both at once.
+  //
+  // When the hero's lockup was off-screen at the cut (a reload landed scrolled
+  // past it), `flip` is null and IdentStage takes its fallback path: a plain
+  // 1.2 s fade with no glide to synchronise, calling onLanded() (which sets
+  // phase to "hide") well before FINISH_AT_MS (~1.24 s) would have fired. That
+  // race let this effect's cleanup cancel the pending finish() before it ever
+  // ran, so `useLoaderState.done` stayed false forever and the hero's entrance
+  // never played, even after scrolling back up to it. With no glide to time
+  // against, there is nothing to wait for: fire finish() immediately instead.
   useEffect(() => {
     if (phase !== "cut" && phase !== "fade") return;
     const cut = phase === "cut";
-    const timers = [setTimeout(finish, cut ? FINISH_AT_MS : 0), setTimeout(releaseBody, cut ? BACKDROP_MS : 0)];
+    const finishDelay = cut && flip ? FINISH_AT_MS : 0;
+    const timers = [setTimeout(finish, finishDelay), setTimeout(releaseBody, cut ? BACKDROP_MS : 0)];
     if (!cut) timers.push(setTimeout(() => setPhase("hide"), BACKDROP_MS));
     return () => timers.forEach(clearTimeout);
-  }, [phase, finish]);
+  }, [phase, finish, flip]);
 
   // Whatever path got here, and on unmount, the page scrolls.
   useEffect(() => {
