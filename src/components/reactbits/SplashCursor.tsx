@@ -1353,8 +1353,18 @@ export default function SplashCursor({
 
   return (
     // Patched: reads this project's single z-index scale (src/lib/z.ts)
-    // instead of a hardcoded z-50.
-    <div className="fixed top-0 left-0 pointer-events-none w-full h-full" style={{ zIndex: Z.cursor }}>
+    // instead of a hardcoded z-50; opacity fades with `paused` on this same
+    // (fixed) element rather than a wrapping ancestor, since opacity below 1
+    // on an ancestor would make position:fixed on a descendant behave like
+    // position:absolute instead. Needed because pausing only skips the sim's
+    // render() call (see updateFrame above) - it does not clear the canvas,
+    // so without this the last frame painted before a pause stayed on screen
+    // indefinitely rather than actually disappearing. 0.55 dims the effect
+    // generally: full-strength splats read as too loud over real content.
+    <div
+      className="fixed top-0 left-0 pointer-events-none w-full h-full"
+      style={{ zIndex: Z.cursor, opacity: paused ? 0 : 0.55, transition: 'opacity 500ms ease' }}
+    >
       <canvas ref={canvasRef} id="fluid" className="w-screen h-screen block"></canvas>
     </div>
   );

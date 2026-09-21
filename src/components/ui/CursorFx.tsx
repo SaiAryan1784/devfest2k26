@@ -37,7 +37,14 @@ export function CursorFx() {
       DYE_RESOLUTION={768}
       SIM_RESOLUTION={96}
       PRESSURE_ITERATIONS={14}
-      SPLAT_RADIUS={0.2}
+      // Smaller, weaker splats that clear faster: the defaults (0.2 radius,
+      // 6000 force, 3.5/2 dissipation) read as a bold, lingering effect: too
+      // loud for a decoration meant to sit quietly under real content.
+      SPLAT_RADIUS={0.12}
+      SPLAT_FORCE={3000}
+      DENSITY_DISSIPATION={5}
+      VELOCITY_DISSIPATION={2.5}
+      CURL={2}
     />
   );
 }

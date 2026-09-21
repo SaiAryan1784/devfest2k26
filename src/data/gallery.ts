@@ -1,25 +1,24 @@
 /**
- * The gallery: nine glimpses of the floor, one per experience already
- * described in floor.ts (no new copy invented). `src` is a seeded picsum
- * placeholder: TODO, swap every one of these for real 2025 event photography
- * before launch, the same honesty pattern speakers.ts's `photo: null` uses.
+ * The gallery: eight photos from DevFest Noida 2025, supplied by the client
+ * (public/devfest2k25/). Captions describe what's actually in each frame
+ * (stage, crew, community) rather than naming a specific floor experience
+ * none of these happen to show.
  */
 export type GalleryPhoto = {
   id: string;
   caption: string;
   src: string;
-  /** The first tile is the bento feature (2x2 on desktop, full width on tablet). */
+  /** The one wide tile (2 columns on desktop); the rest are single cells. */
   feature?: boolean;
 };
 
 export const GALLERY: GalleryPhoto[] = [
-  { id: "vibe-it-space", caption: "Vibe-it Space", src: "https://picsum.photos/seed/devfest-noida-vibe-it-space/900/900", feature: true },
-  { id: "robo-track-battle", caption: "Robo Track Battle", src: "https://picsum.photos/seed/devfest-noida-robo-track-battle/500/500" },
-  { id: "sketch-booth", caption: "Vibe Code / Sketch Booth", src: "https://picsum.photos/seed/devfest-noida-sketch-booth/500/500" },
-  { id: "bytes-with-influencers", caption: "Bytes with Influencers", src: "https://picsum.photos/seed/devfest-noida-bytes-with-influencers/500/500" },
-  { id: "creator-studio", caption: "Creator Studio", src: "https://picsum.photos/seed/devfest-noida-creator-studio/500/500" },
-  { id: "community-demos", caption: "Community Demos", src: "https://picsum.photos/seed/devfest-noida-community-demos/500/500" },
-  { id: "small-business-fair", caption: "Small Business Fair", src: "https://picsum.photos/seed/devfest-noida-small-business-fair/500/500" },
-  { id: "speaker-meet", caption: "Speaker Meet & Greet", src: "https://picsum.photos/seed/devfest-noida-speaker-meet/500/500" },
-  { id: "photo-ops", caption: "Activities & Photo Ops", src: "https://picsum.photos/seed/devfest-noida-photo-ops/500/500" },
+  { id: "community", caption: "The community", src: "/devfest2k25/DP1A3071.webp", feature: true },
+  { id: "on-stage", caption: "On stage", src: "/devfest2k25/DSC09279.webp" },
+  { id: "keynote", caption: "Keynote", src: "/devfest2k25/DSC07446.webp" },
+  { id: "crew", caption: "The crew", src: "/devfest2k25/IMG_9537.webp" },
+  { id: "team", caption: "Team DevFest", src: "/devfest2k25/DSC09738.webp" },
+  { id: "backstage", caption: "Backstage", src: "/devfest2k25/DSC_9697.webp" },
+  { id: "volunteers", caption: "Volunteers", src: "/devfest2k25/DSC09647.webp" },
+  { id: "talks", caption: "Talks", src: "/devfest2k25/DSC07422.webp" },
 ];
