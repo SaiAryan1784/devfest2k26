@@ -41,6 +41,12 @@ export const SPLIT: [number, number] = [0.16, 0.5];
 export const DEPTH: [number, number] = [0.3, 0.56];
 /** The mark's focus pull, used by the stage; the halo behind it is drawn here. */
 export const MARK: [number, number] = [0.52, 0.7];
+/** The halo behind the mark: how far it reaches (as a multiple of the base
+ *  0.42 * min(w,h) radius) and how dark it gets at centre and at its 45% stop.
+ *  Raised so the mark reads as the clear focus of the frame, not one bright
+ *  thing among many stripes. */
+export const HALO_REACH = 1.35;
+export const HALO_DARK: [number, number] = [0.88, 0.62];
 /** Distance from the centre (0..1 of half the width) by which a front stripe is fully in its hue. */
 export const SAT_D = 0.55;
 /** Extra scale reached by the end of the hold (the camera starting to move), and the scale the rush reaches during the cut. */
@@ -294,11 +300,11 @@ export function drawField(ctx: CanvasRenderingContext2D, w: number, h: number, f
   // The halo: the stripes behind the mark dim as it takes the light.
   const halo = smooth(MARK[0], MARK[1], p) * (cut ? 1 - smooth(0, 0.3, since) : 1);
   if (halo > 0.01) {
-    const r = 0.42 * Math.min(w, h) * 1.15;
+    const r = 0.42 * Math.min(w, h) * HALO_REACH;
     ctx.globalCompositeOperation = "source-over";
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
-    g.addColorStop(0, `rgba(0,0,0,${(0.72 * halo).toFixed(3)})`);
-    g.addColorStop(0.45, `rgba(0,0,0,${(0.45 * halo).toFixed(3)})`);
+    g.addColorStop(0, `rgba(0,0,0,${(HALO_DARK[0] * halo).toFixed(3)})`);
+    g.addColorStop(0.45, `rgba(0,0,0,${(HALO_DARK[1] * halo).toFixed(3)})`);
     g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.globalAlpha = 1;
     ctx.fillStyle = g;

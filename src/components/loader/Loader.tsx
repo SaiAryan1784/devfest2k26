@@ -31,9 +31,9 @@ function releaseBody() {
   document.body.removeAttribute("aria-busy");
 }
 
-/** Where the loader's lockup is now versus where the hero's rests. Null if the hero is not on screen. */
+/** Where the loader's lockup is now versus where the nav's rests. Null if the target is not on screen. */
 function measure(el: HTMLElement | null): Flip | null {
-  const target = document.querySelector<HTMLElement>("[data-hero-lockup]");
+  const target = document.querySelector<HTMLElement>("[data-lockup-target]");
   if (!el || !target) return null;
   const from = el.getBoundingClientRect();
   const to = target.getBoundingClientRect();
@@ -98,7 +98,7 @@ export function Loader() {
     return () => c.stop();
   }, [phase, clock, setShowing]);
 
-  // The cut: the moment drawn progress reaches 1. The hero's lockup is
+  // The cut: the moment drawn progress reaches 1. The nav's lockup is
   // measured once, here, before anything moves.
   useMotionValueEvent(shown, "change", (v) => {
     if (v < 0.99 || phase !== "show" || cutRef.current) return;
@@ -115,14 +115,17 @@ export function Loader() {
   // Leaving: hand the page to the hero, and let it scroll once the backdrop
   // is gone. The skip path does both at once.
   //
-  // When the hero's lockup was off-screen at the cut (a reload landed scrolled
-  // past it), `flip` is null and IdentStage takes its fallback path: a plain
-  // 1.2 s fade with no glide to synchronise, calling onLanded() (which sets
-  // phase to "hide") well before FINISH_AT_MS (~1.24 s) would have fired. That
-  // race let this effect's cleanup cancel the pending finish() before it ever
-  // ran, so `useLoaderState.done` stayed false forever and the hero's entrance
-  // never played, even after scrolling back up to it. With no glide to time
-  // against, there is nothing to wait for: fire finish() immediately instead.
+  // The nav is fixed to the top of the viewport, so its lockup is never
+  // off-screen at the cut the way the hero's used to be after a scrolled
+  // reload; `flip` should now always resolve. The fallback path stays as a
+  // backstop (a target could still measure zero-width before its own paint):
+  // if `flip` is null, IdentStage takes a plain 1.2 s fade with no glide to
+  // synchronise, calling onLanded() (which sets phase to "hide") well before
+  // FINISH_AT_MS (~1.24 s) would have fired. That race once let this effect's
+  // cleanup cancel the pending finish() before it ever ran, so
+  // `useLoaderState.done` stayed false forever and the hero's entrance never
+  // played. With no glide to time against, there is nothing to wait for:
+  // fire finish() immediately instead.
   useEffect(() => {
     if (phase !== "cut" && phase !== "fade") return;
     const cut = phase === "cut";

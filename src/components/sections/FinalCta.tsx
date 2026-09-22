@@ -4,12 +4,15 @@ import dynamic from "next/dynamic";
 import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
 import ClickSpark from "@/components/reactbits/ClickSpark";
+import CountUp from "@/components/reactbits/CountUp";
 import ShinyText from "@/components/reactbits/ShinyText";
 import { Button } from "@/components/ui/Button";
 import { EVENT } from "@/data/event";
 
 // WebGL, client only, never under reduced motion.
 const PrismaticBurst = dynamic(() => import("@/components/reactbits/PrismaticBurst"), { ssr: false });
+
+const ease = [0.16, 1, 0.3, 1] as const;
 
 export function FinalCta() {
   const ref = useRef<HTMLElement>(null);
@@ -40,15 +43,32 @@ export function FinalCta() {
       </div>
 
       <div className="mx-auto max-w-[1440px] px-5 text-center md:px-10 lg:px-14">
+        {/* Last year, before the ask: the numbers moved here when the
+            essentials section (their old home) was removed. */}
+        <motion.div
+          className="mb-10 flex flex-col items-center gap-1"
+          initial={reduce ? false : { opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.4 }}
+          transition={{ duration: 0.6, ease }}
+        >
+          <p className="label">Last year</p>
+          <p className="display text-2xl font-semibold leading-tight md:text-3xl">
+            <CountUp to={EVENT.counts.registered2025} separator="," duration={1.6} startWhen={inView} />+ builders showed up.
+          </p>
+          <p className="display text-2xl font-semibold leading-tight md:text-3xl">{EVENT.counts.speakers2025}+ voices took the stage.</p>
+          <p className="mt-3 max-w-[42ch] text-[15px] leading-relaxed text-muted">The floor was full. The conversations were louder.</p>
+        </motion.div>
+
         <motion.h2
           className="display mb-10 text-[clamp(2.6rem,7vw,7rem)] font-medium leading-none"
           initial={reduce ? false : { opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.4 }}
-          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: 0.8, ease }}
         >
           <ShinyText
-            text="See you on October 10."
+            text="Don't watch it from your feed."
             color="#f5f5f7"
             shineColor="#ffffff"
             speed={4}
@@ -62,6 +82,9 @@ export function FinalCta() {
             {EVENT.cta.primary}
           </Button>
         </ClickSpark>
+        <p className="mt-6 text-[15px] text-muted">
+          See you on {EVENT.dateLabel} at {EVENT.venue.shortLabel}.
+        </p>
       </div>
     </section>
   );

@@ -2,11 +2,9 @@
 
 import { useRef, useState } from "react";
 import { motion, useMotionValue, useReducedMotion, useSpring } from "motion/react";
-import { ArrowUpRight } from "@phosphor-icons/react";
 import { Spotlight, SpotlightPool } from "@/components/brand/Spotlight";
 import { Container } from "@/components/ui/Container";
 import { SPEAKERS_2025 } from "@/data/speakers";
-import { EVENT } from "@/data/event";
 import { cn } from "@/lib/utils";
 
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -118,7 +116,7 @@ export function Stage() {
           </h2>
 
           <p className="max-w-[48ch] text-[clamp(1rem,1.8vw,1.25rem)] text-muted leading-relaxed">
-            The engineers, architects, and designers who headlined our stage. Our 2026 speaker lineup is currently in curation.
+            Before we reveal who&apos;s next, meet the voices who took the stage last year: engineers, architects, designers, and builders shaping what comes next.
           </p>
         </div>
 
@@ -232,34 +230,14 @@ export function Stage() {
           </ul>
         </div>
 
-        {/* 2026 Call for Proposals / Stay Updated Callout */}
-        <div className="mt-10 flex flex-col items-start justify-between gap-4 rounded-card border border-white/10 bg-surface/60 p-5 sm:flex-row sm:items-center sm:p-6">
-          <div className="flex items-center gap-3">
-            <span className="flex size-2 rounded-full bg-green animate-pulse" />
-            <div>
-              <p className="text-sm font-medium text-white/95">
-                Want to take the stage at DevFest Noida 2026?
-              </p>
-              <p className="text-xs text-muted">
-                Speaker proposals and keynote announcements will open soon.
-              </p>
-            </div>
-          </div>
-
-          <a
-            href={EVENT.links.waitlist}
-            target="_blank"
-            rel="noreferrer"
-            className="glass-pill inline-flex items-center gap-2 px-4 py-2 text-xs font-mono uppercase tracking-wider text-muted hover:text-white transition-colors"
-          >
-            <span>Join the waitlist</span>
-            <ArrowUpRight size={14} />
-          </a>
-        </div>
       </Container>
 
-      {/* Spacing for stage floor light pool */}
-      <div aria-hidden="true" className="h-[10vh]" />
+      {/* Spacing for the stage floor light pool (SpotlightPool is 18vh tall,
+          anchored to the card row's bottom edge). The callout that used to
+          sit below the cards (a speaker-form CTA, removed: that form is
+          closed) used to be most of this clearance; bumped from 10vh to 20vh
+          so the pool still clears the section's own overflow-hidden edge. */}
+      <div aria-hidden="true" className="h-[20vh]" />
     </section>
   );
 }

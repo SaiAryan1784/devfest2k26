@@ -178,16 +178,14 @@ body {
     display: none !important;
   }
   /*
-   * Scroll-linked reveals resolve to their finished state. Done here rather
-   * than by branching a Motion value on useReducedMotion(), which resolves
-   * after mount and would differ between the server's render and a client
-   * that already prefers reduced motion.
+   * Entrance reveals resolve to their finished state here rather than by
+   * branching a Motion `initial`/`animate` value on useReducedMotion(),
+   * which resolves after mount and would differ between the server's render
+   * and a client that already prefers reduced motion. Used by the Tickets
+   * section and the tracks board.
    */
-  .schedule-slot {
+  .reveal {
     opacity: 1 !important;
-  }
-  .schedule-pipe {
-    stroke-dasharray: none !important;
-    stroke-dashoffset: 0 !important;
+    transform: none !important;
   }
 }

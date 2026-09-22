@@ -14,11 +14,10 @@ import { Z } from "@/lib/z";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
+  { href: "#tickets", label: "Tickets" },
   { href: "#tracks", label: "Tracks" },
   { href: "#floor", label: "The floor" },
   { href: "#speakers", label: "Speakers" },
-  { href: "#schedule", label: "Schedule" },
-  { href: "#venue", label: "Venue" },
   { href: "#partners", label: "Partners" },
   { href: "#gallery", label: "Gallery" },
 ];
@@ -56,11 +55,16 @@ export function Nav() {
         scrolled ? (heroInView ? "border-b border-hair bg-canvas/85" : "border-b border-hair bg-canvas/70 backdrop-blur-xl") : "border-b border-transparent",
       )}
       style={{ zIndex: Z.nav }}
-      initial={{ y: -16, opacity: 0 }}
-      animate={loaderDone ? { y: 0, opacity: 1 } : { y: -16, opacity: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: loaderDone ? 1 : 0 }}
       transition={reduce ? { duration: 0 } : { duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
     >
-      <a href="#top" aria-label={EVENT.name} className="col-start-1 block w-[140px] justify-self-start py-2 lg:w-[150px]">
+      {/* The loader's mark glides onto this exact element (see Loader.tsx's
+          `measure()`): opacity only, no rise, so its rect never moves out
+          from under the incoming mark. It stays laid out (just invisible)
+          before `loaderDone`, so the measurement at cut time is accurate
+          even though the nav has not faded in yet. */}
+      <a href="#top" data-lockup-target aria-label={EVENT.name} className="col-start-1 block w-[140px] justify-self-start py-2 lg:w-[150px]">
         <Lockup pill={PILL[accent]} title={EVENT.name} />
       </a>
 

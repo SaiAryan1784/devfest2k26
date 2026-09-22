@@ -5,8 +5,10 @@ import ScrollReveal from "@/components/reactbits/ScrollReveal";
 import { LightPipe } from "@/components/brand/LightPipe";
 import type { PipeShape } from "@/components/brand/pipes";
 import { GLOW } from "@/components/brand/slabs";
+import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
-import { FLOOR, type FloorItem } from "@/data/floor";
+import { EVENT } from "@/data/event";
+import { FLOOR, FLOOR_INTRO, type FloorItem } from "@/data/floor";
 import type { TrackColor } from "@/data/event";
 import { cn } from "@/lib/utils";
 
@@ -18,10 +20,10 @@ const ACCENTS: Exclude<TrackColor, "spectrum">[] = ["blue", "green", "yellow", "
 const accentOf = (i: number) => ACCENTS[i % ACCENTS.length];
 
 /**
- * Everything on the floor beyond the four tracks. A bento of three tile sizes
- * (two features, six standard, one wide) rather than a uniform grid of nine
- * identical cards: the two things that are new in 2026 lead, the rest fill in
- * under them, and the floor closes on the photo-ops banner.
+ * Everything on the floor beyond the four tracks: a uniform grid of nine
+ * identical tiles (the two new-for-2026 items keep their prominence through
+ * a chip, not a bigger card), closing on a link to the floor's own
+ * registration form.
  */
 export function Floor() {
   const reduce = useReducedMotion();
@@ -44,14 +46,18 @@ export function Floor() {
           containerClassName="mb-12 max-w-[46ch]"
           textClassName="!text-[clamp(1.1rem,1.9vw,1.45rem)] !font-normal !leading-relaxed text-muted"
         >
-          Between sessions the floor is the programme: hack spaces, booths, a robot track, creators recording live, and community demos on open display all day.
+          {FLOOR_INTRO}
         </ScrollReveal>
 
-        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FLOOR.map((item, i) => (
             <Tile key={item.id} item={item} index={i} reduce={!!reduce} />
           ))}
         </ul>
+
+        <div className="mt-10 flex justify-center">
+          <Button href={EVENT.links.floorRegistration}>Register for the floor</Button>
+        </div>
       </Container>
     </section>
   );
@@ -60,17 +66,10 @@ export function Floor() {
 function Tile({ item, index, reduce }: { item: FloorItem; index: number; reduce: boolean }) {
   const accent = accentOf(index);
   const glow = GLOW[accent];
-  // Two features lead, the last tile runs full width, the rest are standard.
-  const size = index < 2 ? "feature" : index === FLOOR.length - 1 ? "wide" : "standard";
 
   return (
     <motion.li
-      className={cn(
-        "group relative",
-        size === "feature" && "lg:col-span-3",
-        size === "standard" && "lg:col-span-2",
-        size === "wide" && "sm:col-span-2 lg:col-span-6",
-      )}
+      className="group relative"
       initial={reduce ? false : { opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.25 }}
@@ -82,12 +81,10 @@ function Tile({ item, index, reduce }: { item: FloorItem; index: number; reduce:
         whileHover={reduce ? undefined : { y: -4 }}
         transition={{ type: "spring", stiffness: 300, damping: 24 }}
         className={cn(
-          "glass relative isolate flex h-full flex-col overflow-hidden rounded-card outline-offset-4",
+          "glass relative isolate flex h-full flex-col overflow-hidden rounded-card p-6 outline-offset-4",
           "transition-[border-color,box-shadow] duration-500",
           "hover:border-[color-mix(in_srgb,var(--glow)_45%,transparent)] focus-within:border-[color-mix(in_srgb,var(--glow)_45%,transparent)]",
           "hover:shadow-[0_0_40px_-16px_var(--glow)] focus-within:shadow-[0_0_40px_-16px_var(--glow)]",
-          size === "feature" ? "min-h-[220px] p-7 lg:min-h-[260px] lg:p-9" : "p-6",
-          size === "wide" && "sm:flex-row sm:items-center sm:justify-between sm:gap-8",
         )}
       >
         {/* A wash of the tile's colour along its lit edge. Static gradient,
@@ -98,35 +95,17 @@ function Tile({ item, index, reduce }: { item: FloorItem; index: number; reduce:
           style={{ background: `radial-gradient(70% 60% at 100% 0%, color-mix(in srgb, ${glow} 22%, transparent), transparent 70%)` }}
         />
 
-        {size === "feature" ? (
-          <>
-            {/* The mark sits large and bleeding off the corner on features. */}
-            <div className="pointer-events-none absolute -right-8 -top-8 size-48 opacity-60 transition-[opacity,transform] duration-700 ease-out group-hover:scale-105 group-hover:opacity-85 lg:size-60">
-              <LightPipe shape={item.glyph} color={accent} className="h-full w-full [mask-image:radial-gradient(72%_72%_at_35%_65%,#000,transparent)]" />
-            </div>
-            <span className="label mb-auto w-fit rounded-pill border border-hair px-3 py-1.5 !text-text">{item.kind}</span>
-            <h3 className="display mt-6 text-[clamp(1.6rem,2.6vw,2.2rem)] font-semibold leading-tight">{item.title}</h3>
-            <p className="mt-3 max-w-[38ch] text-[15px] leading-relaxed text-muted">{item.description}</p>
-          </>
-        ) : size === "wide" ? (
-          <>
-            <div className="flex items-center gap-5">
-              <Glyph glyph={item.glyph} color={accent} />
-              <div>
-                <p className="label mb-2">{item.kind}</p>
-                <h3 className="display text-2xl font-semibold leading-tight">{item.title}</h3>
-              </div>
-            </div>
-            <p className="mt-4 max-w-[46ch] text-[15px] leading-relaxed text-muted sm:mt-0 sm:text-right">{item.description}</p>
-          </>
-        ) : (
-          <>
-            <Glyph glyph={item.glyph} color={accent} />
-            <p className="label mb-2 mt-5">{item.kind}</p>
-            <h3 className="display mb-2 text-xl font-semibold leading-tight">{item.title}</h3>
-            <p className="text-[15px] leading-relaxed text-muted">{item.description}</p>
-          </>
-        )}
+        <div className="flex items-start justify-between gap-3">
+          <Glyph glyph={item.glyph} color={accent} />
+          {item.isNew && (
+            <span className="label shrink-0 rounded-pill border border-hair px-2.5 py-1 !text-text">New for 2026</span>
+          )}
+        </div>
+
+        <p className="label mb-2 mt-5">{item.kind}</p>
+        <h3 className="display mb-2 text-xl font-semibold leading-tight">{item.title}</h3>
+        <p className="text-[15px] leading-snug text-text/90">{item.tagline}</p>
+        <p className="mt-2 text-[15px] leading-relaxed text-muted">{item.description}</p>
       </motion.article>
     </motion.li>
   );

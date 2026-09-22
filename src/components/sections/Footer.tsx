@@ -3,11 +3,10 @@ import { EVENT } from "@/data/event";
 import { SocialLinks } from "./SocialLinks";
 
 const LINKS = [
+  { href: "#tickets", label: "Tickets" },
   { href: "#tracks", label: "Tracks" },
   { href: "#floor", label: "The floor" },
   { href: "#speakers", label: "Speakers" },
-  { href: "#schedule", label: "Schedule" },
-  { href: "#venue", label: "Venue" },
   { href: "#partners", label: "Partners" },
   { href: "#gallery", label: "Gallery" },
 ];
@@ -19,8 +18,16 @@ export function Footer() {
         <div>
           <p className="display text-2xl font-semibold">{EVENT.name}</p>
           <p className="mt-2 max-w-[40ch] text-[15px] leading-relaxed text-muted">
-            {EVENT.dateLabel}. {EVENT.venue.shortLabel}.
+            {EVENT.dateLabel}. {EVENT.venue.label}, {EVENT.venue.address}.
           </p>
+          <a
+            href={EVENT.venue.mapsLink}
+            target="_blank"
+            rel="noopener"
+            className="mt-3 inline-block text-[15px] text-text underline-offset-4 hover:underline"
+          >
+            Get directions<span className="sr-only"> (opens in new tab)</span>
+          </a>
           <p className="mt-6 text-[15px] text-muted">
             Organised by{" "}
             <a href={EVENT.links.community} target="_blank" rel="noopener" className="text-text underline-offset-4 hover:underline">

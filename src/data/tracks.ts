@@ -5,21 +5,26 @@ export type Track = {
   id: string;
   name: string;
   color: Exclude<TrackColor, "spectrum">;
-  tagline: string;
-  description: string;
-  /** Format label shown on the panel. Never a made-up session count. */
-  format: string;
+  /** Small mono line above the name. */
+  kicker: string;
+  /** The whole track in one line. */
+  line: string;
+  /** Format chip. Absent where the track is not one single format. Never a made-up session count. */
+  format?: string;
   /** The track's light-pipe mark, one of the shapes in src/components/brand/pipes.ts. */
   glyph: PipeShape;
 };
+
+/** Sits beside the section heading. */
+export const TRACKS_NOTE = "All four run all day, and one pass covers every one of them, so you can move as the day goes.";
 
 export const TRACKS: Track[] = [
   {
     id: "ai-overloaded",
     name: "AI Overloaded",
     color: "blue",
-    tagline: "The complete agentic track",
-    description: "Agents, harnesses, open models, evals, cloud and dev.",
+    kicker: "The complete agentic",
+    line: "From AI that answers to AI that actually does.",
     format: "Talks",
     glyph: "s-wave",
   },
@@ -27,8 +32,8 @@ export const TRACKS: Track[] = [
     id: "ai-abc",
     name: "AI ABC",
     color: "green",
-    tagline: "AnyBody Can Code",
-    description: "AI from first principles for devs, designers, PMs and entrepreneurs.",
+    kicker: "AnyBody Can Code",
+    line: "From \"What is AI?\" to \"What can I build?\"",
     format: "Talks",
     glyph: "arc",
   },
@@ -36,19 +41,16 @@ export const TRACKS: Track[] = [
     id: "ai-hardware",
     name: "AI × Hardware",
     color: "red",
-    tagline: "Two hack spaces",
-    description:
-      "A showcase of people building in hardware: RPis on surveillance duty, bots roaming the floor, drones overhead, world models you can step into. And a robot racetrack for the passionate makers.",
-    format: "2 hack spaces",
+    kicker: "Two hack spaces",
+    line: "When AI leaves the screen, things get interesting.",
     glyph: "x",
   },
   {
     id: "hands-on",
     name: "Hands-on",
     color: "yellow",
-    tagline: "Guided hands-on learning",
-    description: "Gemma on Edge, the Cloud track, open source and so much more.",
-    format: "Hands-on",
+    kicker: "Guided hands-on learning",
+    line: "Less watching. More building.",
     glyph: "cross",
   },
 ];
