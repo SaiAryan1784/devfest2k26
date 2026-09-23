@@ -40,21 +40,25 @@ export const TICKET_SALE = {
   line: "Early bird pricing runs until the timer stops. Both passes go up after that.",
 };
 
+/** Sits beside the section heading, above the sale strip. */
+export const TICKETS_INTRO =
+  "Get the regular DevFest experience with the general pass, or unlock exclusive perks with the gold pass.";
+
 export const TICKETS: Ticket[] = [
   {
     id: "vip-gold",
     kind: "Gold",
     name: "VIP gold pass",
-    summary: "The whole day, up front, with the people running it.",
+    summary: "More perks. Less waiting. Better experience.",
     price: "₹4,999",
     wasPrice: "₹6,499",
     priceNote: "Per person, taxes included",
     includes: [
-      "Reserved seating in the keynote hall",
-      "Speaker meet and greet before the afternoon sessions",
-      "Both hack spaces and every hands-on lab",
-      "Lunch, coffee and the 2026 swag kit",
-      "Entry to the after party",
+      "Full access to DevFest",
+      "Reserved check-in",
+      "Priority queue for lunch",
+      "Exclusive and premium swag",
+      "Priority queue for swag",
     ],
     cta: { label: "Get the gold pass", href: EVENT.links.waitlist },
     featured: true,
@@ -69,10 +73,11 @@ export const TICKETS: Ticket[] = [
     wasPrice: "₹1,499",
     priceNote: "Per person, taxes included",
     includes: [
-      "All four tracks and the full floor",
-      "Both hack spaces and the robot track",
-      "Lunch and coffee through the day",
-      "Certificate of participation",
+      "Access to DevFest sessions",
+      "Learn and explore new technologies",
+      "Network with developers and tech enthusiasts",
+      "Be part of the DevFest community",
+      "Experience the event and activities",
     ],
     cta: { label: "Get the general pass", href: EVENT.links.waitlist },
     featured: false,

@@ -7,7 +7,7 @@ import { GLOW, PAL } from "@/components/brand/slabs";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { Countdown } from "@/components/ui/Countdown";
-import { TICKETS, TICKET_SALE, type Ticket } from "@/data/tickets";
+import { TICKETS, TICKETS_INTRO, TICKET_SALE, type Ticket } from "@/data/tickets";
 import { cn } from "@/lib/utils";
 
 const ease = [0.16, 1, 0.3, 1] as const;
@@ -35,7 +35,7 @@ export function Tickets() {
       <Container>
         <div className="mb-10 flex flex-col gap-5 md:mb-12 md:flex-row md:items-end md:justify-between">
           <h2 className="display text-[clamp(2.2rem,5vw,4.5rem)] font-medium leading-none">Get your pass.</h2>
-          <p className="max-w-[38ch] text-[15px] leading-relaxed text-muted">{TICKET_SALE.line}</p>
+          <p className="max-w-[38ch] text-[15px] leading-relaxed text-muted">{TICKETS_INTRO}</p>
         </div>
 
         {/* The sale strip: what is running, and how long it has left. */}
