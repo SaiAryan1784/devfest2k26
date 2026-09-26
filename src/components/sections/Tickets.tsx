@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
-import { Check } from "@phosphor-icons/react";
+import { Check, Checks } from "@phosphor-icons/react";
 import { GLOW, PAL } from "@/components/brand/slabs";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
@@ -120,6 +120,15 @@ function TicketCard({ ticket, index, reduce }: { ticket: Ticket; index: number; 
       <p className="mt-2 max-w-[34ch] text-[15px] leading-relaxed text-muted">{ticket.summary}</p>
 
       <ul className="mt-8 space-y-3.5 border-t border-hair pt-8">
+        {ticket.builtOn && (
+          // The lead-in: this pass stacks on the other one, so say that once
+          // instead of repeating its perks. Double check, and full-strength
+          // text, so it reads as the frame for the list below it.
+          <li className="flex items-start gap-3 text-[15px] font-medium leading-relaxed text-text">
+            <Checks aria-hidden="true" size={18} weight="regular" className="mt-[3px] shrink-0 text-yellow-hi" />
+            {ticket.builtOn}:
+          </li>
+        )}
         {ticket.includes.map((line) => (
           <li key={line} className="flex items-start gap-3 text-[15px] leading-relaxed text-text/85">
             <Check aria-hidden="true" size={18} weight="regular" className={cn("mt-[3px] shrink-0", gold ? "text-yellow-hi" : "text-muted")} />
@@ -132,7 +141,6 @@ function TicketCard({ ticket, index, reduce }: { ticket: Ticket; index: number; 
         <Button href={ticket.cta.href} variant={gold ? "primary" : "ghost"} className="w-full">
           {ticket.cta.label}
         </Button>
-        {ticket.note && <p className="mt-3 text-center text-[13px] text-muted">{ticket.note}</p>}
       </div>
     </motion.article>
   );

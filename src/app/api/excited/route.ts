@@ -1,55 +1,71 @@
-import { Redis } from "@upstash/redis";
+import { neon } from "@neondatabase/serverless";
 import { NextResponse } from "next/server";
 
 /**
- * "I'm excited" counter for the floating button, shared across every visitor.
+ * The rocket counter: one row per anonymous visitor who has launched.
  *
- * Stored as a *set of anonymous visitor ids*, not a number. The count is the
- * set's size, so it is idempotent by construction: liking twice from the same
- * browser adds nothing, un-liking something never liked removes nothing, and
- * the count can never go below zero. (The previous design was a bare counter
- * the client told to `incr`/`decr`; a client whose own liked state drifted
- * out of sync decremented it forever, which is how it went negative.)
+ * A launch is one-way (the button can't be un-pressed), so the only write is
+ * an insert keyed on the visitor id: launching twice from one browser adds
+ * nothing, and the count, `count(*)`, can only ever grow and never go
+ * negative.
  *
- * Backed by Upstash Redis (`Redis.fromEnv()` reads UPSTASH_REDIS_REST_URL /
- * UPSTASH_REDIS_REST_TOKEN, injected by Vercel's "Upstash for Redis"
- * Marketplace integration). Without those env vars it falls back to an
- * in-memory set, which is a LOCAL-DEV convenience only: on Vercel each
- * serverless instance gets its own copy and loses it on every cold start.
+ * Backed by Neon Postgres via DATABASE_URL (in `.env` locally; it must also be
+ * set in the Vercel project's environment variables for production). The
+ * table creates itself on first use. Without DATABASE_URL the route falls
+ * back to an in-memory set, a LOCAL-DEV convenience only: on Vercel each
+ * serverless instance would get its own copy and lose it on every cold start.
  */
-const KEY = "devfest:excited:visitors";
 const ID = /^[a-zA-Z0-9-]{8,64}$/;
 
-const redis = process.env.UPSTASH_REDIS_REST_URL ? Redis.fromEnv() : null;
+const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
 const mem = new Set<string>();
 
-async function count() {
-  return redis ? await redis.scard(KEY) : mem.size;
+let ready: Promise<unknown> | null = null;
+function ensureTable() {
+  if (!sql) return Promise.resolve();
+  ready ??= sql`
+    CREATE TABLE IF NOT EXISTS devfest_rockets (
+      visitor_id  text PRIMARY KEY,
+      launched_at timestamptz NOT NULL DEFAULT now()
+    )`.catch((err) => {
+    ready = null; // let the next request retry
+    throw err;
+  });
+  return ready;
 }
 
-async function has(id: string) {
-  return redis ? (await redis.sismember(KEY, id)) === 1 : mem.has(id);
+async function read(id: string | null) {
+  if (!sql) return { count: mem.size, launched: id ? mem.has(id) : false };
+  await ensureTable();
+  const [row] = await sql`
+    SELECT
+      (SELECT count(*)::int FROM devfest_rockets) AS count,
+      EXISTS (SELECT 1 FROM devfest_rockets WHERE visitor_id = ${id ?? ""}) AS launched`;
+  return { count: row.count as number, launched: row.launched as boolean };
 }
 
 export async function GET(req: Request) {
-  const id = new URL(req.url).searchParams.get("id");
-  const liked = id && ID.test(id) ? await has(id) : false;
-  return NextResponse.json({ count: await count(), liked });
+  const raw = new URL(req.url).searchParams.get("id");
+  try {
+    return NextResponse.json(await read(raw && ID.test(raw) ? raw : null));
+  } catch {
+    return NextResponse.json({ error: "unavailable" }, { status: 503 });
+  }
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as { id?: unknown; liked?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { id?: unknown } | null;
   const id = typeof body?.id === "string" ? body.id : "";
-  if (!ID.test(id) || typeof body?.liked !== "boolean") {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
+  if (!ID.test(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+  try {
+    if (sql) {
+      await ensureTable();
+      await sql`INSERT INTO devfest_rockets (visitor_id) VALUES (${id}) ON CONFLICT (visitor_id) DO NOTHING`;
+    } else {
+      mem.add(id);
+    }
+    return NextResponse.json(await read(id));
+  } catch {
+    return NextResponse.json({ error: "unavailable" }, { status: 503 });
   }
-  if (body.liked) {
-    if (redis) await redis.sadd(KEY, id);
-    else mem.add(id);
-  } else if (redis) {
-    await redis.srem(KEY, id);
-  } else {
-    mem.delete(id);
-  }
-  return NextResponse.json({ count: await count(), liked: body.liked });
 }

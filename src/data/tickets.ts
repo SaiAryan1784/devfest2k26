@@ -15,12 +15,15 @@ export type Ticket = {
   kind: string;
   name: string;
   summary: string;
+  /**
+   * A lead-in shown as the first perk, above `includes`, when this pass
+   * contains everything in another one (so the list doesn't repeat it).
+   */
+  builtOn?: string;
   includes: string[];
   cta: { label: string; href: string };
   /** The tier the page pushes. Exactly one ticket sets this. */
   featured: boolean;
-  /** Availability line under the button. */
-  note?: string;
 };
 
 /** The early bird sale: counted down to until it opens, then shown as live. */
@@ -41,6 +44,7 @@ export const TICKETS: Ticket[] = [
     kind: "Gold",
     name: "VIP gold pass",
     summary: "More perks. Less waiting. Better experience.",
+    builtOn: "Everything in the general pass, plus",
     includes: [
       "Full access to DevFest",
       "Reserved check-in",
@@ -50,7 +54,6 @@ export const TICKETS: Ticket[] = [
     ],
     cta: { label: "Get the gold pass", href: EVENT.links.waitlist },
     featured: true,
-    note: "Limited to 100 passes.",
   },
   {
     id: "general",
@@ -66,6 +69,5 @@ export const TICKETS: Ticket[] = [
     ],
     cta: { label: "Get the general pass", href: EVENT.links.waitlist },
     featured: false,
-    note: "Tickets are announced to the waitlist first.",
   },
 ];
