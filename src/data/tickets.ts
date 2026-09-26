@@ -1,13 +1,9 @@
-import { EVENT } from "./event";
-
 /**
  * Ticket tiers and the early bird sale.
  *
  * No prices on the site (client, 26 Sep 2026): the cards sell on perks.
  *
- * TODO: both `cta.href` values point at the event waitlist (the same form
- * every other CTA on the page uses) until real per-tier checkout links
- * exist; swap them, and likely EVENT.cta.primary, when the sale opens.
+ * Each pass has its own registration form on Commudle (supplied 26 Sep 2026).
  */
 export type Ticket = {
   id: string;
@@ -52,7 +48,7 @@ export const TICKETS: Ticket[] = [
       "Exclusive and premium swag",
       "Priority queue for swag",
     ],
-    cta: { label: "Get the gold pass", href: EVENT.links.waitlist },
+    cta: { label: "Get the gold pass", href: "https://www.commudle.com/fill-form/5169" },
     featured: true,
   },
   {
@@ -67,7 +63,7 @@ export const TICKETS: Ticket[] = [
       "Be part of the DevFest community",
       "Experience the event and activities",
     ],
-    cta: { label: "Get the general pass", href: EVENT.links.waitlist },
+    cta: { label: "Get the general pass", href: "https://www.commudle.com/fill-form/5144" },
     featured: false,
   },
 ];
