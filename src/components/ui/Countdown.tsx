@@ -101,3 +101,20 @@ export function Countdown({
     </div>
   );
 }
+
+/**
+ * Whether `iso` has passed, for flipping "opens in" copy to "live". Null on
+ * the server and first client render (the reader's clock can't be in the
+ * HTML), so callers render the "not yet" state first; re-checked every 30s
+ * so an open tab flips over on its own.
+ */
+export function useIsPast(iso: string): boolean | null {
+  const [past, setPast] = useState<boolean | null>(null);
+  useEffect(() => {
+    const check = () => setPast(countdownTo(iso).done);
+    check();
+    const t = setInterval(check, 30_000);
+    return () => clearInterval(t);
+  }, [iso]);
+  return past;
+}

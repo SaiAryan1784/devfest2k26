@@ -5,7 +5,7 @@ import { motion, useInView, useReducedMotion } from "motion/react";
 import VariableProximity from "@/components/reactbits/VariableProximity";
 import Magnet from "@/components/reactbits/Magnet";
 import { Button } from "@/components/ui/Button";
-import { Countdown } from "@/components/ui/Countdown";
+import { Countdown, useIsPast } from "@/components/ui/Countdown";
 import { EVENT } from "@/data/event";
 import { TICKET_SALE } from "@/data/tickets";
 import { useAccentCycle } from "@/lib/accent";
@@ -37,6 +37,7 @@ export function Hero() {
   // paint; on the skip path it is never hidden and the gate's dissolve is the
   // entrance. Both store defaults are false on the server and the client.
   const hidden = showing && !ready;
+  const saleOpen = useIsPast(TICKET_SALE.opensAt) === true;
 
   const enhanceHeadline = ready && !reduce && finePointer;
 
@@ -111,9 +112,15 @@ export function Hero() {
               <dd className="label !text-text">{EVENT.venue.shortLabel}</dd>
             </div>
             <div className="flex items-baseline gap-2">
-              <dt className="label">Early bird ends in</dt>
+              <dt className="label">{saleOpen ? "Tickets" : "Early bird opens in"}</dt>
               <dd>
-                <Countdown to={TICKET_SALE.endsAt} label="Early bird ticket sale ends in" variant="inline" padDays={2} />
+                {saleOpen ? (
+                  <a href="#tickets" className="label !text-text underline-offset-4 hover:underline">
+                    Early bird live
+                  </a>
+                ) : (
+                  <Countdown to={TICKET_SALE.opensAt} label="Early bird ticket sale opens in" variant="inline" padDays={2} />
+                )}
               </dd>
             </div>
           </motion.dl>

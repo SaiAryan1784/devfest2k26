@@ -6,7 +6,7 @@ import { Check } from "@phosphor-icons/react";
 import { GLOW, PAL } from "@/components/brand/slabs";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
-import { Countdown } from "@/components/ui/Countdown";
+import { Countdown, useIsPast } from "@/components/ui/Countdown";
 import { TICKETS, TICKETS_INTRO, TICKET_SALE, type Ticket } from "@/data/tickets";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +29,8 @@ export function Tickets() {
   const ref = useRef<HTMLElement>(null);
   const reduce = useReducedMotion();
   const inView = useInView(ref, { amount: 0.15 });
+  // Null until mounted: render the "opens soon" state until the reader's clock says otherwise.
+  const open = useIsPast(TICKET_SALE.opensAt) === true;
 
   return (
     <section ref={ref} id="tickets" className="py-20 md:py-24 lg:py-28">
@@ -38,34 +40,38 @@ export function Tickets() {
           <p className="max-w-[38ch] text-[15px] leading-relaxed text-muted">{TICKETS_INTRO}</p>
         </div>
 
-        {/* The sale strip: what is running, and how long it has left. */}
+        {/* The sale strip: counts down to the early bird opening, then says it's live. */}
         <div className="reveal mb-4 flex flex-col gap-7 rounded-panel border border-hair bg-surface px-6 py-6 md:flex-row md:items-center md:justify-between md:gap-10 md:px-9 md:py-7">
           <div>
             <p className="label flex items-center gap-2.5 !text-text">
               <motion.span
                 aria-hidden="true"
-                className="inline-block size-2 shrink-0 rounded-full bg-green"
-                style={{ boxShadow: `0 0 10px 2px ${GLOW.green}80` }}
+                className={cn("inline-block size-2 shrink-0 rounded-full", open ? "bg-green" : "bg-yellow")}
+                style={{ boxShadow: `0 0 10px 2px ${open ? GLOW.green : GLOW.yellow}80` }}
                 initial={false}
                 animate={{ opacity: reduce || !inView ? 1 : [1, 0.35, 1] }}
                 transition={reduce || !inView ? { duration: 0 } : { duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
               />
-              {TICKET_SALE.label} is live
+              {TICKET_SALE.label} {open ? "is live" : "opens soon"}
             </p>
-            <p className="mt-3 text-[15px] leading-relaxed text-muted">Ends {TICKET_SALE.endsLabel}.</p>
+            <p className="mt-3 text-[15px] leading-relaxed text-muted">
+              {open ? "Opened" : "Opens"} {TICKET_SALE.opensLabel}.
+            </p>
           </div>
 
-          <Countdown
-            to={TICKET_SALE.endsAt}
-            label={`${TICKET_SALE.label} ends in`}
-            variant="flap"
-            size="sm"
-            units={["days", "hours", "minutes", "seconds"]}
-            active={inView}
-          />
+          {!open && (
+            <Countdown
+              to={TICKET_SALE.opensAt}
+              label={`${TICKET_SALE.label} opens in`}
+              variant="flap"
+              size="sm"
+              units={["days", "hours", "minutes", "seconds"]}
+              active={inView}
+            />
+          )}
         </div>
 
-        {/* Deliberately uneven: a pricing pair that tilts toward the pass the
+        {/* Deliberately uneven: a pair that tilts toward the pass the
             page is pushing, rather than two identical columns. */}
         <div className="grid gap-4 lg:grid-cols-[1.12fr_1fr]">
           {TICKETS.map((ticket, i) => (
@@ -112,12 +118,6 @@ function TicketCard({ ticket, index, reduce }: { ticket: Ticket; index: number; 
 
       <h3 className="display mt-5 text-[clamp(1.5rem,2.4vw,2rem)] font-semibold leading-tight">{ticket.name}</h3>
       <p className="mt-2 max-w-[34ch] text-[15px] leading-relaxed text-muted">{ticket.summary}</p>
-
-      <p className="mt-7 flex flex-wrap items-baseline gap-3">
-        <span className="display text-[clamp(2.4rem,4.4vw,3.4rem)] font-semibold leading-none">{ticket.price}</span>
-        {ticket.wasPrice && <span className="text-[15px] text-muted line-through">{ticket.wasPrice}</span>}
-      </p>
-      <p className="label mt-3">{ticket.priceNote}</p>
 
       <ul className="mt-8 space-y-3.5 border-t border-hair pt-8">
         {ticket.includes.map((line) => (
