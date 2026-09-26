@@ -2,15 +2,18 @@
 
 import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
-import { Check, Checks } from "@phosphor-icons/react";
+import { BellRinging, Check, Checks } from "@phosphor-icons/react";
 import { GLOW, PAL } from "@/components/brand/slabs";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { Countdown, useIsPast } from "@/components/ui/Countdown";
 import { TICKETS, TICKETS_INTRO, TICKET_SALE, type Ticket } from "@/data/tickets";
+import { ICS_PATH, googleCalendarUrl } from "@/lib/early-bird-reminder";
 import { cn } from "@/lib/utils";
 
 const ease = [0.16, 1, 0.3, 1] as const;
+const REMIND =
+  "glass-pill inline-flex h-9 items-center rounded-pill px-4 text-[13px] font-medium text-text transition-colors duration-300 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue";
 // The palette has no separate gold token: on the canvas's near-black, the
 // existing yellow ramp already reads as gold. See slabs.ts.
 const GOLD = PAL.yellow;
@@ -57,6 +60,22 @@ export function Tickets() {
             <p className="mt-3 text-[15px] leading-relaxed text-muted">
               {open ? "Opened" : "Opens"} {TICKET_SALE.opensLabel}.
             </p>
+            {!open && (
+              // A calendar invite is the reminder: it works on every phone and
+              // laptop, needs no sign-up, and alerts at 8:50 and 9 PM IST.
+              <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                <span className="mr-1 flex items-center gap-2 text-[13px] text-muted">
+                  <BellRinging aria-hidden="true" size={16} className="text-yellow-hi" />
+                  Remind me at 9 PM
+                </span>
+                <a href={googleCalendarUrl()} target="_blank" rel="noopener" className={REMIND}>
+                  Google Calendar<span className="sr-only"> (opens in new tab)</span>
+                </a>
+                <a href={ICS_PATH} download="devfest-noida-early-bird.ics" className={REMIND}>
+                  Apple or Outlook
+                </a>
+              </div>
+            )}
           </div>
 
           {!open && (

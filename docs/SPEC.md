@@ -766,3 +766,15 @@ Verified against the real Neon database (test visitor ids prefixed `zztest-`, al
 ## 34. Real ticket forms (26 Sep 2026)
 
 Each pass's button now opens its own Commudle registration form instead of the event waitlist: gold `https://www.commudle.com/fill-form/5169`, general `https://www.commudle.com/fill-form/5144` (both checked to resolve). The hero, nav and closing CTA still use the waitlist (`EVENT.links.waitlist`); the client hasn't asked for those to change.
+
+## 35. Early bird reminders: a calendar invite before, a live pop-up after (26 Sep 2026)
+
+Client: something that reminds people the early bird sale is live. Two pieces, neither needing a new service or collecting personal data.
+
+**Before 9 PM IST, 27 Sep.** The tickets sale strip shows "Remind me at 9 PM" with two buttons: Google Calendar (a prefilled add-event link) and Apple or Outlook (`/early-bird.ics`, a static route in `src/app/early-bird.ics/route.ts`). The invite is a 30-minute event at 15:30 UTC with alerts 10 minutes before and at opening (Google's link uses the reader's own default alerts; it can't carry custom ones). The .ics is RFC 5545 clean: CRLF line endings, TEXT escaping, lines folded at 75 octets. Link and file are built from `TICKET_SALE` in `src/lib/early-bird-reminder.ts` (which uses `TextEncoder`, not `Buffer`, since the browser-side Tickets section imports it too). `EVENT.url` (`https://devfest2k26.gdgnoida.com`) was added for links that leave the site. The buttons disappear once the sale opens.
+
+**After it opens.** `EarlyBirdToast` (mounted in `layout.tsx`) shows "Early bird is live" with a "Get your pass" button to `#tickets`. It appears on its own for anyone with the page already open at 9 PM (`useIsPast` rechecks every 30s), hides while the tickets section is on screen (an IntersectionObserver, not a scroll listener), and stays gone once dismissed or clicked through (localStorage). Desktop bottom-left; on phones it sits under the nav so it never collides with the rocket in the bottom-right. Its exit has its own short transition, because the entrance's delay would otherwise hold a dismissed toast on screen for a moment.
+
+Verified with Playwright at the real time (reminder buttons present, correct Google dates, the .ics downloads, no pop-up) and with the browser clock pinned past opening (pop-up shows, hides over the tickets section, returns after scrolling away, stays dismissed across a reload, no overlap with the rocket on an iPhone 13).
+
+Not built, needs the client's call: an email or WhatsApp reminder at 9 PM. That means collecting contact details with consent and a sending service (Resend or similar, plus a scheduled job).

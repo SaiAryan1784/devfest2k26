@@ -28,6 +28,18 @@ export const TICKET_SALE = {
   /** 27 September 2026, 9 PM IST. */
   opensAt: "2026-09-27T21:00:00+05:30",
   opensLabel: "27 September 2026, 9 PM IST",
+  /** The "remind me" calendar invite, and the pop-up once the sale is live. */
+  reminder: {
+    title: "DevFest Noida 2026: early bird passes open",
+    details: "Early bird passes for DevFest Noida 2026 are live. Get yours before they're gone.",
+    /** How long the calendar entry lasts, in minutes. */
+    minutes: 30,
+  },
+  live: {
+    title: "Early bird is live",
+    line: "Passes for DevFest Noida 2026 are open. Get yours before they're gone.",
+    cta: "Get your pass",
+  },
 };
 
 /** Sits beside the section heading, above the sale strip. */

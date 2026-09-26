@@ -5,6 +5,8 @@ export const EVENT = {
   shortName: "DevFest Noida",
   organiser: "GDG Noida",
   year: 2026,
+  /** The live site, for links that leave it (calendar invites). */
+  url: "https://devfest2k26.gdgnoida.com",
   // IST. Doors open at 9:00.
   date: "2026-10-10T09:00:00+05:30",
   dateLabel: "10 October 2026",

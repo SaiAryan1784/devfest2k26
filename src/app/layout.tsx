@@ -4,6 +4,7 @@ import { EVENT } from "@/data/event";
 import { Loader } from "@/components/loader/Loader";
 import { CursorFx } from "@/components/ui/CursorFx";
 import { ExcitedButton } from "@/components/ui/ExcitedButton";
+import { EarlyBirdToast } from "@/components/ui/EarlyBirdToast";
 import { Z } from "@/lib/z";
 import "./globals.css";
 
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {children}
         <CursorFx />
         <ExcitedButton />
+        <EarlyBirdToast />
         {/* Film grain, fixed and inert so it never repaints with scroll. */}
         <div
           aria-hidden="true"
