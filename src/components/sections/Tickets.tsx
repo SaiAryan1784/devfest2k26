@@ -7,7 +7,7 @@ import { GLOW, PAL } from "@/components/brand/slabs";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { Countdown, useIsPast } from "@/components/ui/Countdown";
-import { TICKETS, TICKETS_INTRO, TICKET_SALE, type Ticket } from "@/data/tickets";
+import { TICKETS, TICKETS_INTRO, TICKETS_ON_SALE, TICKETS_PAUSED, TICKET_SALE, type Ticket } from "@/data/tickets";
 import { ICS_PATH, googleCalendarUrl } from "@/lib/early-bird-reminder";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +33,9 @@ export function Tickets() {
   const reduce = useReducedMotion();
   const inView = useInView(ref, { amount: 0.15 });
   // Null until mounted: render the "opens soon" state until the reader's clock says otherwise.
-  const open = useIsPast(TICKET_SALE.opensAt) === true;
+  // Also gated on TICKETS_ON_SALE, so the site never claims "live" while the
+  // buttons below are actually paused (see tickets.ts).
+  const open = useIsPast(TICKET_SALE.opensAt) === true && TICKETS_ON_SALE;
 
   return (
     <section ref={ref} id="tickets" className="py-20 md:py-24 lg:py-28">
@@ -157,9 +159,18 @@ function TicketCard({ ticket, index, reduce }: { ticket: Ticket; index: number; 
       </ul>
 
       <div className="mt-auto pt-9">
-        <Button href={ticket.cta.href} variant={gold ? "primary" : "ghost"} className="w-full">
-          {ticket.cta.label}
-        </Button>
+        {TICKETS_ON_SALE ? (
+          <Button href={ticket.cta.href} variant={gold ? "primary" : "ghost"} className="w-full">
+            {ticket.cta.label}
+          </Button>
+        ) : (
+          <>
+            <Button disabled className="w-full">
+              {TICKETS_PAUSED.cta}
+            </Button>
+            <p className="mt-3 text-center text-[13px] text-muted">{TICKETS_PAUSED.note}</p>
+          </>
+        )}
       </div>
     </motion.article>
   );

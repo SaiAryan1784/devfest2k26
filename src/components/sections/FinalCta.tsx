@@ -78,7 +78,7 @@ export function FinalCta() {
           />
         </motion.h2>
         <ClickSpark sparkColor="#fff" sparkSize={12} sparkRadius={28} sparkCount={10} duration={500}>
-          <Button href={EVENT.links.waitlist} className="h-14 px-8 text-base">
+          <Button href="#tickets" className="h-14 px-8 text-base">
             {EVENT.cta.primary}
           </Button>
         </ClickSpark>

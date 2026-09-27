@@ -6,7 +6,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { GLOW } from "@/components/brand/slabs";
 import { Button } from "@/components/ui/Button";
 import { useIsPast } from "@/components/ui/Countdown";
-import { TICKET_SALE } from "@/data/tickets";
+import { TICKETS_ON_SALE, TICKET_SALE } from "@/data/tickets";
 import { useLoaderState } from "@/lib/loader-state";
 import { Z } from "@/lib/z";
 
@@ -24,7 +24,9 @@ const DISMISSED_KEY = "devfest-earlybird-live-dismissed";
 export function EarlyBirdToast() {
   const reduce = useReducedMotion();
   const loaderDone = useLoaderState((s) => s.done);
-  const live = useIsPast(TICKET_SALE.opensAt) === true;
+  // Gated on TICKETS_ON_SALE too, so this never claims "live" while the
+  // ticket buttons are actually paused (see tickets.ts).
+  const live = useIsPast(TICKET_SALE.opensAt) === true && TICKETS_ON_SALE;
   // Hidden on the server and first paint; corrected from localStorage after mount.
   const [dismissed, setDismissed] = useState(true);
   const [ticketsInView, setTicketsInView] = useState(false);
