@@ -25,6 +25,8 @@ export const EVENT = {
     mapsEmbedUrl: "https://www.google.com/maps?q=ExpoInn+Suites+%26+Convention%2C+Greater+Noida&output=embed",
   },
   links: {
+    // Retired 27 Sep 2026: the waitlist closed once passes went on sale.
+    // Kept for reference; nothing on the site links to it anymore.
     waitlist: "https://www.commudle.com/fill-form/5096",
     community: "https://gdgnoida.com",
     sponsor: "mailto:noida.gdg@gmail.com",
@@ -47,7 +49,9 @@ export const EVENT = {
     tracks: 4,
   },
   cta: {
-    primary: "Join the waitlist",
+    // Was "Join the waitlist" until the waitlist closed 27 Sep 2026; every
+    // primary CTA now sends people to the tickets section instead.
+    primary: "Get your pass",
     secondary: "See the tracks",
     sponsor: "Become a sponsor",
   },

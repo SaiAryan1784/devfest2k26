@@ -9,7 +9,7 @@ export default function NotFound() {
           <Lockup />
         </div>
         <h1 className="display mb-4 text-4xl font-medium md:text-6xl">That page is not on the floor.</h1>
-        <p className="mx-auto mb-8 max-w-[40ch] text-muted">Try the home page, or the waitlist if you came for tickets.</p>
+        <p className="mx-auto mb-8 max-w-[40ch] text-muted">Try the home page, or the tickets section if that&apos;s what you came for.</p>
         <Button href="/">Back to DevFest Noida</Button>
       </div>
     </main>

@@ -77,7 +77,7 @@ export function Nav() {
         pillTextColor="#9a9aa3"
         hoveredPillTextColor="#0a0a0c"
         mobileFooter={
-          <Button href={EVENT.links.waitlist} className="w-full">
+          <Button href="#tickets" className="w-full">
             {EVENT.cta.primary}
           </Button>
         }

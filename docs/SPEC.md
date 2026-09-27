@@ -778,3 +778,15 @@ Client: something that reminds people the early bird sale is live. Two pieces, n
 Verified with Playwright at the real time (reminder buttons present, correct Google dates, the .ics downloads, no pop-up) and with the browser clock pinned past opening (pop-up shows, hides over the tickets section, returns after scrolling away, stays dismissed across a reload, no overlap with the rocket on an iPhone 13).
 
 Not built, needs the client's call: an email or WhatsApp reminder at 9 PM. That means collecting contact details with consent and a sending service (Resend or similar, plus a scheduled job).
+
+## 36. The waitlist closed, the sale moved to 1 Oct, and both ticket buttons are paused (27 Sep 2026)
+
+Three related changes from the client.
+
+**Every "Join the waitlist" CTA now points at the tickets section.** The waitlist closed once real per-tier registration forms existed (§34). `EVENT.cta.primary` ("Join the waitlist" → "Get your pass") and its three call sites (`Hero.tsx`'s primary CTA, `Nav.tsx`'s mobile footer button, `FinalCta.tsx`'s closing button) all read from that one constant already, so the label changed once; each `href={EVENT.links.waitlist}` became `href="#tickets"` individually. `EVENT.links.waitlist` itself is kept (commented as retired) rather than deleted, since it's a real historical URL and nothing was asking for it to be erased. `not-found.tsx`'s "or the waitlist if you came for tickets" line updated to point at the tickets section instead.
+
+**The early bird sale moved from 27 Sep to 1 Oct, 9 PM IST**, both still in `tickets.ts`. Nothing else needed to change: the countdown, the sale strip's live/opens-soon copy, the calendar invite (`early-bird-reminder.ts`) and the live pop-up (`EarlyBirdToast.tsx`) all read `TICKET_SALE.opensAt`.
+
+**Both ticket buttons are paused "for now."** A new `TICKETS_ON_SALE` boolean in `tickets.ts` (currently `false`) is the single switch; flipping it back to `true` is the entire re-enable. While it's off, `TicketCard` renders a genuinely disabled `<Button disabled>` reading "Back soon" instead of the Commudle link, with "We're refuelling the rocket. Check back shortly." underneath (on-brand with the rocket launch button, §33). `Button.tsx` gained real `disabled` support: a plain `<button disabled aria-disabled>`, not a styled link someone could still tab to and open, with `href` now optional on the type since a disabled button has none. Deliberately decoupled from the sale's own clock: `open`/`live` in `Tickets.tsx` and `EarlyBirdToast.tsx` are now gated on `useIsPast(...) && TICKETS_ON_SALE`, so if `TICKETS_ON_SALE` is still `false` when 1 Oct 9 PM arrives, the site quietly keeps saying "opens soon" rather than telling everyone it's live while the buttons stay off.
+
+Verified: `tsc`, lint and build clean; the §12 dash grep clean. Playwright confirmed the hero/nav/final-CTA buttons read "Get your pass" and link to `#tickets`; both ticket buttons render truly disabled ("Back soon", not just styled to look that way) with the refuelling note under each; the Google Calendar link's `dates` param now reads 1 Oct; the 404 page's updated line.

@@ -86,7 +86,7 @@ export function Hero() {
               transition={reduce || hidden ? { duration: 0 } : { duration: 0.8, ease, delay: 0.9 }}
             >
               <Magnet padding={60} magnetStrength={6} disabled={!inView || !!reduce}>
-                <Button href={EVENT.links.waitlist}>{EVENT.cta.primary}</Button>
+                <Button href="#tickets">{EVENT.cta.primary}</Button>
               </Magnet>
               <Magnet padding={60} magnetStrength={6} disabled={!inView || !!reduce}>
                 <Button href="#tracks" variant="ghost">

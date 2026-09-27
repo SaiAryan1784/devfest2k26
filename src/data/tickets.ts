@@ -22,12 +22,25 @@ export type Ticket = {
   featured: boolean;
 };
 
+/**
+ * Whether the two Commudle forms below are actually open. Flip this back to
+ * `true` to re-enable both ticket buttons; nothing else needs to change.
+ * (Paused 27 Sep 2026, ahead of the sale moving to 1 Oct.)
+ */
+export const TICKETS_ON_SALE = false;
+
+/** Shown on both buttons, and beneath them, while `TICKETS_ON_SALE` is false. */
+export const TICKETS_PAUSED = {
+  cta: "Back soon",
+  note: "We're refuelling the rocket. Check back shortly.",
+};
+
 /** The early bird sale: counted down to until it opens, then shown as live. */
 export const TICKET_SALE = {
   label: "Early bird",
-  /** 27 September 2026, 9 PM IST. */
-  opensAt: "2026-09-27T21:00:00+05:30",
-  opensLabel: "27 September 2026, 9 PM IST",
+  /** 1 October 2026, 9 PM IST. Moved back from 27 Sep 2026. */
+  opensAt: "2026-10-01T21:00:00+05:30",
+  opensLabel: "1 October 2026, 9 PM IST",
   /** The "remind me" calendar invite, and the pop-up once the sale is live. */
   reminder: {
     title: "DevFest Noida 2026: early bird passes open",
