@@ -55,6 +55,14 @@ export const TICKET_SALE = {
   },
 };
 
+/** For anyone stuck registering or with a problem on their pass. Shown under the ticket cards. */
+export const TICKET_HELP = {
+  title: "Facing issues with your ticket?",
+  line: "Trouble registering, no confirmation, or wrong details on your pass? Tell us and the team will get back to you.",
+  cta: "Report an issue",
+  href: "https://tally.so/r/NpkjRp",
+};
+
 /** Sits beside the section heading, above the sale strip. */
 export const TICKETS_INTRO =
   "Get the regular DevFest experience with the general pass, or unlock exclusive perks with the gold pass.";

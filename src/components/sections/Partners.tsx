@@ -26,7 +26,7 @@ export function Partners() {
         <h2 className="display mb-10 text-[clamp(2.2rem,5vw,4.5rem)] font-medium leading-none">Past partners</h2>
 
         <div className="relative isolate">
-          <span aria-hidden="true" className="pointer-events-none absolute -inset-x-6 -inset-y-10 -z-10 rounded-[inherit] bg-paper/25 blur-3xl" />
+          <span aria-hidden="true" className="pointer-events-none absolute inset-x-2 -inset-y-10 -z-10 md:-inset-x-6 rounded-[inherit] bg-paper/25 blur-3xl" />
           <div className="overflow-hidden rounded-panel bg-paper py-8">
             <LogoLoop
               logos={logos}
