@@ -4,6 +4,7 @@ import { SocialLinks } from "./SocialLinks";
 
 const LINKS = [
   { href: "#tickets", label: "Tickets" },
+  { href: "#ticket-help", label: "Ticket help" },
   { href: "#tracks", label: "Tracks" },
   { href: "#floor", label: "The floor" },
   { href: "#speakers", label: "Speakers" },

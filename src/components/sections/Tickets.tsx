@@ -2,12 +2,12 @@
 
 import { useRef } from "react";
 import { motion, useInView, useReducedMotion } from "motion/react";
-import { BellRinging, Check, Checks } from "@phosphor-icons/react";
+import { BellRinging, Check, Checks, Lifebuoy } from "@phosphor-icons/react";
 import { GLOW, PAL } from "@/components/brand/slabs";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { Countdown, useIsPast } from "@/components/ui/Countdown";
-import { TICKETS, TICKETS_INTRO, TICKETS_ON_SALE, TICKETS_PAUSED, TICKET_SALE, type Ticket } from "@/data/tickets";
+import { TICKETS, TICKETS_INTRO, TICKETS_ON_SALE, TICKETS_PAUSED, TICKET_HELP, TICKET_SALE, type Ticket } from "@/data/tickets";
 import { ICS_PATH, googleCalendarUrl } from "@/lib/early-bird-reminder";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +98,25 @@ export function Tickets() {
           {TICKETS.map((ticket, i) => (
             <TicketCard key={ticket.id} ticket={ticket} index={i} reduce={!!reduce} />
           ))}
+        </div>
+
+        {/* Help for anyone stuck: right under the passes, where they'll be looking. */}
+        <div
+          id="ticket-help"
+          className="mt-4 flex flex-col gap-6 rounded-panel border border-hair bg-surface px-6 py-6 md:flex-row md:items-center md:justify-between md:gap-10 md:px-9 md:py-7"
+        >
+          <div className="flex items-start gap-4">
+            <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-card border border-hair bg-canvas text-blue-hi">
+              <Lifebuoy size={22} weight="regular" />
+            </span>
+            <div>
+              <h3 className="display text-xl font-semibold leading-tight">{TICKET_HELP.title}</h3>
+              <p className="mt-2 max-w-[56ch] text-[15px] leading-relaxed text-muted">{TICKET_HELP.line}</p>
+            </div>
+          </div>
+          <Button href={TICKET_HELP.href} variant="ghost" className="w-full md:w-auto">
+            {TICKET_HELP.cta}
+          </Button>
         </div>
       </Container>
     </section>

@@ -197,4 +197,12 @@ body {
     opacity: 1 !important;
     transform: none !important;
   }
+  /* The speaker reel: no curtain reveal, and strips snap open instead of sliding. */
+  .reel-strip {
+    clip-path: none !important;
+  }
+  .reel-strip,
+  .reel-strip * {
+    transition: none !important;
+  }
 }
