@@ -25,9 +25,9 @@ export type Ticket = {
 /**
  * Whether the two Commudle forms below are actually open. Flip this back to
  * `true` to re-enable both ticket buttons; nothing else needs to change.
- * (Paused 27 Sep 2026, ahead of the sale moving to 1 Oct.)
+ * (Paused 27 Sep 2026; switched back on by hand 1 Oct 2026.)
  */
-export const TICKETS_ON_SALE = false;
+export const TICKETS_ON_SALE = true;
 
 /** Shown on both buttons, and beneath them, while `TICKETS_ON_SALE` is false. */
 export const TICKETS_PAUSED = {
