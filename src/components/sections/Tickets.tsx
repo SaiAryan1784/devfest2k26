@@ -19,7 +19,7 @@ const REMIND =
 const GOLD = PAL.yellow;
 
 /**
- * Two passes, side by side, with the early bird sale running above them.
+ * Two passes, side by side, with the ticket sale running above them.
  * Opaque surface panels rather than `.glass` tiles: the floor's bento owns
  * the glass-tile family, and nothing moves behind these, so a blur would be
  * paying for nothing (see the .glass / .glass-live note in globals.css).
@@ -45,7 +45,7 @@ export function Tickets() {
           <p className="max-w-[38ch] text-[15px] leading-relaxed text-muted">{TICKETS_INTRO}</p>
         </div>
 
-        {/* The sale strip: counts down to the early bird opening, then says it's live. */}
+        {/* The sale strip: counts down to the sale opening, then says it's live. */}
         <div className="reveal mb-4 flex flex-col gap-7 rounded-panel border border-hair bg-surface px-6 py-6 md:flex-row md:items-center md:justify-between md:gap-10 md:px-9 md:py-7">
           <div>
             <p className="label flex items-center gap-2.5 !text-text">
@@ -73,7 +73,7 @@ export function Tickets() {
                 <a href={googleCalendarUrl()} target="_blank" rel="noopener" className={REMIND}>
                   Google Calendar<span className="sr-only"> (opens in new tab)</span>
                 </a>
-                <a href={ICS_PATH} download="devfest-noida-early-bird.ics" className={REMIND}>
+                <a href={ICS_PATH} download="devfest-noida-ticket-sale.ics" className={REMIND}>
                   Apple or Outlook
                 </a>
               </div>

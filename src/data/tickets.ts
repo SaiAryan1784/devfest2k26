@@ -1,5 +1,5 @@
 /**
- * Ticket tiers and the early bird sale.
+ * Ticket tiers and the ticket sale.
  *
  * No prices on the site (client, 26 Sep 2026): the cards sell on perks.
  *
@@ -35,21 +35,21 @@ export const TICKETS_PAUSED = {
   note: "We're refuelling the rocket. Check back shortly.",
 };
 
-/** The early bird sale: counted down to until it opens, then shown as live. */
+/** The ticket sale: counted down to until it opens, then shown as live. */
 export const TICKET_SALE = {
-  label: "Early bird",
+  label: "Ticket sale",
   /** 1 October 2026, 9 PM IST. Moved back from 27 Sep 2026. */
   opensAt: "2026-10-01T21:00:00+05:30",
   opensLabel: "1 October 2026, 9 PM IST",
   /** The "remind me" calendar invite, and the pop-up once the sale is live. */
   reminder: {
-    title: "DevFest Noida 2026: early bird passes open",
-    details: "Early bird passes for DevFest Noida 2026 are live. Get yours before they're gone.",
+    title: "DevFest Noida 2026: ticket sale opens",
+    details: "The DevFest Noida 2026 ticket sale is live. Get your pass before they're gone.",
     /** How long the calendar entry lasts, in minutes. */
     minutes: 30,
   },
   live: {
-    title: "Early bird is live",
+    title: "Ticket sale is live",
     line: "Passes for DevFest Noida 2026 are open. Get yours before they're gone.",
     cta: "Get your pass",
   },
