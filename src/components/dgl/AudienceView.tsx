@@ -15,6 +15,13 @@ import { ScoreGrid } from "./ScoreGrid";
 
 const c = DGL.copy;
 
+/*
+ * `[@media(max-height:700px)]:` classes: under 700 px tall (a 360 x 640 phone
+ * shows about 510 px of page) the voting-grid screen tightens so the grid and
+ * "Lock in" fit without scrolling. Taller screens (390 x 844 and up) are
+ * unaffected. Written out in full each time so Tailwind's scanner sees them.
+ */
+
 /** State colour for a vote line (PAL hi tones); the words always say the same thing. */
 const LINE_TONE: Record<VoteShown["line"], string> = {
   voteRecorded: "text-green-hi",
@@ -63,7 +70,14 @@ export function AudienceView() {
         {liveText(view)}
       </p>
       <AnimatePresence initial={false} mode="wait">
-        <m.div key={view.kind} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="mt-6 flex flex-1 flex-col gap-5">
+        <m.div
+          key={view.kind}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={fade}
+          className={cn("mt-6 flex flex-1 flex-col gap-5", view.kind === "voting-grid" && "[@media(max-height:700px)]:mt-3 [@media(max-height:700px)]:gap-2")}
+        >
           <Screen
             view={view}
             offset={offset}
@@ -115,10 +129,10 @@ function Screen({ view, offset, picked, onPick, onLockIn, focusLockedRef, fade }
     case "voting-grid":
       return (
         <>
-          <ActBlock act={view.act} />
-          <div className="flex flex-col gap-3">
-            {view.notCounted && <p className="text-[15px] text-red-hi">{c.earlierNotCounted}</p>}
-            <h3 id={scoreTitle} className="text-[17px] font-semibold text-blue-hi">
+          <ActBlock act={view.act} compact />
+          <div className="flex flex-col gap-3 [@media(max-height:700px)]:gap-2">
+            {view.notCounted && <p className="text-[15px] text-red-hi [@media(max-height:700px)]:text-[14px] [@media(max-height:700px)]:leading-[1.3]">{c.earlierNotCounted}</p>}
+            <h3 id={scoreTitle} className="text-[17px] font-semibold text-blue-hi [@media(max-height:700px)]:leading-tight">
               {c.votingTitle}
             </h3>
             <ScoreGrid value={picked} onChange={onPick} labelledBy={scoreTitle} />
@@ -197,12 +211,32 @@ function Message({ title, body }: { title: string; body?: string }) {
 }
 
 /** Who is on, and their prompt. `status` is a plain sentence-case line, not an eyebrow. */
-function ActBlock({ act, status }: { act: Act; status?: string }) {
+/**
+ * Who is on, and their prompt. `status` is a plain sentence-case line, not an eyebrow.
+ * Names and prompts can be 200 characters: the name is clamped to two lines and
+ * the prompt to three (visually only; a screen reader still reads all of it),
+ * and long unbroken words wrap instead of running off the side. `compact` (the
+ * voting grid) sets both smaller on short screens so "Lock in" stays above the fold.
+ */
+function ActBlock({ act, status, compact = false }: { act: Act; status?: string; compact?: boolean }) {
   return (
     <div className="flex flex-col gap-1">
       {status && <p className="text-[15px] text-muted">{status}</p>}
-      {act.contestant && <h2 className="display text-[32px] font-semibold leading-[1.1]">{act.contestant}</h2>}
-      {act.prompt && <p className="mt-1 text-[17px] leading-snug text-muted">{act.prompt}</p>}
+      {act.contestant && (
+        <h2 className={cn("display line-clamp-2 break-words text-[32px] font-semibold leading-[1.1]", compact && "[@media(max-height:700px)]:text-[24px]")}>
+          {act.contestant}
+        </h2>
+      )}
+      {act.prompt && (
+        <p
+          className={cn(
+            "mt-1 line-clamp-3 break-words text-[17px] leading-snug text-muted",
+            compact && "[@media(max-height:700px)]:mt-0 [@media(max-height:700px)]:text-[15px] [@media(max-height:700px)]:leading-[1.3]",
+          )}
+        >
+          {act.prompt}
+        </p>
+      )}
     </div>
   );
 }
