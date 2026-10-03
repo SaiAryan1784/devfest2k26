@@ -1,3 +1,5 @@
+import type { compareScores } from "./score";
+
 /** Status stored on a performance row. */
 export type StoredStatus =
   | "READY"
@@ -53,3 +55,47 @@ export type SetupAction =
   | { type: "resetShow"; confirm: "RESET" };
 
 export type Action = LiveAction | SetupAction;
+
+/** What anyone may see: never the self score before REVEAL, never voter or IP data. */
+export type PublicState = {
+  phase: Phase;
+  performanceId: string | null;
+  contestant: string | null;
+  prompt: string | null;
+  endsAtMs: number | null;
+  /** Counted votes (excluded votes are not counted). */
+  votes: number;
+  /** Null below DGL.minVotes, else one decimal. */
+  average: number | null;
+  reveal: {
+    self: number;
+    audience: number | null;
+    result: ReturnType<typeof compareScores>;
+  } | null;
+};
+
+export type ContestantStatus = "upcoming" | "current" | "done";
+
+export type AdminState = PublicState & {
+  version: number;
+  serverNow: number;
+  selfScore: number | null;
+  rawAverage: number | null;
+  flagged: number;
+  excluded: number;
+  kiosk: number;
+  contestants: { id: string; name: string; sort: number; active: boolean; status: ContestantStatus }[];
+  prompts: { id: string; text: string; active: boolean }[];
+  /** SUPER_ADMIN only. */
+  admins?: { id: string; name: string; role: Role; active: boolean }[];
+  /** SUPER_ADMIN only: the last 50 entries, newest first. */
+  audit?: { at: number; adminName: string; action: string; detail: unknown }[];
+};
+
+export type ActionResult =
+  | { ok: true; state: AdminState }
+  | {
+      ok: false;
+      code: "forbidden" | "not_allowed" | "stale" | "invalid" | "needs_prompt" | "needs_self_score";
+      state: AdminState;
+    };

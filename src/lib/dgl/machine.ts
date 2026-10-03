@@ -50,7 +50,7 @@ export function allowed(phase: Phase, action: LiveType): boolean {
   return TRANSITIONS[phase].includes(action);
 }
 
-const LIVE_ACTIONS: readonly LiveType[] = [
+export const LIVE_ACTIONS: readonly LiveType[] = [
   "selectContestant",
   "reassignContestant",
   "setPrompt",
