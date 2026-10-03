@@ -3,8 +3,10 @@
 // everything else (every /api/ call, other origins, non-GET) passes straight through, so a vote
 // or a state poll is never answered from a cache.
 //
-// Kill switch: to retire this worker, ship a version of this file whose `activate` handler calls
-// `self.registration.unregister()` and deletes every `dgl-` cache. Browsers re-fetch the script
+// Kill switch: to retire this worker, ship a version of this file that keeps `skipWaiting()` in its
+// `install` handler, has NO `fetch` handler, and whose `activate` handler deletes every `dgl-`
+// cache and calls `self.registration.unregister()`. In the same release remove `<RegisterSw />`
+// from src/app/dgl/layout.tsx, so nothing registers a worker again. Browsers re-fetch the script
 // on navigation (at the latest every 24 h) and install it over this one.
 // This file is served from Next's public folder at /dgl-sw.js, registered with scope "/dgl".
 "use strict";
@@ -44,15 +46,15 @@ function store(cache, key, response) {
 
 // Network first. If the network errors or has not answered within timeoutMs, serve the cached
 // copy of this URL, else the cached /dgl shell. With nothing cached, keep waiting for the network.
+//
+// The answer is stored when the network won the race. An answer that lands after the timeout is
+// stored only if this URL had no cached copy: the page was served from the old copy, so the new
+// HTML's chunks were never fetched, and storing it would leave a later offline reload with HTML
+// whose chunks are not in the cache.
 async function networkFirst(request, cache, fetchFn, timeoutMs, timers) {
   const t = timers || { setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: (id) => clearTimeout(id) };
   const key = request.url;
-  const network = Promise.resolve()
-    .then(() => fetchFn(request))
-    .then((response) => {
-      store(cache, key, response); // also fills the cache when the answer lands after the timeout
-      return response;
-    });
+  const network = Promise.resolve().then(() => fetchFn(request));
   network.catch(() => {}); // a late failure after the timeout must not surface as unhandled
 
   let timer;
@@ -62,14 +64,24 @@ async function networkFirst(request, cache, fetchFn, timeoutMs, timers) {
   let failure = null;
   try {
     const first = await Promise.race([network, timeout]);
-    if (first !== TIMED_OUT) return first;
+    if (first !== TIMED_OUT) {
+      store(cache, key, first);
+      return first;
+    }
   } catch (err) {
     failure = err;
   } finally {
     t.clearTimeout(timer);
   }
 
-  const cached = (await cache.match(key)) || (await cache.match(new URL("/dgl", key).href));
+  const own = await cache.match(key);
+  if (!own && !failure) {
+    network.then(
+      (response) => store(cache, key, response),
+      () => {},
+    );
+  }
+  const cached = own || (await cache.match(new URL("/dgl", key).href));
   if (cached) return cached;
   if (failure) throw failure;
   return network;

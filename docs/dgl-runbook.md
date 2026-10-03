@@ -80,6 +80,8 @@ To judge abuse, look at the vote count against the room size (a count well above
 
 ## Service worker kill switch
 
+No deploys during the DGL segment. A new deploy changes the page's chunk names, and a phone that reloads on a weak connection may be served the old cached page while the new one is still arriving.
+
 If the offline shell misbehaves in production:
 
 1. Replace `public/dgl-sw.js` with a file whose `activate` handler unregisters the worker and deletes every cache whose name starts with `dgl-`. Keep `skipWaiting` in the `install` handler so it takes over at once. Do not add a `fetch` handler.

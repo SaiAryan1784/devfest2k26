@@ -182,6 +182,54 @@ describe("networkFirst", () => {
     }
   });
 
+  // Lets every pending promise callback run (the late network answer and its cache write).
+  const settle = () => new Promise((r) => setTimeout(r, 0));
+
+  it("does NOT store a late answer when this URL already had a cached copy (its chunks were never fetched)", async () => {
+    const old = res("old");
+    const { cache, put, store } = fakeCache({ [ORIGIN + "/dgl/stage"]: old });
+    const { timers, trip } = manualTimers();
+    let resolveNet: (r: Res) => void = () => {};
+    const slow = new Promise<Res>((r) => (resolveNet = r));
+    const p = sw.networkFirst(nav("/dgl/stage"), cache, () => slow, 4000, timers);
+    trip();
+    expect(await p).toBe(old);
+    resolveNet(res("late"));
+    await settle();
+    expect(put).not.toHaveBeenCalled();
+    expect(store.get(ORIGIN + "/dgl/stage")).toBe(old);
+  });
+
+  it("stores a late answer when nothing was cached for that URL (the /dgl shell stood in)", async () => {
+    const shell = res("shell");
+    const { cache, put, store } = fakeCache({ [ORIGIN + "/dgl"]: shell });
+    const { timers, trip } = manualTimers();
+    let resolveNet: (r: Res) => void = () => {};
+    const slow = new Promise<Res>((r) => (resolveNet = r));
+    const p = sw.networkFirst(nav("/dgl/kiosk"), cache, () => slow, 4000, timers);
+    trip();
+    expect(await p).toBe(shell);
+    resolveNet(res("late"));
+    await settle();
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(put.mock.calls[0][0]).toBe(ORIGIN + "/dgl/kiosk");
+    expect(store.get(ORIGIN + "/dgl/kiosk")?.id).toBe("late-clone");
+    expect(store.get(ORIGIN + "/dgl")).toBe(shell);
+  });
+
+  it("stores a late answer when nothing at all was cached (the page waited for it)", async () => {
+    const { cache, put } = fakeCache();
+    const { timers, trip } = manualTimers();
+    let resolveNet: (r: Res) => void = () => {};
+    const slow = new Promise<Res>((r) => (resolveNet = r));
+    const p = sw.networkFirst(nav("/dgl"), cache, () => slow, 4000, timers);
+    trip();
+    resolveNet(res("late"));
+    expect((await p).id).toBe("late");
+    await settle();
+    expect(put).toHaveBeenCalledTimes(1);
+  });
+
   it("passes the configured timeout to the timer", async () => {
     const { cache } = fakeCache();
     const setTimeout = vi.fn(() => 1);
