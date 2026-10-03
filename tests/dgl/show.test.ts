@@ -547,3 +547,61 @@ test("moderation keeps the 20 newest performances with votes", async () => {
   expect(m).toHaveLength(20);
   expect(m[0].performanceId).toBe(p);
 });
+
+test("a VOLUNTEER's admin state carries only what the kiosk needs: no self score, raw average, flags, kiosk count or prompts", async () => {
+  await toVoting({ votes: [9, 8, 7], self: 6 });
+  await addVotes([4], { flagged: true });
+  await addVotes([5], { source: "kiosk" });
+  const v = await admin("VOLUNTEER");
+  expect(v).toMatchObject({
+    phase: "VOTING",
+    performanceId: p,
+    contestant: "Riya Sharma",
+    prompt: "Roast your own GitHub profile",
+    me: { name: "Super", role: "VOLUNTEER" },
+    selfScore: null,
+    rawAverage: null,
+    flagged: 0,
+    excluded: 0,
+    kiosk: 0,
+    prompts: [],
+  });
+  expect(typeof v.version).toBe("number");
+  expect(v.serverNow).toBe(T0);
+  expect(v.contestants.map((k) => k.name)).toEqual(["Riya Sharma", "Aman Gupta"]);
+  for (const k of ["admins", "audit", "moderation"]) expect(k in v).toBe(false);
+});
+
+test("the self score entered for an act is absent from a VOLUNTEER's serialised state before the reveal", async () => {
+  await toVotingClosed({ votes: [5, 5, 5, 5, 5], self: 7 });
+  const json = JSON.stringify(await admin("VOLUNTEER"));
+  expect(json).not.toMatch(/"selfScore":7/);
+  expect(JSON.parse(json)).toMatchObject({ selfScore: null, reveal: null });
+  // The same state for the host still has it, so the volunteer's is stripped, not missing.
+  expect((await admin("HOST")).selfScore).toBe(7);
+});
+
+test("HOST, OPERATOR and SUPER_ADMIN still get the self score, raw average, flags, kiosk count and prompts", async () => {
+  await toVoting({ votes: [9, 8, 7], self: 6 });
+  await addVotes([4], { flagged: true });
+  await addVotes([5], { source: "kiosk" });
+  for (const role of ["HOST", "OPERATOR", "SUPER_ADMIN"] as const) {
+    const s = await admin(role);
+    expect(s.selfScore).toBe(6);
+    expect(s.rawAverage).toBeCloseTo(6.6);
+    expect(s.flagged).toBe(1);
+    expect(s.kiosk).toBe(1);
+    expect(s.prompts.length).toBe(2);
+  }
+});
+
+test("an action type that is not an admin action is invalid for every role and writes nothing", async () => {
+  const before = await count("dgl_audit");
+  for (const role of ["SUPER_ADMIN", "OPERATOR", "HOST", "VOLUNTEER"] as const) {
+    for (const type of ["kioskVote", "nope"]) {
+      expect(await runAs(role, { type } as unknown as Action)).toMatchObject({ ok: false, code: "invalid" });
+    }
+  }
+  expect(await count("dgl_audit")).toBe(before);
+  expect((await admin()).version).toBe(0);
+});

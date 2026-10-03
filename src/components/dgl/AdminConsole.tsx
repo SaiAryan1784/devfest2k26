@@ -76,7 +76,7 @@ export function AdminConsole() {
         <p role="status" className="text-[17px] text-muted">
           {c.checking}
         </p>
-        {admin.connection !== "live" && <p className="text-[15px] text-yellow-hi">{c.unreachable}</p>}
+        {(admin.connection === "reconnecting" || admin.connection === "offline") && <p className="text-[15px] text-yellow-hi">{c.unreachable}</p>}
       </div>
     );
   }
@@ -137,7 +137,15 @@ function Console({ admin, state }: { admin: UseAdmin; state: AdminState }) {
   const shown: View = setup ? view : "live";
 
   return (
-    <div className={cn("mx-auto flex w-full max-w-[1200px] flex-col px-4 pt-4 sm:px-6 lg:px-8 lg:pb-12", shown === "live" ? "pb-56" : "pb-12")}>
+    <div
+      className={cn(
+        "mx-auto flex w-full max-w-[1200px] flex-col px-4 pt-4 sm:px-6 lg:px-8 lg:pb-12",
+        // Below lg the big button is a fixed bar: the padding keeps the last control above it, and the
+        // page's scroll padding (set on <html> while this view shows) keeps a focused input from
+        // scrolling in under it.
+        shown === "live" ? "pb-56 max-lg:[html:has(&)]:[scroll-padding-bottom:14rem]" : "pb-12",
+      )}
+    >
       <TopBar admin={admin} state={state} />
       {setup && <ViewSwitch view={shown} onChange={setView} />}
 
@@ -172,7 +180,8 @@ function Console({ admin, state }: { admin: UseAdmin; state: AdminState }) {
               onTap={(s) => tap(s.key, s.needsConfirm, () => void admin.act({ type: s.key }, v))}
             />
 
-            {state.performanceId && state.phase !== "COMPLETED" && (
+            {/* A volunteer's state carries no prompt data (see readAdminState): no panel rather than an empty one. */}
+            {state.performanceId && state.phase !== "COMPLETED" && state.me.role !== "VOLUNTEER" && (
               <PromptPanel state={state} admin={admin} gate={gate} draw={has("drawPrompt")} type={has("setPrompt")} />
             )}
 
@@ -218,13 +227,16 @@ function TopBar({ admin, state }: { admin: UseAdmin; state: AdminState }) {
   if (state.phase === "PERFORMING" && state.endsAtMs !== null) {
     stats.push({ label: c.stats.timeLeft, value: <ActClock endsAtMs={state.endsAtMs} offset={admin.offset} /> });
   }
-  stats.push(
-    { label: c.stats.votes, value: state.votes },
-    { label: c.stats.rawAverage, value: raw ?? c.stats.noVotes },
-    { label: c.stats.flagged, value: state.flagged },
-    { label: c.stats.excluded, value: state.excluded },
-    { label: c.stats.kiosk, value: state.kiosk },
-  );
+  stats.push({ label: c.stats.votes, value: state.votes });
+  // A volunteer's state has these stripped (see readAdminState): zeros there would look like data.
+  if (state.me.role !== "VOLUNTEER") {
+    stats.push(
+      { label: c.stats.rawAverage, value: raw ?? c.stats.noVotes },
+      { label: c.stats.flagged, value: state.flagged },
+      { label: c.stats.excluded, value: state.excluded },
+      { label: c.stats.kiosk, value: state.kiosk },
+    );
+  }
 
   return (
     <header className="flex flex-col gap-4">

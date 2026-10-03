@@ -131,6 +131,46 @@ export function nextAttempt(prev: string | null, event: AttemptEvent, newId: () 
   }
 }
 
+/**
+ * The unsettled press, kept in sessionStorage so a reload (or the re-sign-in
+ * after a 401) between a lost answer and the next press still resends the
+ * same id. Cleared on a definitive outcome and on sign-out. Every access is
+ * best effort: storage that is missing or throws only loses this safety net.
+ */
+export type StoredAttempt = { id: string; forId: string };
+
+export const ATTEMPT_KEY = "dgl:kiosk:attempt";
+
+const ATTEMPT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function loadAttempt(storage: Storage | null): StoredAttempt | null {
+  if (!storage) return null;
+  try {
+    const parsed: unknown = JSON.parse(storage.getItem(ATTEMPT_KEY) ?? "null");
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const { id, forId } = parsed as { id?: unknown; forId?: unknown };
+    return typeof id === "string" && ATTEMPT_UUID.test(id) && typeof forId === "string" && forId ? { id, forId } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stores the attempt, or removes it when null. */
+export function saveAttempt(storage: Storage | null, a: StoredAttempt | null): void {
+  if (!storage) return;
+  try {
+    if (a) storage.setItem(ATTEMPT_KEY, JSON.stringify({ id: a.id, forId: a.forId }));
+    else storage.removeItem(ATTEMPT_KEY);
+  } catch {
+    // The in-memory attempt still works until a reload.
+  }
+}
+
+/** The stored attempt, only when it was made for this performance (another act's press is not this one). */
+export function restoreAttempt(stored: StoredAttempt | null, performanceId: string | null): StoredAttempt | null {
+  return stored && performanceId !== null && stored.forId === performanceId ? stored : null;
+}
+
 /** A version 4 UUID from 16 random bytes (RFC 4122 version and variant bits set). */
 export function uuidV4(bytes: Uint8Array): string {
   const b = Uint8Array.from(bytes);

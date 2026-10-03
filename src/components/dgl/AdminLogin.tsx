@@ -78,7 +78,7 @@ export function AdminLogin({ onSignedIn, note }: Props) {
         onSignedIn();
         return;
       }
-      fail(res.status === 423 ? c.locked : res.status === 401 ? c.invalid : c.failed);
+      fail(res.status === 423 ? c.locked : res.status === 429 ? c.rateLimited : res.status === 401 ? c.invalid : c.failed);
     } catch {
       fail(c.failed);
     }

@@ -4,7 +4,17 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CheckCircle, Info, SignOut, WarningCircle } from "@phosphor-icons/react";
 import { DGL } from "@/data/dgl";
 import { timeoutSignal } from "@/lib/dgl/client-http";
-import { kioskOutcome, kioskScreen, newAttemptId, nextAttempt, type KioskOutcome, type KioskSession } from "@/lib/dgl/kiosk-view";
+import {
+  kioskOutcome,
+  kioskScreen,
+  loadAttempt,
+  newAttemptId,
+  nextAttempt,
+  restoreAttempt,
+  saveAttempt,
+  type KioskOutcome,
+  type KioskSession,
+} from "@/lib/dgl/kiosk-view";
 import type { Role } from "@/lib/dgl/types";
 import { useDglState } from "@/lib/dgl/use-dgl-state";
 import { cn } from "@/lib/utils";
@@ -19,6 +29,15 @@ const SESSION_TIMEOUT_MS = 6000;
 const VOTE_TIMEOUT_MS = 8000;
 
 type Me = { name: string; role: Role };
+
+/** sessionStorage can throw on access itself (blocked site data), so every use goes through here. */
+function sessionStore(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
 
 const ROLES: readonly string[] = ["SUPER_ADMIN", "OPERATOR", "HOST", "VOLUNTEER"];
 
@@ -110,6 +129,8 @@ export function KioskView() {
     try {
       const res = await fetch("/api/dgl/admin/logout", { method: "POST", cache: "no-store", signal: timeoutSignal(SESSION_TIMEOUT_MS) });
       if (!res.ok) throw new Error(`logout ${res.status}`);
+      // A deliberate sign-out ends the unsettled press too: the next person starts a new vote.
+      saveAttempt(sessionStore(), null);
       if (!mounted.current) return;
       setMe(null);
       setNote(null);
@@ -200,7 +221,8 @@ const TONE: Record<KioskOutcome["tone"], string> = {
  * recorded (see kioskOutcome). The pick belongs to its performance; after a
  * recorded vote the grid locks for DGL.limits.kioskGapMs (matching the
  * server's per-admin gap) and then clears. Every press carries an attempt id
- * that survives a failed or unanswered try, so pressing again is safe.
+ * that survives a failed or unanswered try (and a reload of this tab), so
+ * pressing again is safe.
  */
 function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskProps) {
   const { state, connection } = useDglState();
@@ -216,8 +238,9 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
   const inFlight = useRef(false);
   // The id of the press that is not settled yet, per act. Kept across every outcome that leaves
   // the vote's fate unknown or retryable, so a repeat press resends it and the server answers
-  // "duplicate" instead of counting twice (see nextAttempt). It lives and dies with this
-  // component, which signing out or a 401 unmounts.
+  // "duplicate" instead of counting twice (see nextAttempt). Mirrored to sessionStorage, so a
+  // reload, or the re-sign-in after a 401 (which unmounts this component), still resends it for
+  // the same act; cleared on a definitive outcome and on sign-out. Never read while rendering.
   const attempt = useRef<{ id: string; forId: string } | null>(null);
   const lockedRef = useRef(false);
   const lockTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -231,6 +254,13 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
       clearTimeout(lockTimer.current);
     };
   }, []);
+
+  // Pick up an unsettled press a reload or a re-sign-in left behind, only for the act it was made for.
+  useEffect(() => {
+    if (!performanceId || attempt.current?.forId === performanceId) return;
+    const restored = restoreAttempt(loadAttempt(sessionStore()), performanceId);
+    if (restored) attempt.current = restored;
+  }, [performanceId]);
 
   const picked = pick && pick.id === performanceId ? pick.n : null;
   // Only a vote's own answer, only on the voting screen, only for this act.
@@ -252,6 +282,7 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
     const prior = attempt.current?.forId === forId ? attempt.current.id : null;
     const attemptId = nextAttempt(prior, "press", newAttemptId) as string;
     attempt.current = { id: attemptId, forId };
+    saveAttempt(sessionStore(), attempt.current);
     let status: number | null = null;
     let body: unknown = null;
     try {
@@ -272,7 +303,10 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
     if (!mounted.current) return;
     setBusy(false);
     const out = kioskOutcome(status, body, sent);
-    if (nextAttempt(attemptId, out.kind, newAttemptId) === null) attempt.current = null;
+    if (nextAttempt(attemptId, out.kind, newAttemptId) === null) {
+      attempt.current = null;
+      saveAttempt(sessionStore(), null);
+    }
     if (out.kind === "signed_out") return onSessionEnded();
     if (out.kind === "forbidden") return onDenied();
     setOutcome({ id: forId, o: out });

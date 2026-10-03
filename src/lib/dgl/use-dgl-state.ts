@@ -4,9 +4,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { DGL } from "@/data/dgl";
 import { pickOffset, pollDelay } from "./clock";
 import { fetchMe, timeoutSignal } from "./client-http";
+import { connectionFor, type Connection } from "./connection";
 import type { PublicState } from "./types";
-
-export type Connection = "live" | "reconnecting" | "offline";
 
 const OFFSET_REFRESH_MS = 60_000;
 const SAMPLES = 5;
@@ -31,7 +30,8 @@ function asPublicState(x: unknown): PublicState | null {
 /**
  * The show, polled. `state` is the last good PublicState (kept through
  * failures), `offset` is server time minus this phone's clock (see
- * clock.ts), `connection` is what to tell the voter.
+ * clock.ts), `connection` is what to tell the voter ("connecting" until the
+ * first good poll, on the server too, so hydration matches).
  *
  * One timer, restarted whenever the cadence changes. It does not run while
  * the tab is hidden, and fires straight away on becoming visible or online.
@@ -141,6 +141,7 @@ export function useDglState(): { state: PublicState | null; offset: number; conn
     };
   }, []);
 
-  const connection: Connection = !online ? "offline" : failing ? "reconnecting" : "live";
+  // The first good poll always sets `state` (lastJson starts empty), so a state means a poll answered.
+  const connection: Connection = connectionFor(online, failing, state !== null);
   return { state, offset, connection };
 }

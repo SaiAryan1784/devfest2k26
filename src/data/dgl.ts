@@ -43,6 +43,8 @@ export const DGL = {
     burstFlagAt: 25,
     loginFailures: 5,
     loginWindowMin: 15,
+    /** Sign in attempts per IP per minute, per server instance (best effort, see loginLimiter). */
+    loginPerIpPerMin: 10,
     kioskGapMs: 2000,
   },
   copy: {
@@ -78,7 +80,7 @@ export const DGL = {
     difference: (d: string) => `Difference ${d}`,
     notEnoughVotes: "Not enough votes for an audience score",
     completed: "Next act coming up",
-    connection: { live: "Live", reconnecting: "Reconnecting", offline: "Offline" },
+    connection: { connecting: "Connecting", live: "Live", reconnecting: "Reconnecting", offline: "Offline" },
 
     // Stage display (/dgl/stage)
     stageTitle: "DevFest Got Latent stage",
@@ -133,6 +135,7 @@ export const DGL = {
         missing: "Enter your name and passcode.",
         invalid: "Name or passcode is not right.",
         locked: "Too many attempts. Try again in 15 minutes.",
+        rateLimited: "Too many attempts. Try again in a minute.",
         failed: "Could not sign in. Check the connection and try again.",
       },
       sessionEnded: "Your session ended. Sign in again.",

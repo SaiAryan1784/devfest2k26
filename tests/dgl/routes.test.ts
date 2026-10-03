@@ -298,8 +298,9 @@ describe("me route", () => {
 });
 
 describe("login and logout routes", () => {
+  // A fresh address per call unless one is given: the per-IP login limiter lives for the whole file.
   const login = (body: unknown, extra: Init = {}) =>
-    loginPOST(req("/api/dgl/admin/login", "POST", { body, ...extra }));
+    loginPOST(req("/api/dgl/admin/login", "POST", { body, ip: ip(), ...extra }));
 
   test("sets an HttpOnly SameSite=Strict dgl_admin cookie that works for admin/state", async () => {
     const a = await addAdmin("OPERATOR", "Sai");
@@ -344,6 +345,47 @@ describe("login and logout routes", () => {
 
   test("403 when Origin differs", async () => {
     expect((await login({ name: "Sai", passcode: "x" }, { origin: "http://evil.test" })).status).toBe(403);
+  });
+
+  test("the attempt after loginPerIpPerMin from one IP within a minute is 429, and touches no database", async () => {
+    await addAdmin("OPERATOR", "Sai");
+    const from = ip();
+    const max = DGL.limits.loginPerIpPerMin;
+    expect(max).toBe(10);
+    // Random names: each one is its own lockout bucket, so only the IP limit can stop them.
+    for (let i = 0; i < max; i++) {
+      expect((await login({ name: `nobody-${i}`, passcode: "wrong" }, { ip: from })).status).toBe(401);
+    }
+    const failed = () => db.query("SELECT 1 FROM dgl_audit WHERE action = 'loginFailed'");
+    expect(await failed()).toHaveLength(max);
+    const spy = vi.spyOn(db, "query");
+    const res = await login({ name: "Sai", passcode: "right" }, { ip: from });
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "too many attempts" });
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+    expect(await failed()).toHaveLength(max);
+    expect(await db.query("SELECT 1 FROM dgl_audit WHERE action = 'login'")).toHaveLength(0);
+  });
+
+  test("a 429 for one IP does not affect another", async () => {
+    await addAdmin("OPERATOR", "Sai");
+    const x = ip();
+    for (let i = 0; i < DGL.limits.loginPerIpPerMin; i++) await login({ name: `nobody-${i}`, passcode: "wrong" }, { ip: x });
+    expect((await login({ name: "Sai", passcode: "right" }, { ip: x })).status).toBe(429);
+    expect((await login({ name: "Sai", passcode: "right" }, { ip: ip() })).status).toBe(200);
+  });
+
+  test("malformed bodies and a bad Origin are refused before the limiter counts them", async () => {
+    await addAdmin("OPERATOR", "Sai");
+    const from = ip();
+    for (let i = 0; i < DGL.limits.loginPerIpPerMin + 2; i++) {
+      expect((await login({ name: 1 }, { ip: from })).status).toBe(400);
+      expect((await login({ name: "Sai", passcode: "right" }, { ip: from, origin: "http://evil.test" })).status).toBe(403);
+    }
+    expect((await login({ name: "Sai", passcode: "right" }, { ip: from })).status).toBe(200);
   });
 
   test("logout clears the cookie, and 403 on a bad Origin", async () => {
@@ -446,6 +488,21 @@ describe("action route", () => {
     });
     expect(res.status).toBe(403);
     expect((await res.json()).code).toBe("forbidden");
+  });
+
+  test("400 invalid for an action type that is not an admin action (kioskVote, an unknown one), and nothing is written", async () => {
+    const a = await addAdmin("SUPER_ADMIN");
+    const audit = () => db.query("SELECT 1 FROM dgl_audit");
+    const before = await audit();
+    for (const type of ["kioskVote", "nope", "toString", "__proto__"]) {
+      const res = await act({ body: { action: { type }, version: 0 }, cookie: a.cookie });
+      expect(res.status).toBe(400);
+      expect((await res.json()).code).toBe("invalid");
+    }
+    expect(await audit()).toHaveLength(before.length);
+    expect(await db.query("SELECT 1 FROM dgl_votes")).toHaveLength(0);
+    const [show] = await db.query<{ version: number }>("SELECT version FROM dgl_show WHERE id = 1");
+    expect(show.version).toBe(0);
   });
 
   test("400 invalid for a well-shaped action with bad fields", async () => {

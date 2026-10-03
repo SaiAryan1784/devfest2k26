@@ -122,6 +122,14 @@ export function clearAdminCookie(res: NextResponse): NextResponse {
 export const voterLimiter = createLimiter(DGL.limits.votePerVoterPerMin, 60_000);
 export const ipLimiter = createLimiter(DGL.limits.votePerIpPerMin, 60_000);
 export const kioskLimiter = createLimiter(1, DGL.limits.kioskGapMs);
+/**
+ * Sign in attempts per IP, checked before any database or scrypt work, so a
+ * script cannot run unlimited scrypt with random names or burn a known name's
+ * lockout as fast as it likes. Per instance, best effort, like the others: a
+ * client spread over many warm instances gets more; the per-name lockout in
+ * the database is still the real guard.
+ */
+export const loginLimiter = createLimiter(DGL.limits.loginPerIpPerMin, 60_000);
 
 /** A vote result as the HTTP response the clients expect. */
 export function voteResponse(r: VoteResult): NextResponse {

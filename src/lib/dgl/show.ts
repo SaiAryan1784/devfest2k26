@@ -1,7 +1,7 @@
 import { DGL } from "@/data/dgl";
 import { cleanAdminName, hashPasscode, validNewPasscode } from "./auth";
 import { ensureSchema, type Db } from "./db";
-import { LIVE_ACTIONS, allowed, can, effectivePhase, nextStatus } from "./machine";
+import { LIVE_ACTIONS, SETUP_ACTIONS, allowed, can, effectivePhase, nextStatus } from "./machine";
 import { compareScores, publicAverage } from "./score";
 import type {
   Action,
@@ -175,6 +175,17 @@ export async function readAdminState(
     state.audit = r.audit ?? [];
     state.moderation = r.moderation ?? [];
   }
+  if (admin.role === "VOLUNTEER") {
+    // The kiosk needs the phase, the act and `me`. The own score before the
+    // reveal, the raw average, the flag and kiosk counts and the prompt list
+    // are show control data a volunteer device has no use for.
+    state.selfScore = null;
+    state.rawAverage = null;
+    state.flagged = 0;
+    state.excluded = 0;
+    state.kiosk = 0;
+    state.prompts = [];
+  }
   return state;
 }
 
@@ -243,10 +254,24 @@ function normalize(a: Action): Action | null {
         : null;
     case "resetShow":
       return a.confirm === "RESET" ? { type: a.type, confirm: "RESET" } : null;
-    default:
+    case "drawPrompt":
+    case "startPerformance":
+    case "startVoting":
+    case "pauseVoting":
+    case "resumeVoting":
+    case "stopVoting":
+    case "reopenVoting":
+    case "reveal":
+    case "complete":
       return { type: a.type };
+    default:
+      // Anything else (kioskVote, which has its own route, or an unknown type) is not an action here.
+      return null;
   }
 }
+
+/** Every Action type, and nothing else (kioskVote is a permission with its own route, not an action). */
+const ACTION_TYPES = new Set<string>([...LIVE_ACTIONS, ...SETUP_ACTIONS]);
 
 function detailOf(a: Action): Record<string, unknown> {
   if (a.type === "upsertAdmin") {
@@ -457,6 +482,9 @@ export async function applyAction(
     state: state ?? (await readAdminState(db, admin, now)),
   });
 
+  // An unknown type is invalid for everyone, before the role check: `can` knows kioskVote, which is
+  // not an action here and would otherwise reach writeStatement with no SQL for it.
+  if (!ACTION_TYPES.has(action.type)) return refuse("invalid");
   if (!can(admin.role, action.type)) return refuse("forbidden");
   const a = normalize(action);
   if (!a) return refuse("invalid");

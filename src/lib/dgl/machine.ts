@@ -66,7 +66,7 @@ export const LIVE_ACTIONS: readonly LiveType[] = [
   "complete",
 ];
 
-const SETUP_ACTIONS: readonly SetupAction["type"][] = [
+export const SETUP_ACTIONS: readonly SetupAction["type"][] = [
   "upsertContestant",
   "upsertPrompt",
   "upsertAdmin",

@@ -1,16 +1,18 @@
 import { DGL } from "@/data/dgl";
-import type { Connection } from "@/lib/dgl/use-dgl-state";
+import type { Connection } from "@/lib/dgl/connection";
 import { cn } from "@/lib/utils";
 
 const DOT: Record<Connection, string> = {
+  // Neutral, not green: nothing has answered yet.
+  connecting: "bg-muted",
   live: "bg-green-hi",
   reconnecting: "bg-yellow-hi",
   offline: "bg-red-hi",
 };
 
 /**
- * How this screen is talking to the show: live, reconnecting or offline, in
- * words. The dot is the one status dot on a DGL screen and only repeats the
+ * How this screen is talking to the show: connecting, live, reconnecting or
+ * offline, in words. The dot is the one status dot on a DGL screen and only repeats the
  * word; colour is never the only signal. Presentational, so the stage, admin
  * and kiosk can show the same pill. `role="status"` lets a screen reader hear
  * a drop or a recovery without the voter looking away from the stage.

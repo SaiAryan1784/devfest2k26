@@ -42,7 +42,7 @@ const LINE_ICON = {
  * The audience page's live part: one screen per phase, cross-faded. All
  * decisions come from `viewFor` (src/lib/dgl/audience-view.ts, unit tested);
  * this only renders them. Hydration: both hooks start neutral (no state, no
- * vote, connection "live"), so the first client render is the server's IDLE
+ * vote, connection "connecting"), so the first client render is the server's IDLE
  * screen; nothing here reads window, navigator or storage while rendering.
  */
 export function AudienceView() {

@@ -6,7 +6,7 @@ import { outcomeOf, settleKey, SETTLE_MS } from "./admin-view";
 import { estimateOffset, pickOffset } from "./clock";
 import { timeoutSignal } from "./client-http";
 import type { Action, ActionResult, AdminState } from "./types";
-import type { Connection } from "./use-dgl-state";
+import { connectionFor, type Connection } from "./connection";
 
 /** "checking" until /admin/state first answers; 401 means "signedOut". */
 export type Session = "checking" | "signedIn" | "signedOut";
@@ -96,7 +96,9 @@ function stateKey(s: AdminState): string {
  *
  * - Signed in or not is decided by /admin/state: 200 is signed in, 401 is
  *   signed out (the session cookie is httpOnly; this never sees it). Polling
- *   stops on 401 and starts again on `refresh()`.
+ *   stops on 401 and starts again on `refresh()`. A 401 after the console
+ *   was showing the show sets the "session ended" note in place of any
+ *   action note.
  * - One timer chain (setTimeout, never setInterval). It does not run while
  *   the tab is hidden and fires straight away on becoming visible or online.
  *   Network trouble keeps the last good state and shows in `connection`.
@@ -188,7 +190,12 @@ export function useAdmin(): UseAdmin {
           stopped = true;
           failures = 0;
           setFailing(false);
+          // A screen that was showing the show lost its session (expired, deactivated): say so on the
+          // sign in form, and drop any action note ("Updated.") that would be stale there. A first
+          // check, or the check after a deliberate sign out, had no state and shows no note.
+          const wasSignedIn = latest.current !== null;
           adopt(null);
+          setError(wasSignedIn ? a.sessionEnded : null);
           setSession("signedOut");
           return;
         }
@@ -299,6 +306,7 @@ export function useAdmin(): UseAdmin {
     }
   }, [adopt]);
 
-  const connection: Connection = !online ? "offline" : failing ? "reconnecting" : "live";
+  // "connecting" while the session is being checked (first load, after signing in): nothing has answered yet.
+  const connection: Connection = connectionFor(online, failing, session !== "checking");
   return { state, act, error, session, connection, offset, busy, changedAt, settling, refresh, signOut };
 }

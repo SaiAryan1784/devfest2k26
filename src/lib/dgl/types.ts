@@ -81,6 +81,10 @@ export type AdminState = PublicState & {
   me: { name: string; role: Role };
   version: number;
   serverNow: number;
+  /**
+   * For a VOLUNTEER these are stripped: selfScore and rawAverage null,
+   * flagged, excluded and kiosk 0, prompts empty (see readAdminState).
+   */
   selfScore: number | null;
   rawAverage: number | null;
   flagged: number;

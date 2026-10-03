@@ -7,8 +7,10 @@ import {
   config,
   fail,
   forbidden,
+  hashedIp,
   isObject,
   json,
+  loginLimiter,
   readJson,
   setAdminCookie,
   unavailable,
@@ -23,6 +25,8 @@ export async function POST(req: NextRequest) {
   }
   const cfg = config();
   if (!cfg) return unavailable();
+  // Per instance, best effort (see loginLimiter); before any database or scrypt work.
+  if (!loginLimiter.hit(`login:${hashedIp(req, cfg.secret)}`, now)) return json({ error: "too many attempts" }, 429);
   try {
     await ensureSchema(cfg.db);
     const r = await login(cfg.db, body.name, body.passcode, now);

@@ -1,6 +1,17 @@
 import { describe, expect, test } from "vitest";
 import { DGL } from "@/data/dgl";
-import { kioskOutcome, kioskScreen, newAttemptId, nextAttempt, uuidV4, type KioskOutcome } from "@/lib/dgl/kiosk-view";
+import {
+  ATTEMPT_KEY,
+  kioskOutcome,
+  kioskScreen,
+  loadAttempt,
+  newAttemptId,
+  nextAttempt,
+  restoreAttempt,
+  saveAttempt,
+  uuidV4,
+  type KioskOutcome,
+} from "@/lib/dgl/kiosk-view";
 import type { Phase, Role } from "@/lib/dgl/types";
 
 const k = DGL.copy.kiosk;
@@ -192,5 +203,74 @@ describe("attempt ids", () => {
     } finally {
       Object.defineProperty(globalThis, "crypto", { value: real, configurable: true });
     }
+  });
+});
+
+describe("attempt persistence (sessionStorage)", () => {
+  const ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
+  const P = "11111111-1111-4111-8111-111111111111";
+  const OTHER = "22222222-2222-4222-8222-222222222222";
+
+  function fakeStorage() {
+    const data = new Map<string, string>();
+    return {
+      data,
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, v: string) => void data.set(key, v),
+      removeItem: (key: string) => void data.delete(key),
+    } as unknown as Storage & { data: Map<string, string> };
+  }
+  const throwing = {
+    getItem() {
+      throw new Error("denied");
+    },
+    setItem() {
+      throw new Error("denied");
+    },
+    removeItem() {
+      throw new Error("denied");
+    },
+  } as unknown as Storage;
+
+  test("saveAttempt then loadAttempt round trips, and null removes it", () => {
+    const s = fakeStorage();
+    saveAttempt(s, { id: ID, forId: P });
+    expect(JSON.parse(s.data.get(ATTEMPT_KEY) ?? "null")).toEqual({ id: ID, forId: P });
+    expect(loadAttempt(s)).toEqual({ id: ID, forId: P });
+    saveAttempt(s, null);
+    expect(s.data.has(ATTEMPT_KEY)).toBe(false);
+    expect(loadAttempt(s)).toBeNull();
+  });
+
+  test("storage that throws, or no storage at all, never breaks the kiosk", () => {
+    expect(() => saveAttempt(throwing, { id: ID, forId: P })).not.toThrow();
+    expect(() => saveAttempt(throwing, null)).not.toThrow();
+    expect(loadAttempt(throwing)).toBeNull();
+    expect(() => saveAttempt(null, { id: ID, forId: P })).not.toThrow();
+    expect(loadAttempt(null)).toBeNull();
+  });
+
+  test("a corrupt or foreign stored value is ignored", () => {
+    const s = fakeStorage();
+    for (const raw of ["{oops", "null", "7", JSON.stringify({ id: "not-a-uuid", forId: P }), JSON.stringify({ id: ID }), JSON.stringify({ id: ID, forId: 5 })]) {
+      s.data.set(ATTEMPT_KEY, raw);
+      expect(loadAttempt(s)).toBeNull();
+    }
+  });
+
+  test("restoreAttempt gives the stored attempt back only for the performance it was made for", () => {
+    const stored = { id: ID, forId: P };
+    expect(restoreAttempt(stored, P)).toEqual(stored);
+    expect(restoreAttempt(stored, OTHER)).toBeNull();
+    expect(restoreAttempt(stored, null)).toBeNull();
+    expect(restoreAttempt(null, P)).toBeNull();
+  });
+
+  test("a restored attempt is what the next press resends", () => {
+    const s = fakeStorage();
+    saveAttempt(s, { id: ID, forId: P });
+    // A reload: the component's ref is gone, the stored attempt is not.
+    const restored = restoreAttempt(loadAttempt(s), P);
+    expect(nextAttempt(restored?.id ?? null, "press", () => "fresh")).toBe(ID);
   });
 });
