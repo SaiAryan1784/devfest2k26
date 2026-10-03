@@ -84,6 +84,30 @@ export const DGL = {
     stageYou: "You",
     outOf: "/ 10",
 
+    // Volunteer backup voting kiosk (/dgl/kiosk)
+    kiosk: {
+      pageTitle: "DevFest Got Latent kiosk",
+      heading: "Backup voting",
+      checking: "Checking session",
+      unreachable: "Cannot reach the server. Check this device's connection.",
+      tryAgain: "Try again",
+      wrongRole: "This role cannot record kiosk votes. Sign in with a volunteer or operator account.",
+      scoreTitle: "Score to record",
+      pickScore: "Pick a score",
+      record: (n: number) => `Record vote ${n}`,
+      sending: "Sending",
+      loading: "Loading the show",
+      notOpen: "Voting is not open.",
+      pausedBody: "Wait for the host to reopen it.",
+      outcome: {
+        recorded: "Recorded. Hand over for the next vote.",
+        paused: "Voting is paused",
+        closed: "Voting closed, this vote was not counted",
+        rateLimited: "Too fast. Wait a moment.",
+        notSent: "Not sent. Check this device's connection.",
+      },
+    },
+
     // Admin console (/dgl/admin)
     admin: {
       pageTitle: "DevFest Got Latent admin",
