@@ -318,6 +318,17 @@ describe("settleKey: what counts as the big button changing", () => {
     expect(settleKey(inPhase("READY", { me: { name: "Sai", role: "VOLUNTEER" } }))).not.toBe(settleKey(ready));
   });
 
+  test("time running out (PERFORMING to PERFORMED, same act, same button) does not", () => {
+    const performing = inPhase("PERFORMING", { endsAtMs: T + 1000 });
+    const performed = inPhase("PERFORMED", { endsAtMs: T - 1 });
+    expect(settleKey(performed)).toBe(settleKey(performing));
+  });
+
+  test("a real step still does: READY to PERFORMING, PERFORMED to VOTING", () => {
+    expect(settleKey(inPhase("PERFORMING"))).not.toBe(settleKey(inPhase("READY")));
+    expect(settleKey(inPhase("VOTING"))).not.toBe(settleKey(inPhase("PERFORMED")));
+  });
+
   test("votes, version, prompt and own score do not (the button keeps its label)", () => {
     expect(settleKey(inPhase("READY", { votes: 40, version: 99, prompt: null, selfScore: 6 }))).toBe(settleKey(ready));
   });

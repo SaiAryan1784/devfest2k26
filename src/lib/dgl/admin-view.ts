@@ -198,11 +198,14 @@ export function tapAllowed(changedAt: number | null, now: number, settleMs: numb
 }
 
 /**
- * What the big button depends on: phase, act and the button itself (for the
- * signed-in role). When this changes between two adopted states, the console
+ * What the big button depends on: phase (PERFORMED counted as PERFORMING),
+ * act and the button itself (for the signed-in role). When this changes between two adopted states, the console
  * settles. Counts, the version, the prompt and the own score leave it alone.
  */
 export function settleKey(s: AdminState): string {
   const p = primaryAction(s, s.me.role);
-  return [s.phase, s.performanceId ?? "", s.me.role, p ? `${p.labelKey}:${p.action?.type ?? ""}` : ""].join("|");
+  // PERFORMED is PERFORMING with the time up: the server's clock moves it, not
+  // an action (same version, same "Start voting"), so it must not settle.
+  const phase = s.phase === "PERFORMED" ? "PERFORMING" : s.phase;
+  return [phase, s.performanceId ?? "", s.me.role, p ? `${p.labelKey}:${p.action?.type ?? ""}` : ""].join("|");
 }
