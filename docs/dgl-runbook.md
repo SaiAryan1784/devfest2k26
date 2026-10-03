@@ -1,20 +1,22 @@
 # DevFest Got Latent: organiser runbook
 
-Live audience voting for 3 Oct 2026. Pages: `/dgl` (phones), `/dgl/stage` (projector), `/dgl/admin` (show control), `/dgl/kiosk` (volunteer backup voting).
+Live audience voting for DevFest Noida on 10 Oct 2026 (rehearsal on 8 Oct). Pages: `/dgl` (phones), `/dgl/stage` (projector), `/dgl/admin` (show control), `/dgl/kiosk` (volunteer backup voting).
 
 Read the last section first. Nothing on these screens was ever seen in a browser during the build, so the rehearsal on 8 Oct is the first time anyone looks at them.
 
 ## Before doors
 
-1. In Vercel set `DGL_SECRET` (make one with `openssl rand -hex 32`) and `DATABASE_URL`. Redeploy after setting them. Without either, every `/api/dgl` call answers 503 and the pages show "Offline" or "Cannot reach the server".
-2. Check that the Neon region and the Vercel function region are close. A far apart pair adds a round trip to every vote.
-3. Create the admins from a laptop that has the database URL in its local `.env`: `npm run dgl:admin -- --name "<name>" --role SUPER_ADMIN`. The script asks for the passcode with hidden input. Run it again with `--role OPERATOR`, `HOST` or `VOLUNTEER` for the others. Make ONE volunteer account PER kiosk device, because the kiosk rate limit is per admin id and two devices on one account slow each other down. Passcodes need at least 6 characters.
-4. Sign in at `/dgl/admin` as a super admin and open Setup. Add the contestants in running order (lowest sort number first). Add the prompts. "Load the starter prompts" adds a draft list from the code: replace it with the real prompts.
-5. Reset rehearsal data: Setup, Reset show, type `RESET`. It clears every performance and vote and keeps contestants, prompts and admins. Never use it once the real show has started.
-6. Open `/dgl/stage` full screen (F11) on the projector laptop. Leave the mouse alone: the pointer hides after 3 s.
-7. The stage shows the QR for `https://devfest2k26.gdgnoida.com/dgl`. The address comes from `EVENT.url` and is drawn at build time, so even a preview deployment's stage points phones at the production address. For a rehearsal on a preview, open the preview's `/dgl` by hand on the phones.
-8. Put two volunteer phones on mobile data (not the venue Wi-Fi) and sign them in at `/dgl/kiosk`.
-9. Ask the venue for a dedicated SSID for the audience and the admin devices. Hundreds of phones on a shared guest network is the biggest risk on the night.
+1. Developer: in Vercel set `DGL_SECRET` (make one with `openssl rand -hex 32`) and `DATABASE_URL`. Redeploy after setting them. Without either, every `/api/dgl` call answers 503 and the pages show "Offline" or "Cannot reach the server".
+2. Developer: check that the Neon region and the Vercel function region are close. A far apart pair adds a round trip to every vote.
+3. Developer: create the first admins with `npm run dgl:admin -- --name "<name>" --role SUPER_ADMIN`. The script writes to the database named by `DATABASE_URL` in your local `.env`. Confirm it is the same Neon database Vercel uses before relying on it, otherwise nobody can sign in on the night. Running it again with an existing name resets that admin's passcode and role and reactivates the account. That is the recovery path for a forgotten passcode, or for an admin locked out once the 15 minute lockout window has passed. The script asks for the passcode with hidden input. Run it again for each person with `--role OPERATOR`, `HOST` or `VOLUNTEER` for the others. Make ONE volunteer account PER kiosk device, because the kiosk rate limit is per admin id and two devices on one account slow each other down. Passcodes need at least 6 characters.
+   Vercel shares environment variables across environments by default. If previews use the production database, the load check's votes and Reset show act on the production show. Give previews a separate Neon branch or database, or run the load check only before any real data exists.
+4. Organiser: sign in at `/dgl/admin` as a super admin and open Setup. Add the contestants in running order (lowest sort number first). Add the prompts. "Load the starter prompts" adds a draft list from the code: replace it with the real prompts.
+5. Organiser: reset rehearsal data: Setup, Reset show, type `RESET`. It clears every performance and vote and keeps contestants, prompts and admins. Never use it once the real show has started.
+6. Organiser: open `/dgl/stage` full screen (F11) on the projector laptop. Leave the mouse alone: the pointer hides after 3 s.
+7. Organiser: the stage shows the QR for `https://devfest2k26.gdgnoida.com/dgl`. The address comes from `EVENT.url` and is drawn at build time, so even a preview deployment's stage points phones at the production address. For a rehearsal on a preview, open the preview's `/dgl` by hand on the phones.
+8. Organiser: put two volunteer phones on mobile data (not the venue Wi-Fi) and sign them in at `/dgl/kiosk`.
+9. Organiser: ask the venue for a dedicated SSID for the audience and the admin devices. Hundreds of phones on a shared guest network is the biggest risk on the night.
+10. Developer: on the preview, run `curl -sI https://<preview>/api/dgl/state` twice within a second. The second response must show `x-vercel-cache: HIT`. The one second CDN cache is what the design relies on: without it every phone polling reaches the database. If Vercel Deployment Protection is on, the preview answers 401 to curl and to the load script: turn protection off for that preview, or use Vercel's protection bypass token as its documentation describes.
 
 ## Roles
 
@@ -55,7 +57,11 @@ What the audience sees on a phone: before the first act "DevFest Got Latent star
 
 ## Moderation
 
-A vote is flagged when one connection casts 25 or more votes in 10 s. Venue Wi-Fi often shares one address, so a few flags are normal. Flagged votes still count. Only use Setup, Moderation, Exclude flagged votes if you see real abuse. Include flagged votes puts them back.
+A vote is flagged when it is the 26th or later vote from one IP address inside a rolling 10 s window. On shared venue Wi-Fi hundreds of phones share one public address, so in a busy room MOST votes will be flagged. That is expected and does not mean abuse. Flagged votes still count.
+
+Exclude flagged votes (Setup, Moderation, super admin only) removes real votes from the count and the average. Use it only when you have evidence of real abuse, for example one person voting many times with many cookies. Never use it because the flagged number looks large. Include flagged votes puts them back.
+
+To judge abuse, look at the vote count against the room size (a count well above the number of people present), and at a sudden jump of votes in a second or two that the room cannot explain. The flagged number alone tells you nothing on shared Wi-Fi.
 
 ## Known limits and decisions
 
@@ -81,7 +87,7 @@ If the offline shell misbehaves in production:
 
 ## Rehearsal checklist for 8 Oct
 
-Use real phones, the projector laptop and, if possible, the venue network. Run three acts end to end, including one wrong contestant fix and one admin handover. Then Reset show.
+Organiser (with the developer): use real phones, the projector laptop and, if possible, the venue network. Run three acts end to end, including one wrong contestant fix and one admin handover. Then Reset show.
 
 Not verified in any browser: every screen. The layout at 360 and 390 px wide, the 360 x 640 fit of "Lock in" (about 4 px of slack, worked out not measured), the stage at the projector's resolution (the column widths are derived), focus order and keyboard use, screen reader announcements, contrast, reduced motion, hydration warnings in the console, the service worker and offline behaviour, and the timing numbers on a slow connection. Interactive within 5 s on Slow 4G was not measured. Transfer size is about 395 KB with gzip and about 361 KB with brotli for `/dgl`, a little over the 350 KB plan ceiling (SPEC section 38). Watch the console and report anything odd.
 
@@ -153,9 +159,9 @@ Not verified in any browser: every screen. The layout at 360 and 390 px wide, th
 
 ### Load check (300 voters)
 
-Run this against a PREVIEW deployment, never production, with the show already in Voting:
+Developer: run this against a PREVIEW deployment, never production, with the show already in Voting. The script refuses the production host (`devfest2k26.gdgnoida.com`, with or without `www.`) before it makes any request, and also refuses non https addresses other than localhost. It needs a separate preview database or a database with no real data (see Before doors).
 
-1. In the admin console select a contestant, start the performance and start voting.
+1. Organiser: in the admin console select a contestant, start the performance and start voting.
 2. Run `node scripts/dgl-load-check.mjs --base https://<preview-url> --voters 300 --confirm`.
 3. Expect about 300 recorded (200), no 429 and no 503, p95 under 1.5 s, and the vote count after equal to before plus the recorded count.
 4. The admin console will show the votes as flagged, because they all come from one address. That is expected. 429 answers are not expected, since each fake voter votes once.

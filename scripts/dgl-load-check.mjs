@@ -16,6 +16,9 @@
 import { randomUUID } from "node:crypto";
 
 const BATCH = 50;
+// The live site's host: this is EVENT.url's host in src/data/event.ts, keep in sync. The script
+// never runs against it, even by mistake during the real show.
+const PRODUCTION_HOSTS = ["devfest2k26.gdgnoida.com"];
 
 function usage(msg) {
   if (msg) console.error(msg + "\n");
@@ -45,6 +48,8 @@ const local = ["localhost", "127.0.0.1", "[::1]"].includes(base.hostname);
 if (base.protocol !== "https:" && !local) usage("--base must be https unless the host is localhost.");
 const voters = Number(opt("voters") ?? 300);
 if (!Number.isInteger(voters) || voters < 1 || voters > 2000) usage("--voters must be a whole number from 1 to 2000.");
+const host = base.hostname.toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+if (PRODUCTION_HOSTS.includes(host)) usage("Refusing to run: --base is the production site. Use a preview deployment.");
 const origin = base.origin;
 
 async function getState() {
