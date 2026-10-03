@@ -6,15 +6,24 @@ export interface Db {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
 }
 
-/** Neon over HTTP, or null when DATABASE_URL is not set. */
+let cached: { url: string; db: Db } | null = null;
+
+/**
+ * Neon over HTTP, or null when DATABASE_URL is not set. The instance is cached
+ * at module scope per URL, so handlers can call this on every request and
+ * `ensureSchema`'s per-Db memo still hits instead of re-running the DDL.
+ */
 export function neonDb(): Db | null {
   const url = process.env.DATABASE_URL;
   if (!url) return null;
+  if (cached?.url === url) return cached.db;
   const sql = neon(url);
-  return {
+  const db: Db = {
     query: async <T = Record<string, unknown>>(text: string, params?: unknown[]) =>
       (await sql.query(text, params)) as unknown as T[],
   };
+  cached = { url, db };
+  return db;
 }
 
 const ready = new WeakMap<Db, Promise<void>>();
