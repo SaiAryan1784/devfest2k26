@@ -31,16 +31,16 @@ export const TICKETS_ON_SALE = true;
 
 /** Shown on both buttons, and beneath them, while `TICKETS_ON_SALE` is false. */
 export const TICKETS_PAUSED = {
-  cta: "Back soon",
-  note: "We're refuelling the rocket. Check back shortly.",
+  cta: "Opens 3 Oct, 9 PM",
+  note: "We're refuelling the rocket. Check back at 9 PM.",
 };
 
 /** The ticket sale: counted down to until it opens, then shown as live. */
 export const TICKET_SALE = {
   label: "Ticket sale",
-  /** 1 October 2026, 9 PM IST. Moved back from 27 Sep 2026. */
-  opensAt: "2026-10-01T21:00:00+05:30",
-  opensLabel: "1 October 2026, 9 PM IST",
+  /** 3 October 2026, 9 PM IST. Moved from 27 Sep, then 1 Oct. */
+  opensAt: "2026-10-03T21:00:00+05:30",
+  opensLabel: "3 October 2026, 9 PM IST",
   /** The "remind me" calendar invite, and the pop-up once the sale is live. */
   reminder: {
     title: "DevFest Noida 2026: ticket sale opens",
