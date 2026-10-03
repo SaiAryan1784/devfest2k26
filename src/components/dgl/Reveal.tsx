@@ -95,7 +95,7 @@ export function Reveal(props: Props) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={at(audience === null ? SELF_LAND_S : VERDICT_AT_S, VERDICT_S)}
-        className={cn("display text-[clamp(2rem,4vw,4.5rem)] font-semibold leading-[1.05]", match ? "text-green-hi" : audience === null ? "text-muted" : "text-text")}
+        className={cn("display max-w-[16ch] text-balance text-[clamp(2rem,4vw,4.5rem)] font-semibold leading-[1.05]", match ? "text-green-hi" : audience === null ? "text-muted" : "text-text")}
       >
         {lines.verdict}
       </m.p>

@@ -44,7 +44,7 @@ export function StageView({ qrSvg, voteUrl, lockup }: Props) {
   const actKey = view.kind === "idle" || view.kind === "completed" ? view.kind : `act:${view.id}`;
 
   return (
-    <div ref={root} className="relative flex min-h-[100dvh] flex-col px-6 py-6 sm:px-10 lg:px-16 lg:py-12">
+    <div ref={root} className="relative flex min-h-[100dvh] flex-col px-6 py-6 sm:px-10 lg:px-[3vw] lg:py-12">
       <IdleCursor target={root} />
       <header className="flex items-center justify-between gap-6">
         <div className="flex items-center gap-5">
@@ -54,7 +54,15 @@ export function StageView({ qrSvg, voteUrl, lockup }: Props) {
         <ConnectionPill connection={connection} />
       </header>
 
-      <div className="grid flex-1 grid-cols-1 content-center items-center gap-10 py-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-16">
+      {/*
+       * At lg the right track is fit-content(52%): it sizes to the timer, QR or
+       * reveal, but never past 52% of the row, so nothing on the right can
+       * squeeze the act. The gutters are in vw on purpose: the timer is
+       * 20vw type, 0.48 W wide (four 0.6 em mono glyphs), and with 3vw
+       * padding and a 4vw gap it leaves the left column 0.42 W, 47% of the
+       * tracks, at every width up to 1440 (where the timer stops growing).
+       */}
+      <div className="grid flex-1 grid-cols-1 content-center items-center gap-10 py-10 lg:grid-cols-[minmax(0,1fr)_fit-content(52%)] lg:gap-[4vw]">
         <AnimatePresence initial={false} mode="wait">
           <m.div key={actKey} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="min-w-0">
             <Left view={view} />
