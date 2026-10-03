@@ -18,7 +18,7 @@ import {
   unavailable,
   voteResponse,
 } from "@/lib/dgl/route";
-import { castVote } from "@/lib/dgl/votes";
+import { castKioskVote } from "@/lib/dgl/votes";
 
 /**
  * A vote typed in by a signed-in volunteer or organiser on the venue kiosk.
@@ -39,27 +39,17 @@ export async function POST(req: NextRequest) {
     if (!can(admin.role, "kioskVote")) return forbidden();
     if (!kioskLimiter.hit(admin.id, now)) return json({ status: "rate_limited" }, 429);
 
-    const result = await castVote(cfg.db, {
+    // One statement stores the vote and its audit row together (see castKioskVote).
+    const result = await castKioskVote(cfg.db, {
       performanceId: body.performanceId,
       voterId: `kiosk-${crypto.randomUUID()}`,
       score: body.score,
       ipHash: hashedIp(req, cfg.secret),
       source: "kiosk",
       now,
+      adminId: admin.id,
+      adminName: admin.name,
     });
-    if (result.status === "recorded") {
-      // The vote is already stored, so a failed audit write must not turn a
-      // recorded vote into a 503 (the device would retry and double count).
-      try {
-        await cfg.db.query(
-          `INSERT INTO dgl_audit (at, admin_id, admin_name, action, performance_id, detail)
-           VALUES (to_timestamp($1::float8 / 1000.0), $2::uuid, $3::text, 'kioskVote', $4::uuid, '{}'::jsonb)`,
-          [now, admin.id, admin.name, body.performanceId],
-        );
-      } catch (err) {
-        console.error("DGL kiosk audit failed:", err instanceof Error ? err.name : "unknown");
-      }
-    }
     return voteResponse(result);
   } catch (err) {
     return fail(err);

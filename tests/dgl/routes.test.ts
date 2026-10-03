@@ -424,6 +424,7 @@ describe("kiosk vote route", () => {
     expect((await kiosk(pid, 6, { cookie: host.cookie })).status).toBe(403);
     expect((await kiosk(pid, 6)).status).toBe(401);
     expect(await db.query("SELECT 1 FROM dgl_votes")).toHaveLength(0);
+    expect(await db.query("SELECT 1 FROM dgl_audit WHERE action = 'kioskVote'")).toHaveLength(0);
   });
 
   test("200 for VOLUNTEER, stores source kiosk and a kiosk- voter, audits without the score", async () => {
@@ -455,6 +456,25 @@ describe("kiosk vote route", () => {
     expect(again.status).toBe(429);
     expect(await again.json()).toEqual({ status: "rate_limited" });
     expect(await db.query("SELECT 1 FROM dgl_votes")).toHaveLength(1);
+    expect(await db.query("SELECT 1 FROM dgl_audit WHERE action = 'kioskVote'")).toHaveLength(1);
+  });
+
+  test("3 kiosk votes (one per gap) make 3 kiosk rows, 3 audit rows and a kiosk count of 3", async () => {
+    const pid = await toVoting();
+    const v = await addAdmin("VOLUNTEER");
+    const now = vi.spyOn(Date, "now");
+    const t0 = Date.now();
+    for (let i = 0; i < 3; i++) {
+      now.mockReturnValue(t0 + i * (DGL.limits.kioskGapMs + 100));
+      expect((await kiosk(pid, 5 + i, { cookie: v.cookie })).status).toBe(200);
+    }
+    now.mockRestore();
+    const rows = await db.query<{ source: string }>("SELECT source FROM dgl_votes");
+    expect(rows.map((r) => r.source)).toEqual(["kiosk", "kiosk", "kiosk"]);
+    expect(await db.query("SELECT 1 FROM dgl_audit WHERE action = 'kioskVote'")).toHaveLength(3);
+    const op = await addAdmin("OPERATOR");
+    const state = await adminStateGET(req("/api/dgl/admin/state", "GET", { cookie: op.cookie }));
+    expect((await state.json()).kiosk).toBe(3);
   });
 
   test("400 on a bad score and 403 on a bad Origin", async () => {
