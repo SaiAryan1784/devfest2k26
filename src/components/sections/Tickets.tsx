@@ -96,7 +96,7 @@ export function Tickets() {
             page is pushing, rather than two identical columns. */}
         <div className="grid gap-4 lg:grid-cols-[1.12fr_1fr]">
           {TICKETS.map((ticket, i) => (
-            <TicketCard key={ticket.id} ticket={ticket} index={i} reduce={!!reduce} />
+            <TicketCard key={ticket.id} ticket={ticket} index={i} reduce={!!reduce} open={open} />
           ))}
         </div>
 
@@ -123,7 +123,7 @@ export function Tickets() {
   );
 }
 
-function TicketCard({ ticket, index, reduce }: { ticket: Ticket; index: number; reduce: boolean }) {
+function TicketCard({ ticket, index, reduce, open }: { ticket: Ticket; index: number; reduce: boolean; open: boolean }) {
   const gold = ticket.featured;
 
   return (
@@ -178,7 +178,7 @@ function TicketCard({ ticket, index, reduce }: { ticket: Ticket; index: number; 
       </ul>
 
       <div className="mt-auto pt-9">
-        {TICKETS_ON_SALE ? (
+        {open ? (
           <Button href={ticket.cta.href} variant={gold ? "primary" : "ghost"} className="w-full">
             {ticket.cta.label}
           </Button>
