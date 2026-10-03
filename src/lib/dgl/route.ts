@@ -68,6 +68,21 @@ export function parseVoteBody(body: unknown): { performanceId: string; score: nu
   return { performanceId, score };
 }
 
+/**
+ * A kiosk vote body: the vote body plus `attemptId`, a client-made UUID that
+ * stays the same across resends of one press. The server derives the voter id
+ * from it, so a resend after a lost answer hits the (performance, voter)
+ * unique key and comes back as a duplicate instead of counting twice. Lower
+ * cased, so the same UUID in either case is one attempt.
+ */
+export function parseKioskBody(body: unknown): { performanceId: string; score: number; attemptId: string } | null {
+  const vote = parseVoteBody(body);
+  if (!vote) return null;
+  const { attemptId } = body as { attemptId?: unknown };
+  if (typeof attemptId !== "string" || !UUID.test(attemptId)) return null;
+  return { ...vote, attemptId: attemptId.toLowerCase() };
+}
+
 const secure = () => process.env.NODE_ENV === "production";
 
 /** The voter id from the cookie when it is a UUID, else a fresh one (and `minted`). */

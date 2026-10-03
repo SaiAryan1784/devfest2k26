@@ -12,7 +12,7 @@ import {
   hashedIp,
   json,
   kioskLimiter,
-  parseVoteBody,
+  parseKioskBody,
   readJson,
   unauthorized,
   unavailable,
@@ -22,13 +22,14 @@ import { castKioskVote } from "@/lib/dgl/votes";
 
 /**
  * A vote typed in by a signed-in volunteer or organiser on the venue kiosk.
- * Each one is a fresh anonymous voter, so a kiosk can take many votes; the
+ * Each press is one anonymous voter (`kiosk-<attemptId>`), so a kiosk can take
+ * many votes while a resend of the same press cannot count twice; the
  * per-admin gap and the audit row are the brakes.
  */
 export async function POST(req: NextRequest) {
   const now = Date.now();
   if (!sameOrigin(req)) return forbidden();
-  const body = parseVoteBody(await readJson(req));
+  const body = parseKioskBody(await readJson(req));
   if (!body) return badRequest();
   const cfg = config();
   if (!cfg) return unavailable();
@@ -42,7 +43,8 @@ export async function POST(req: NextRequest) {
     // One statement stores the vote and its audit row together (see castKioskVote).
     const result = await castKioskVote(cfg.db, {
       performanceId: body.performanceId,
-      voterId: `kiosk-${crypto.randomUUID()}`,
+      // The client's attempt id, so a resend of the same press is a duplicate, not a second vote.
+      voterId: `kiosk-${body.attemptId}`,
       score: body.score,
       ipHash: hashedIp(req, cfg.secret),
       source: "kiosk",

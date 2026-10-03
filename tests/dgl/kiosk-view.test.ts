@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { DGL } from "@/data/dgl";
-import { kioskOutcome, kioskScreen, type KioskOutcome } from "@/lib/dgl/kiosk-view";
+import { kioskOutcome, kioskScreen, newAttemptId, nextAttempt, uuidV4, type KioskOutcome } from "@/lib/dgl/kiosk-view";
 import type { Phase, Role } from "@/lib/dgl/types";
 
 const k = DGL.copy.kiosk;
@@ -47,26 +47,26 @@ describe("kioskScreen", () => {
 });
 
 describe("kioskOutcome", () => {
-  const recorded: KioskOutcome = { kind: "recorded", text: k.outcome.recorded, tone: "success", keepSelection: false, lock: true };
+  const recorded: KioskOutcome = { kind: "recorded", text: k.outcome.recorded, tone: "success", keepSelection: false, lock: true, score: 7 };
 
   test("200 recorded is the only success, and it locks and clears", () => {
-    expect(kioskOutcome(200, { status: "recorded", score: 7 })).toEqual(recorded);
+    expect(kioskOutcome(200, { status: "recorded", score: 7 }, 7)).toEqual(recorded);
   });
 
   test("409 duplicate is treated as recorded", () => {
-    expect(kioskOutcome(409, { status: "duplicate", score: 7 })).toEqual(recorded);
+    expect(kioskOutcome(409, { status: "duplicate", score: 7 }, 7)).toEqual(recorded);
   });
 
   test("409 paused keeps the selection, does not lock", () => {
-    expect(kioskOutcome(409, { status: "paused" })).toEqual({ kind: "paused", text: k.outcome.paused, tone: "warn", keepSelection: true, lock: false });
+    expect(kioskOutcome(409, { status: "paused" })).toEqual({ kind: "paused", text: k.outcome.paused, tone: "warn", keepSelection: true, lock: false, score: null });
   });
 
   test("409 closed clears the selection and says the vote was not counted", () => {
-    expect(kioskOutcome(409, { status: "closed" })).toEqual({ kind: "closed", text: k.outcome.closed, tone: "error", keepSelection: false, lock: false });
+    expect(kioskOutcome(409, { status: "closed" })).toEqual({ kind: "closed", text: k.outcome.closed, tone: "error", keepSelection: false, lock: false, score: null });
   });
 
   test("429 keeps the selection", () => {
-    expect(kioskOutcome(429, { status: "rate_limited" })).toEqual({ kind: "rate_limited", text: k.outcome.rateLimited, tone: "warn", keepSelection: true, lock: false });
+    expect(kioskOutcome(429, { status: "rate_limited" })).toEqual({ kind: "rate_limited", text: k.outcome.rateLimited, tone: "warn", keepSelection: true, lock: false, score: null });
   });
 
   test("401 sends the volunteer to sign in, 403 to the role message", () => {
@@ -74,9 +74,31 @@ describe("kioskOutcome", () => {
     expect(kioskOutcome(403, { error: "forbidden" }).kind).toBe("forbidden");
   });
 
+  test("the score shown is the server's: a duplicate with another score than the pick says so", () => {
+    const o = kioskOutcome(409, { status: "duplicate", score: 7 }, 3);
+    expect(o).toMatchObject({ kind: "recorded", score: 7, lock: true, keepSelection: false });
+    expect(o.text).toBe(k.outcome.recordedAs(7));
+    expect(o.text).toContain("7");
+    expect(o.text).not.toContain("3");
+  });
+
+  test("a recorded answer carries the server score, even if it differs from the pick", () => {
+    expect(kioskOutcome(200, { status: "recorded", score: 8 }, 6)).toMatchObject({ score: 8, text: k.outcome.recordedAs(8) });
+  });
+
+  test("a recorded answer without a usable score still records, with no score to show", () => {
+    expect(kioskOutcome(200, { status: "recorded" }, 6)).toMatchObject({ kind: "recorded", score: null, text: k.outcome.recorded });
+    expect(kioskOutcome(200, { status: "recorded", score: 99 }, 6)).toMatchObject({ kind: "recorded", score: null });
+  });
+
+  test("not sent tells the volunteer a repeat press is safe", () => {
+    expect(k.outcome.notSent).toMatch(/press again/i);
+    expect(k.outcome.notSent).toMatch(/not count twice/i);
+  });
+
   test("honesty: a network error or timeout (null status) is never recorded", () => {
     const o = kioskOutcome(null, null);
-    expect(o).toEqual({ kind: "not_sent", text: k.outcome.notSent, tone: "error", keepSelection: true, lock: false });
+    expect(o).toEqual({ kind: "not_sent", text: k.outcome.notSent, tone: "error", keepSelection: true, lock: false, score: null });
     expect(o.text).not.toMatch(/recorded/i);
   });
 
@@ -108,5 +130,67 @@ describe("kioskOutcome", () => {
 
   test("copy has no dashes", () => {
     expect(JSON.stringify(k)).not.toMatch(/[\u2014\u2013]/);
+  });
+});
+
+describe("nextAttempt", () => {
+  let n = 0;
+  const fresh = () => `id-${++n}`;
+
+  test("the first press creates an id, a later press of the same attempt keeps it", () => {
+    const first = nextAttempt(null, "press", fresh);
+    expect(first).toMatch(/^id-/);
+    expect(nextAttempt(first, "press", fresh)).toBe(first);
+  });
+
+  test.each(["not_sent", "rate_limited", "paused", "signed_out", "forbidden"] as const)("%s keeps the id, so a repeat press resends it", (kind) => {
+    const id = nextAttempt(null, "press", fresh);
+    const after = nextAttempt(id, kind, fresh);
+    expect(after).toBe(id);
+    expect(nextAttempt(after, "press", fresh)).toBe(id);
+  });
+
+  test.each(["recorded", "closed", "sign_out"] as const)("%s drops the id, so the next press is a new vote", (event) => {
+    const id = nextAttempt(null, "press", fresh);
+    const after = nextAttempt(id, event, fresh);
+    expect(after).toBeNull();
+    const next = nextAttempt(after, "press", fresh);
+    expect(next).not.toBe(id);
+  });
+
+  test("duplicate answers are definitive too (they come back as recorded)", () => {
+    const id = nextAttempt(null, "press", fresh);
+    expect(nextAttempt(id, kioskOutcome(409, { status: "duplicate", score: 5 }, 5).kind, fresh)).toBeNull();
+  });
+
+  test("a network error and an unreadable 200 body keep the id", () => {
+    const id = nextAttempt(null, "press", fresh);
+    expect(nextAttempt(id, kioskOutcome(null, null).kind, fresh)).toBe(id);
+    expect(nextAttempt(id, kioskOutcome(200, null).kind, fresh)).toBe(id);
+  });
+});
+
+describe("attempt ids", () => {
+  const V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  test("uuidV4 builds a v4 UUID from any 16 bytes", () => {
+    expect(uuidV4(new Uint8Array(16))).toBe("00000000-0000-4000-8000-000000000000");
+    expect(uuidV4(new Uint8Array(16).fill(255))).toBe("ffffffff-ffff-4fff-bfff-ffffffffffff");
+    expect(uuidV4(Uint8Array.from({ length: 16 }, (_, i) => i * 17))).toMatch(V4);
+  });
+
+  test("newAttemptId is a v4 UUID, with randomUUID or with the getRandomValues fallback", () => {
+    expect(newAttemptId()).toMatch(V4);
+    const real = globalThis.crypto;
+    const stub = { getRandomValues: real.getRandomValues.bind(real) } as unknown as Crypto;
+    Object.defineProperty(globalThis, "crypto", { value: stub, configurable: true });
+    try {
+      const a = newAttemptId();
+      const b = newAttemptId();
+      expect(a).toMatch(V4);
+      expect(a).not.toBe(b);
+    } finally {
+      Object.defineProperty(globalThis, "crypto", { value: real, configurable: true });
+    }
   });
 });

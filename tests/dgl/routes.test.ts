@@ -415,8 +415,12 @@ describe("action route", () => {
 });
 
 describe("kiosk vote route", () => {
-  const kiosk = (pid: string, score: unknown, o: Init = {}) =>
-    kioskPOST(req("/api/dgl/kiosk/vote", "POST", { body: { performanceId: pid, score }, ip: ip(), ...o }));
+  const kiosk = (pid: string, score: unknown, o: Init & { attemptId?: unknown } = {}) => {
+    const { attemptId = crypto.randomUUID(), ...init } = o;
+    return kioskPOST(req("/api/dgl/kiosk/vote", "POST", { body: { performanceId: pid, score, attemptId }, ip: ip(), ...init }));
+  };
+  const kioskRows = () => db.query<{ voter_id: string; score: number }>("SELECT voter_id, score FROM dgl_votes");
+  const kioskAudit = () => db.query("SELECT 1 FROM dgl_audit WHERE action = 'kioskVote'");
 
   test("403 for HOST, 401 without session", async () => {
     const pid = await toVoting();
@@ -475,6 +479,82 @@ describe("kiosk vote route", () => {
     const op = await addAdmin("OPERATOR");
     const state = await adminStateGET(req("/api/dgl/admin/state", "GET", { cookie: op.cookie }));
     expect((await state.json()).kiosk).toBe(3);
+  });
+
+  describe("attempt id", () => {
+    test("the same attemptId twice is recorded then duplicate with the FIRST score, one vote, one audit row", async () => {
+      const pid = await toVoting();
+      const v = await addAdmin("VOLUNTEER");
+      const attemptId = crypto.randomUUID();
+      const now = vi.spyOn(Date, "now");
+      const t0 = Date.now();
+      now.mockReturnValue(t0);
+      const first = await kiosk(pid, 7, { cookie: v.cookie, attemptId });
+      expect(first.status).toBe(200);
+      expect(await first.json()).toEqual({ status: "recorded", score: 7 });
+      now.mockReturnValue(t0 + DGL.limits.kioskGapMs + 100);
+      const again = await kiosk(pid, 3, { cookie: v.cookie, attemptId });
+      now.mockRestore();
+      expect(again.status).toBe(409);
+      expect(await again.json()).toEqual({ status: "duplicate", score: 7 });
+      expect(await kioskRows()).toEqual([{ voter_id: `kiosk-${attemptId}`, score: 7 }]);
+      expect(await kioskAudit()).toHaveLength(1);
+    });
+
+    test("an upper case attemptId is the same attempt as its lower case form", async () => {
+      const pid = await toVoting();
+      const v = await addAdmin("VOLUNTEER");
+      const attemptId = crypto.randomUUID();
+      const now = vi.spyOn(Date, "now");
+      const t0 = Date.now();
+      now.mockReturnValue(t0);
+      expect((await kiosk(pid, 7, { cookie: v.cookie, attemptId: attemptId.toUpperCase() })).status).toBe(200);
+      now.mockReturnValue(t0 + DGL.limits.kioskGapMs + 100);
+      expect((await kiosk(pid, 7, { cookie: v.cookie, attemptId })).status).toBe(409);
+      now.mockRestore();
+      expect(await kioskRows()).toHaveLength(1);
+    });
+
+    test("two different attemptIds make two votes", async () => {
+      const pid = await toVoting();
+      const v = await addAdmin("VOLUNTEER");
+      const now = vi.spyOn(Date, "now");
+      const t0 = Date.now();
+      now.mockReturnValue(t0);
+      expect((await kiosk(pid, 7, { cookie: v.cookie })).status).toBe(200);
+      now.mockReturnValue(t0 + DGL.limits.kioskGapMs + 100);
+      expect((await kiosk(pid, 7, { cookie: v.cookie })).status).toBe(200);
+      now.mockRestore();
+      expect(await kioskRows()).toHaveLength(2);
+      expect(await kioskAudit()).toHaveLength(2);
+    });
+
+    test.each([undefined, "", "not-a-uuid", 7, null, "11111111-1111-4111-8111-11111111111"])(
+      "a missing or malformed attemptId (%s) is 400 and writes nothing",
+      async (attemptId) => {
+        const pid = await toVoting();
+        const v = await addAdmin("VOLUNTEER");
+        const res = await kioskPOST(
+          req("/api/dgl/kiosk/vote", "POST", {
+            body: attemptId === undefined ? { performanceId: pid, score: 6 } : { performanceId: pid, score: 6, attemptId },
+            cookie: v.cookie,
+            ip: ip(),
+          }),
+        );
+        expect(res.status).toBe(400);
+        expect(await kioskRows()).toHaveLength(0);
+        expect(await kioskAudit()).toHaveLength(0);
+      },
+    );
+
+    test("a bad attemptId is refused before any database work", async () => {
+      const pid = await toVoting();
+      const v = await addAdmin("VOLUNTEER");
+      const spy = vi.spyOn(db, "query");
+      const res = await kioskPOST(req("/api/dgl/kiosk/vote", "POST", { body: { performanceId: pid, score: 6, attemptId: "x" }, cookie: v.cookie, ip: ip() }));
+      expect(res.status).toBe(400);
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   test("400 on a bad score and 403 on a bad Origin", async () => {

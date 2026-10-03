@@ -154,6 +154,13 @@ describe("castKioskVote", () => {
     expect(await audit()).toHaveLength(1);
   });
 
+  test("a replay with the same voter id is recorded then duplicate, with the first score and no second audit row", async () => {
+    expect(await kiosk({ voterId: "kiosk-attempt", score: 7 })).toEqual({ status: "recorded", score: 7 });
+    expect(await kiosk({ voterId: "kiosk-attempt", score: 3 })).toEqual({ status: "duplicate", score: 7 });
+    expect(await count()).toBe(1);
+    expect(await audit()).toHaveLength(1);
+  });
+
   test("a closed vote creates no audit row", async () => {
     await setStatus("VOTING_CLOSED");
     expect((await kiosk()).status).toBe("closed");

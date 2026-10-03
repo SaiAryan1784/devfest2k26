@@ -101,10 +101,13 @@ export const DGL = {
       pausedBody: "Wait for the host to reopen it.",
       outcome: {
         recorded: "Recorded. Hand over for the next vote.",
+        /** The server already had this press with another score (an earlier try went through): its score stands. */
+        recordedAs: (n: number) => `Recorded as ${n}, from the earlier press. Hand over for the next vote.`,
+        confirmedScore: (n: number) => `Score on record: ${n}`,
         paused: "Voting is paused",
         closed: "Voting closed, this vote was not counted",
         rateLimited: "Too fast. Wait a moment.",
-        notSent: "Not sent. Check this device's connection.",
+        notSent: "Not sent. Check this device's connection, then press again. It will not count twice.",
       },
     },
 

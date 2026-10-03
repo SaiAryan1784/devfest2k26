@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { CheckCircle, Info, SignOut, WarningCircle } from "@phosphor-icons/react";
 import { DGL } from "@/data/dgl";
 import { timeoutSignal } from "@/lib/dgl/client-http";
-import { kioskOutcome, kioskScreen, type KioskOutcome, type KioskSession } from "@/lib/dgl/kiosk-view";
+import { kioskOutcome, kioskScreen, newAttemptId, nextAttempt, type KioskOutcome, type KioskSession } from "@/lib/dgl/kiosk-view";
 import type { Role } from "@/lib/dgl/types";
 import { useDglState } from "@/lib/dgl/use-dgl-state";
 import { cn } from "@/lib/utils";
@@ -199,7 +199,8 @@ const TONE: Record<KioskOutcome["tone"], string> = {
  * one request, and the screen says "Recorded" only when the server answered
  * recorded (see kioskOutcome). The pick belongs to its performance; after a
  * recorded vote the grid locks for DGL.limits.kioskGapMs (matching the
- * server's per-admin gap) and then clears.
+ * server's per-admin gap) and then clears. Every press carries an attempt id
+ * that survives a failed or unanswered try, so pressing again is safe.
  */
 function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskProps) {
   const { state, connection } = useDglState();
@@ -213,6 +214,11 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
   const [locked, setLocked] = useState(false);
   // Set synchronously, before any await, so a second press in the same tick cannot send twice.
   const inFlight = useRef(false);
+  // The id of the press that is not settled yet, per act. Kept across every outcome that leaves
+  // the vote's fate unknown or retryable, so a repeat press resends it and the server answers
+  // "duplicate" instead of counting twice (see nextAttempt). It lives and dies with this
+  // component, which signing out or a 401 unmounts.
+  const attempt = useRef<{ id: string; forId: string } | null>(null);
   const lockedRef = useRef(false);
   const lockTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mounted = useRef(false);
@@ -242,13 +248,17 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
     setBusy(true);
     setOutcome(null);
     const forId = performanceId;
+    const sent = picked;
+    const prior = attempt.current?.forId === forId ? attempt.current.id : null;
+    const attemptId = nextAttempt(prior, "press", newAttemptId) as string;
+    attempt.current = { id: attemptId, forId };
     let status: number | null = null;
     let body: unknown = null;
     try {
       const res = await fetch("/api/dgl/kiosk/vote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ performanceId: forId, score: picked }),
+        body: JSON.stringify({ performanceId: forId, score: sent, attemptId }),
         cache: "no-store",
         signal: timeoutSignal(VOTE_TIMEOUT_MS),
       });
@@ -261,11 +271,14 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
     }
     if (!mounted.current) return;
     setBusy(false);
-    const out = kioskOutcome(status, body);
+    const out = kioskOutcome(status, body, sent);
+    if (nextAttempt(attemptId, out.kind, newAttemptId) === null) attempt.current = null;
     if (out.kind === "signed_out") return onSessionEnded();
     if (out.kind === "forbidden") return onDenied();
     setOutcome({ id: forId, o: out });
     if (out.lock) {
+      // Show what the server has, not what was pressed, if an earlier try of this press went through.
+      if (out.score !== null) setPick({ id: forId, n: out.score });
       lockedRef.current = true;
       setLocked(true);
       clearTimeout(lockTimer.current);
@@ -345,7 +358,10 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
             ) : (
               <WarningCircle aria-hidden="true" weight="regular" className="mt-[2px] size-6 shrink-0" />
             )}
-            {shown.text}
+            <span className="flex flex-col gap-1">
+              {shown.text}
+              {shown.score !== null && <span className="font-mono text-[15px] font-medium tabular-nums">{k.outcome.confirmedScore(shown.score)}</span>}
+            </span>
           </span>
         )}
       </p>
