@@ -1,10 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Google_Sans_Flex, Google_Sans_Code } from "next/font/google";
 import { EVENT } from "@/data/event";
-import { Loader } from "@/components/loader/Loader";
-import { CursorFx } from "@/components/ui/CursorFx";
-import { ExcitedButton } from "@/components/ui/ExcitedButton";
-import { EarlyBirdToast } from "@/components/ui/EarlyBirdToast";
 import { Z } from "@/lib/z";
 import "./globals.css";
 
@@ -54,11 +50,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           Skip to content
         </a>
-        <Loader />
         {children}
-        <CursorFx />
-        <ExcitedButton />
-        <EarlyBirdToast />
         {/* Film grain, fixed and inert so it never repaints with scroll. */}
         <div
           aria-hidden="true"
