@@ -1,5 +1,6 @@
 import { beforeEach, expect, test } from "vitest";
 import type { Db } from "@/lib/dgl/db";
+import { hashPasscode, login } from "@/lib/dgl/auth";
 import { applyAction, readAdminState, readPublicState } from "@/lib/dgl/show";
 import type { Action, Role } from "@/lib/dgl/types";
 import { createTestDb } from "./pg";
@@ -302,12 +303,6 @@ test("admin state names the signed-in admin and their role, nothing more", async
   expect(r.state.me).toEqual({ name: "Super", role: "SUPER_ADMIN" });
 });
 
-test("upsertAdmin is not available yet", async () => {
-  const r = await run({ type: "upsertAdmin", name: "New", role: "HOST", passcode: "123456", active: true });
-  expect(r).toMatchObject({ ok: false, code: "invalid" });
-  expect(await count("dgl_admins")).toBe(0);
-});
-
 test("upsertContestant and upsertPrompt add and edit", async () => {
   const add = await must({ type: "upsertContestant", name: "  Kabir  ", sort: 3, active: true });
   const kabir = add.state.contestants.find((c) => c.name === "Kabir");
@@ -333,4 +328,222 @@ test("public state carries no voter or admin data", async () => {
   expect(JSON.stringify(s)).not.toContain("voter-");
   expect(s.votes).toBe(5);
   expect(s.average).toBe(7);
+});
+
+/* Setup actions leave the show version alone; the SQL version guard. */
+
+test("a setup action does not change the version, so the host's next tap is not stale", async () => {
+  await must({ type: "selectContestant", contestantId: riya });
+  const v = (await admin()).version;
+  const before = await count("dgl_audit");
+  await must({ type: "upsertPrompt", text: "Give a TED talk on tabs versus spaces", active: true });
+  await must({ type: "upsertContestant", name: "Kabir", sort: 3, active: true });
+  expect((await admin()).version).toBe(v);
+  expect(await count("dgl_audit")).toBe(before + 2);
+  // A live action rendered before the edit still goes through.
+  expect((await applyAction(db, sa, { type: "drawPrompt" }, v, T0)).ok).toBe(true);
+});
+
+test("two stopVoting on the same version: the SQL guard lets one through", async () => {
+  await toVoting({ votes: [] });
+  const v = (await admin()).version;
+  const audits = await count("dgl_audit");
+  const results = await Promise.all([
+    applyAction(db, sa, { type: "stopVoting" }, v, T0),
+    applyAction(db, sa, { type: "stopVoting" }, v, T0),
+  ]);
+  expect(results.filter((r) => r.ok)).toHaveLength(1);
+  expect(results.filter((r) => !r.ok && r.code === "stale")).toHaveLength(1);
+  expect(await count("dgl_audit")).toBe(audits + 1);
+  const [row] = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM dgl_audit WHERE action = 'stopVoting'");
+  expect(row.n).toBe(1);
+  expect((await admin()).version).toBe(v + 1);
+});
+
+/* upsertAdmin */
+
+async function insertAdmin(name: string, role: Role, o: { id?: string; active?: boolean; pass?: string } = {}) {
+  const [r] = await db.query<{ id: string }>(
+    `INSERT INTO dgl_admins (id, name, role, passcode_hash, active)
+     VALUES (coalesce($1::uuid, gen_random_uuid()), $2, $3, $4, $5) RETURNING id`,
+    [o.id ?? null, name, role, await hashPasscode(o.pass ?? "starting passcode"), o.active ?? true],
+  );
+  return r.id;
+}
+
+const adminRow = async (id: string) =>
+  (await db.query<{ name: string; role: Role; active: boolean }>("SELECT name, role, active FROM dgl_admins WHERE id = $1", [id]))[0];
+
+test("upsertAdmin creates an admin who can then sign in", async () => {
+  const r = await must({ type: "upsertAdmin", name: "  Neha  ", role: "HOST", passcode: "correct horse battery", active: true });
+  expect(r.state.admins).toContainEqual({ id: expect.any(String), name: "Neha", role: "HOST", active: true });
+  expect(await login(db, "Neha", "correct horse battery", T0)).toMatchObject({ ok: true, admin: { name: "Neha", role: "HOST" } });
+  expect(await login(db, "Neha", "wrong passcode", T0)).toMatchObject({ ok: false });
+});
+
+test("upsertAdmin refuses a duplicate name, a short passcode and bad fields", async () => {
+  await must({ type: "upsertAdmin", name: "Neha", role: "HOST", passcode: "123456", active: true });
+  const admins = await count("dgl_admins");
+  const audits = await count("dgl_audit");
+  const bad: Action[] = [
+    { type: "upsertAdmin", name: "Neha", role: "OPERATOR", passcode: "abcdefgh", active: true },
+    { type: "upsertAdmin", name: "Short", role: "HOST", passcode: "12345", active: true },
+    { type: "upsertAdmin", name: "Nopass", role: "HOST", active: true },
+    { type: "upsertAdmin", name: "Long", role: "HOST", passcode: "x".repeat(257), active: true },
+    { type: "upsertAdmin", name: "   ", role: "HOST", passcode: "123456", active: true },
+    { type: "upsertAdmin", name: "x".repeat(65), role: "HOST", passcode: "123456", active: true },
+    { type: "upsertAdmin", name: "Bad\u0000name", role: "HOST", passcode: "123456", active: true },
+    { type: "upsertAdmin", name: "Bad role", role: "ROOT" as Role, passcode: "123456", active: true },
+    { type: "upsertAdmin", name: "Bad active", role: "HOST", passcode: "123456", active: "yes" as unknown as boolean },
+    { type: "upsertAdmin", id: "not-a-uuid", name: "Bad id", role: "HOST", active: true },
+    { type: "upsertAdmin", id: crypto.randomUUID(), name: "Ghost", role: "HOST", active: true },
+  ];
+  for (const action of bad) expect(await run(action), JSON.stringify(action)).toMatchObject({ ok: false, code: "invalid" });
+  expect(await count("dgl_admins")).toBe(admins);
+  expect(await count("dgl_audit")).toBe(audits);
+});
+
+test("upsertAdmin renaming onto a taken name is invalid, not an error", async () => {
+  await insertAdmin("Neha", "HOST");
+  const aman2 = await insertAdmin("Aman", "HOST");
+  expect(await run({ type: "upsertAdmin", id: aman2, name: "Neha", role: "HOST", active: true })).toMatchObject({ ok: false, code: "invalid" });
+  expect((await adminRow(aman2)).name).toBe("Aman");
+});
+
+test("upsertAdmin updates role and active, and keeps the passcode when none is given", async () => {
+  const id = await insertAdmin("Neha", "HOST", { pass: "first passcode" });
+  const r = await must({ type: "upsertAdmin", id, name: "Neha", role: "OPERATOR", active: false });
+  expect(r.state.admins).toContainEqual({ id, name: "Neha", role: "OPERATOR", active: false });
+  await must({ type: "upsertAdmin", id, name: "Neha", role: "OPERATOR", active: true });
+  expect(await login(db, "Neha", "first passcode", T0)).toMatchObject({ ok: true, admin: { role: "OPERATOR" } });
+});
+
+test("upsertAdmin passcode change takes effect for login", async () => {
+  const id = await insertAdmin("Neha", "HOST", { pass: "first passcode" });
+  await must({ type: "upsertAdmin", id, name: "Neha", role: "HOST", passcode: "second passcode", active: true });
+  expect(await login(db, "Neha", "first passcode", T0)).toMatchObject({ ok: false });
+  expect(await login(db, "Neha", "second passcode", T0)).toMatchObject({ ok: true });
+});
+
+test("you cannot deactivate yourself", async () => {
+  await insertAdmin(sa.name, "SUPER_ADMIN", { id: sa.id });
+  await insertAdmin("Other super", "SUPER_ADMIN");
+  const r = await run({ type: "upsertAdmin", id: sa.id, name: sa.name, role: "SUPER_ADMIN", active: false });
+  expect(r).toMatchObject({ ok: false, code: "invalid" });
+  expect((await adminRow(sa.id)).active).toBe(true);
+});
+
+test("you cannot demote yourself", async () => {
+  await insertAdmin(sa.name, "SUPER_ADMIN", { id: sa.id });
+  await insertAdmin("Other super", "SUPER_ADMIN");
+  const r = await run({ type: "upsertAdmin", id: sa.id, name: sa.name, role: "OPERATOR", active: true });
+  expect(r).toMatchObject({ ok: false, code: "invalid" });
+  expect((await adminRow(sa.id)).role).toBe("SUPER_ADMIN");
+  // Changing your own passcode is fine.
+  expect((await run({ type: "upsertAdmin", id: sa.id, name: sa.name, role: "SUPER_ADMIN", passcode: "new passcode", active: true })).ok).toBe(true);
+});
+
+test("the last active SUPER_ADMIN cannot be demoted or deactivated by anyone", async () => {
+  const only = await insertAdmin("Only super", "SUPER_ADMIN");
+  await insertAdmin("Retired super", "SUPER_ADMIN", { active: false });
+  const audits = await count("dgl_audit");
+  // `sa` is not in the table here, so the self guard does not apply: only the last-SUPER_ADMIN guard does.
+  expect(await run({ type: "upsertAdmin", id: only, name: "Only super", role: "HOST", active: true })).toMatchObject({ ok: false, code: "invalid" });
+  expect(await run({ type: "upsertAdmin", id: only, name: "Only super", role: "SUPER_ADMIN", active: false })).toMatchObject({ ok: false, code: "invalid" });
+  expect(await adminRow(only)).toMatchObject({ role: "SUPER_ADMIN", active: true });
+  expect(await count("dgl_audit")).toBe(audits);
+  // With a second active one, the first can step down.
+  await must({ type: "upsertAdmin", name: "Second super", role: "SUPER_ADMIN", passcode: "123456", active: true });
+  expect((await run({ type: "upsertAdmin", id: only, name: "Only super", role: "HOST", active: true })).ok).toBe(true);
+});
+
+test("two SUPER_ADMINs demoting each other at once leave one SUPER_ADMIN", async () => {
+  const x = await insertAdmin("Super X", "SUPER_ADMIN");
+  const y = await insertAdmin("Super Y", "SUPER_ADMIN");
+  const asX = { id: x, name: "Super X", role: "SUPER_ADMIN" as const };
+  const asY = { id: y, name: "Super Y", role: "SUPER_ADMIN" as const };
+  const v = (await admin()).version;
+  const results = await Promise.all([
+    applyAction(db, asX, { type: "upsertAdmin", id: y, name: "Super Y", role: "HOST", active: true }, v, T0),
+    applyAction(db, asY, { type: "upsertAdmin", id: x, name: "Super X", role: "SUPER_ADMIN", active: false }, v, T0),
+  ]);
+  expect(results.filter((r) => r.ok)).toHaveLength(1);
+  const [{ n }] = await db.query<{ n: number }>(
+    "SELECT count(*)::int AS n FROM dgl_admins WHERE role = 'SUPER_ADMIN' AND active",
+  );
+  expect(n).toBe(1);
+});
+
+test("upsertAdmin is audited without the passcode or its hash", async () => {
+  const r = await must({ type: "upsertAdmin", name: "Neha", role: "HOST", passcode: "correct horse battery", active: true });
+  const id = r.state.admins!.find((x) => x.name === "Neha")!.id;
+  expect(r.state.audit?.[0]).toEqual({
+    at: T0,
+    adminName: "Super",
+    action: "upsertAdmin",
+    detail: { id, name: "Neha", role: "HOST", active: true, passcodeChanged: true },
+  });
+  const edit = await must({ type: "upsertAdmin", id, name: "Neha", role: "OPERATOR", active: true });
+  expect(edit.state.audit?.[0].detail).toEqual({ id, name: "Neha", role: "OPERATOR", active: true, passcodeChanged: false });
+
+  const [{ hash }] = await db.query<{ hash: string }>("SELECT passcode_hash AS hash FROM dgl_admins WHERE id = $1", [id]);
+  const rows = await db.query<{ detail: unknown }>("SELECT detail FROM dgl_audit");
+  // The audit table, the action results (the API response bodies) and a fresh SUPER_ADMIN read.
+  const everything = JSON.stringify(rows) + JSON.stringify(r) + JSON.stringify(edit) + JSON.stringify(await admin());
+  for (const secret of ["correct horse battery", hash, "scrypt$"]) expect(everything).not.toContain(secret);
+});
+
+test("HOST and OPERATOR cannot manage admins", async () => {
+  for (const role of ["HOST", "OPERATOR"] as const) {
+    expect(await runAs(role, { type: "upsertAdmin", name: "Sneaky", role: "SUPER_ADMIN", passcode: "123456", active: true }))
+      .toMatchObject({ ok: false, code: "forbidden" });
+  }
+  expect(await count("dgl_admins")).toBe(0);
+});
+
+/* Moderation */
+
+test("moderation lists performances with votes for SUPER_ADMIN only", async () => {
+  // An earlier act with votes, then the current one; an act without votes is not listed.
+  await toVotingClosed({ votes: [6, 6, 6, 6, 6], self: 6 });
+  const first = p;
+  await addVotes([1, 1, 1], { flagged: true });
+  await must({ type: "reveal" });
+  await must({ type: "complete" });
+  await run({ type: "selectContestant", contestantId: aman }, T0 + 1000);
+  const second = p;
+  await run({ type: "setPrompt", text: "Any" }, T0 + 1000);
+  await run({ type: "startPerformance" }, T0 + 1000);
+  await run({ type: "startVoting" }, T0 + 1000);
+  await addVotes([9, 9]);
+  await addVotes([2], { flagged: true });
+
+  const s = await admin();
+  expect(s.moderation).toEqual([
+    { performanceId: second, contestant: "Aman Gupta", votes: 3, flagged: 1, excluded: 0 },
+    { performanceId: first, contestant: "Riya Sharma", votes: 8, flagged: 3, excluded: 0 },
+  ]);
+  for (const role of ["HOST", "OPERATOR"] as const) expect("moderation" in (await admin(role))).toBe(false);
+
+  // Toggling updates the counts and the live average.
+  const r = await must({ type: "setFlaggedExcluded", performanceId: second, excluded: true });
+  expect(r.state.moderation?.[0]).toEqual({ performanceId: second, contestant: "Aman Gupta", votes: 2, flagged: 1, excluded: 1 });
+  expect(r.state.rawAverage).toBeCloseTo(9);
+  const back = await must({ type: "setFlaggedExcluded", performanceId: second, excluded: false });
+  expect(back.state.moderation?.[0]).toMatchObject({ votes: 3, excluded: 0 });
+  expect(back.state.rawAverage).toBeCloseTo(20 / 3);
+});
+
+test("moderation keeps the 20 newest performances with votes", async () => {
+  for (let i = 0; i < 22; i++) {
+    const [row] = await db.query<{ id: string }>(
+      "INSERT INTO dgl_performances (contestant_id, status, created_at) VALUES ($1, 'COMPLETED', to_timestamp($2::float8 / 1000.0)) RETURNING id",
+      [riya, T0 + i * 1000],
+    );
+    p = row.id;
+    await addVotes([5]);
+  }
+  const m = (await admin()).moderation!;
+  expect(m).toHaveLength(20);
+  expect(m[0].performanceId).toBe(p);
 });

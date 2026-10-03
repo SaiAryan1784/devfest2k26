@@ -74,7 +74,21 @@ export type LoginResult =
 
 const MAX_NAME = 64;
 const MAX_PASS = 256;
+/** The shortest passcode an admin can be given (the bootstrap script and upsertAdmin). */
+export const MIN_PASS = 6;
 const CONTROL = /[\u0000-\u001f\u007f]/;
+
+/** An admin name, trimmed: 1 to 64 characters, no control characters; else null. */
+export function cleanAdminName(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const name = raw.trim();
+  return name && name.length <= MAX_NAME && !CONTROL.test(name) ? name : null;
+}
+
+/** Whether a passcode may be set: MIN_PASS to 256 characters. */
+export function validNewPasscode(pass: unknown): pass is string {
+  return typeof pass === "string" && pass.length >= MIN_PASS && pass.length <= MAX_PASS;
+}
 
 /**
  * Checks a name and passcode. The name is trimmed (as the bootstrap script
@@ -98,8 +112,8 @@ const CONTROL = /[\u0000-\u001f\u007f]/;
  * No passcode, hash or token is ever stored in an audit row.
  */
 export async function login(db: Db, rawName: string, pass: string, now: number): Promise<LoginResult> {
-  const name = rawName.trim();
-  if (!name || name.length > MAX_NAME || CONTROL.test(name) || !pass || pass.length > MAX_PASS) {
+  const name = cleanAdminName(rawName);
+  if (!name || !pass || pass.length > MAX_PASS) {
     return { ok: false, code: "bad_credentials" };
   }
   await ensureSchema(db);

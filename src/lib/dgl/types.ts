@@ -92,6 +92,14 @@ export type AdminState = PublicState & {
   admins?: { id: string; name: string; role: Role; active: boolean }[];
   /** SUPER_ADMIN only: the last 50 entries, newest first. */
   audit?: { at: number; adminName: string; action: string; detail: unknown }[];
+  /**
+   * SUPER_ADMIN only: the 20 newest performances that have at least one vote,
+   * newest first. `votes` counts the votes that count (not excluded), like
+   * `votes` above; `flagged` and `excluded` count flagged and excluded votes.
+   * setFlaggedExcluded flips `excluded` on the flagged votes only, so
+   * `excluded > 0` means the flagged votes are out.
+   */
+  moderation?: { performanceId: string; contestant: string; votes: number; flagged: number; excluded: number }[];
 };
 
 export type ActionResult =

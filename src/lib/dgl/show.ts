@@ -1,4 +1,5 @@
 import { DGL } from "@/data/dgl";
+import { cleanAdminName, hashPasscode, validNewPasscode } from "./auth";
 import { ensureSchema, type Db } from "./db";
 import { LIVE_ACTIONS, allowed, can, effectivePhase, nextStatus } from "./machine";
 import { compareScores, publicAverage } from "./score";
@@ -44,7 +45,7 @@ LEFT JOIN LATERAL (
 ) t ON true
 WHERE s.id = 1`;
 
-/** $1: whether to include admins and the audit log (SUPER_ADMIN). */
+/** $1: whether to include admins, the audit log and moderation (SUPER_ADMIN). */
 const ADMIN_SQL = `
 SELECT s.version, p.id AS performance_id, p.status, c.name AS contestant, p.prompt,
   round(extract(epoch FROM p.ends_at) * 1000)::float8 AS ends_at_ms,
@@ -70,7 +71,24 @@ SELECT s.version, p.id AS performance_id, p.status, c.name AS contestant, p.prom
         'adminName', l.admin_name, 'action', l.action, 'detail', l.detail
       ) ORDER BY l.id DESC), '[]'::json)
      FROM (SELECT * FROM dgl_audit ORDER BY id DESC LIMIT 50) l)
-  END AS audit
+  END AS audit,
+  CASE WHEN $1::boolean THEN
+    (SELECT coalesce(json_agg(json_build_object(
+        'performanceId', m.id, 'contestant', m.name, 'votes', m.votes,
+        'flagged', m.flagged, 'excluded', m.excluded
+      ) ORDER BY m.created_at DESC, m.id DESC), '[]'::json)
+     FROM (
+       SELECT d.id, d.created_at, k.name,
+         (count(*) FILTER (WHERE NOT v.excluded))::int AS votes,
+         (count(*) FILTER (WHERE v.flagged))::int AS flagged,
+         (count(*) FILTER (WHERE v.excluded))::int AS excluded
+       FROM dgl_performances d
+       JOIN dgl_contestants k ON k.id = d.contestant_id
+       JOIN dgl_votes v ON v.performance_id = d.id
+       GROUP BY d.id, d.created_at, k.name
+       ORDER BY d.created_at DESC, d.id DESC
+       LIMIT 20) m)
+  END AS moderation
 ${CURRENT}
 LEFT JOIN LATERAL (
   SELECT (count(*) FILTER (WHERE NOT v.excluded))::int AS votes,
@@ -103,6 +121,7 @@ type AdminRow = PublicRow & {
   prompts: AdminState["prompts"];
   admins: NonNullable<AdminState["admins"]> | null;
   audit: NonNullable<AdminState["audit"]> | null;
+  moderation: NonNullable<AdminState["moderation"]> | null;
 };
 
 const num = (x: unknown): number | null => (x === null || x === undefined ? null : Number(x));
@@ -154,6 +173,7 @@ export async function readAdminState(
   if (full) {
     state.admins = r.admins ?? [];
     state.audit = r.audit ?? [];
+    state.moderation = r.moderation ?? [];
   }
   return state;
 }
@@ -168,6 +188,8 @@ const isUuid = (x: unknown): x is string => typeof x === "string" && UUID.test(x
 const isBool = (x: unknown): x is boolean => typeof x === "boolean";
 const isScore = (x: unknown): x is number =>
   typeof x === "number" && Number.isInteger(x) && x >= 1 && x <= 10;
+const ROLES: readonly Role[] = ["SUPER_ADMIN", "OPERATOR", "HOST", "VOLUNTEER"];
+const isRole = (x: unknown): x is Role => ROLES.includes(x as Role);
 const isSort = (x: unknown): x is number =>
   typeof x === "number" && Number.isInteger(x) && x >= -2_147_483_648 && x <= 2_147_483_647;
 function text200(x: unknown): string | null {
@@ -199,9 +221,22 @@ function normalize(a: Action): Action | null {
       if (a.id != null && !isUuid(a.id)) return null;
       return { type: a.type, ...(a.id != null && { id: a.id }), text, active: a.active };
     }
-    case "upsertAdmin":
-      // Needs hashPasscode (Task 4); implemented with its guards in Task 11.
-      return null;
+    case "upsertAdmin": {
+      // A new admin needs a passcode; an edit may leave it out (keeps the hash).
+      const name = cleanAdminName(a.name);
+      if (!name || !isRole(a.role) || !isBool(a.active)) return null;
+      if (a.id != null && !isUuid(a.id)) return null;
+      const hasPass = a.passcode != null;
+      if (hasPass ? !validNewPasscode(a.passcode) : a.id == null) return null;
+      return {
+        type: a.type,
+        ...(a.id != null && { id: a.id }),
+        name,
+        role: a.role,
+        ...(hasPass && { passcode: a.passcode }),
+        active: a.active,
+      };
+    }
     case "setFlaggedExcluded":
       return isUuid(a.performanceId) && isBool(a.excluded)
         ? { type: a.type, performanceId: a.performanceId, excluded: a.excluded }
@@ -214,6 +249,10 @@ function normalize(a: Action): Action | null {
 }
 
 function detailOf(a: Action): Record<string, unknown> {
+  if (a.type === "upsertAdmin") {
+    // Built field by field: never the passcode, never its hash.
+    return { name: a.name, role: a.role, active: a.active, passcodeChanged: a.passcode != null };
+  }
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { type, ...rest } = a as Action & { confirm?: string; passcode?: string };
   delete rest.confirm;
@@ -237,12 +276,19 @@ class Params {
 
 /*
  * Every write is one statement (data-modifying CTEs), so it is atomic over
- * Neon's HTTP driver, which has no transactions. Each statement bumps
- * dgl_show.version (guarded by WHERE version = $v for versioned actions),
- * applies the change and inserts the audit row, all keyed off the same CTE,
- * and returns n = the number of rows the guard let through (0 or 1).
+ * Neon's HTTP driver, which has no transactions. A versioned action (live
+ * actions and resetShow) bumps dgl_show.version guarded by WHERE version =
+ * $v; setup actions (contestants, prompts, admins, moderation) leave the
+ * version alone, so an edit in setup mid-show never makes the host's next
+ * tap stale. Each statement applies the change and inserts the audit row,
+ * keyed off the same CTE, and returns n = the number of rows the guard let
+ * through (0 or 1).
+ *
+ * `hash` is the scrypt hash of an upsertAdmin passcode, computed by the
+ * caller before the statement (null: keep the stored one). It only ever
+ * goes into dgl_admins.passcode_hash.
  */
-function writeStatement(a: Action, admin: Admin, version: number, now: number) {
+function writeStatement(a: Action, admin: Admin, version: number, now: number, hash: string | null) {
   const q = new Params();
   const ts = (ms: number) => `to_timestamp(${q.add(ms, "float8")} / 1000.0)`;
   const at = ts(now);
@@ -256,8 +302,9 @@ function writeStatement(a: Action, admin: Admin, version: number, now: number) {
     `bump AS (UPDATE dgl_show SET version = version + 1${set}
       WHERE id = 1 AND version = ${q.add(version, "int")}${cond}
       RETURNING current_performance_id AS pid)`;
-  const unchecked = (cond: string) =>
-    `bump AS (UPDATE dgl_show SET version = version + 1 WHERE id = 1 AND ${cond} RETURNING id)`;
+  // Tied to the current performance by id only, with no status condition:
+  // every status change bumps the version, so the version guard in `bump`
+  // implies the status this action was checked against in applyAction.
   const onCurrent = (set: string) =>
     `chg AS (UPDATE dgl_performances p SET ${set} FROM bump WHERE p.id = bump.pid)`;
   const status = (t: LiveAction["type"]) => `status = ${q.add(nextStatus(t), "text")}`;
@@ -335,7 +382,6 @@ function writeStatement(a: Action, admin: Admin, version: number, now: number) {
             : `INSERT INTO dgl_prompts (text, active)
                 VALUES (${q.add(a.text, "text")}, ${q.add(a.active, "boolean")}) RETURNING id`;
       text = `WITH up AS (${up}),
-        ${unchecked("EXISTS (SELECT 1 FROM up)")},
         ${audit("up", "NULL::uuid", `${detail()} || jsonb_build_object('id', up.id)`)}
         SELECT count(*)::int AS n FROM up`;
       break;
@@ -344,12 +390,52 @@ function writeStatement(a: Action, admin: Admin, version: number, now: number) {
       text = `WITH perf AS (SELECT id FROM dgl_performances WHERE id = ${q.add(a.performanceId, "uuid")}),
         chg AS (UPDATE dgl_votes v SET excluded = ${q.add(a.excluded, "boolean")}
           FROM perf WHERE v.performance_id = perf.id AND v.flagged RETURNING 1),
-        ${unchecked("EXISTS (SELECT 1 FROM perf)")},
         ${audit("perf", "perf.id", `${detail()} || jsonb_build_object('votes', (SELECT count(*) FROM chg))`)}
         SELECT count(*)::int AS n FROM perf`;
       break;
-    case "upsertAdmin":
-      throw new Error("upsertAdmin is not implemented yet");
+    case "upsertAdmin": {
+      const role = q.add(a.role, "text");
+      const active = q.add(a.active, "boolean");
+      let up: string;
+      if (!a.id) {
+        if (hash === null) throw new Error("upsertAdmin insert needs a passcode hash");
+        // A taken name is a conflict: no row, n = 0, "invalid" (never a 500).
+        up = `up AS (INSERT INTO dgl_admins (name, role, passcode_hash, active)
+          VALUES (${q.add(a.name, "text")}, ${role}, ${q.add(hash, "text")}, ${active})
+          ON CONFLICT (name) DO NOTHING RETURNING id)`;
+      } else {
+        /*
+         * The last active SUPER_ADMIN guard. `supers` locks every active
+         * SUPER_ADMIN row (FOR UPDATE, in id order so two edits lock in the
+         * same order). The update goes through if the row stays an active
+         * SUPER_ADMIN, or is not one now, or another active SUPER_ADMIN is
+         * among the locked rows. Two concurrent demotions (X demotes Y while
+         * Y demotes X): the second blocks on the first one's lock;
+         * under READ COMMITTED, once the first commits Postgres re-checks
+         * the locked row against WHERE role = 'SUPER_ADMIN' AND active, so
+         * the demoted row drops out of `supers`, no other SUPER_ADMIN is
+         * left, and the second update matches nothing (invalid). A plain
+         * EXISTS on the table would read the statement snapshot and let
+         * both through. The guard reads `supers`, never the table. A row
+         * counted as "another" stays locked until commit, so nobody can
+         * demote it meanwhile. A lock wait cycle that Postgres still finds
+         * fails the statement (nothing written, a 500), never a bad state.
+         */
+        const id = q.add(a.id, "uuid");
+        const keepsSuper = a.role === "SUPER_ADMIN" && a.active;
+        const pass = hash === null ? "passcode_hash" : q.add(hash, "text");
+        up = `supers AS (SELECT id FROM dgl_admins WHERE role = 'SUPER_ADMIN' AND active ORDER BY id FOR UPDATE),
+          up AS (UPDATE dgl_admins SET name = ${q.add(a.name, "text")}, role = ${role}, active = ${active},
+              passcode_hash = ${pass}
+            WHERE id = ${id}
+              ${keepsSuper ? "" : `AND (NOT (role = 'SUPER_ADMIN' AND active) OR EXISTS (SELECT 1 FROM supers WHERE supers.id <> ${id}))`}
+            RETURNING id)`;
+      }
+      text = `WITH ${up},
+        ${audit("up", "NULL::uuid", `${detail()} || jsonb_build_object('id', up.id)`)}
+        SELECT count(*)::int AS n FROM up`;
+      break;
+    }
   }
   return { text, values: q.values };
 }
@@ -392,8 +478,23 @@ export async function applyAction(
     if (a.type === "reveal" && before.selfScore === null) return refuse("needs_self_score", before);
   }
 
-  const { text, values } = writeStatement(a, admin, version, now);
-  const [{ n }] = await db.query<{ n: number }>(text, values);
+  let hash: string | null = null;
+  if (a.type === "upsertAdmin") {
+    // You cannot deactivate yourself or step down from SUPER_ADMIN (only a
+    // SUPER_ADMIN gets here). The last-SUPER_ADMIN guard is in the SQL.
+    if (a.id === admin.id && (!a.active || a.role !== "SUPER_ADMIN")) return refuse("invalid", before);
+    if (a.passcode != null) hash = await hashPasscode(a.passcode);
+  }
+
+  const { text, values } = writeStatement(a, admin, version, now, hash);
+  let n: number;
+  try {
+    [{ n }] = await db.query<{ n: number }>(text, values);
+  } catch (err) {
+    // A rename onto a name that is already taken: invalid, not a 500.
+    if (a.type === "upsertAdmin" && (err as { code?: unknown })?.code === "23505") return refuse("invalid");
+    throw err;
+  }
   const state = await readAdminState(db, admin, now);
   if (Number(n) > 0) return { ok: true, state };
   // Nothing written: a versioned action lost the race (stale) or, with the
