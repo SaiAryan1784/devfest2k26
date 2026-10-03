@@ -308,7 +308,7 @@ export const DGL = {
         },
         moderation: {
           title: "Moderation",
-          body: "Votes from one connection arriving in a burst are flagged. Excluding them takes them out of the count and the average.",
+          body: "Votes from one connection arriving in a burst are flagged, which is normal on shared venue Wi-Fi. Excluding them removes real votes from the count and the average: use it only when you have evidence of abuse.",
           empty: "No votes yet.",
           votes: "Counted",
           flagged: "Flagged",

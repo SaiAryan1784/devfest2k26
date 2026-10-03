@@ -7,17 +7,19 @@ Read the last section first. Nothing on these screens was ever seen in a browser
 ## Before doors
 
 1. Developer: in Vercel set `DGL_SECRET` (make one with `openssl rand -hex 32`) and `DATABASE_URL`. Redeploy after setting them. Without either, every `/api/dgl` call answers 503 and the pages show "Offline" or "Cannot reach the server".
-2. Developer: check that the Neon region and the Vercel function region are close. A far apart pair adds a round trip to every vote.
+2. Developer: keep the Vercel function region next to the Neon region (Vercel project settings, Functions, Region). A far apart pair adds a round trip to every vote. For the event day, disable scale-to-zero on the Neon compute (Neon console, the branch's compute settings), so the first request after a quiet spell does not wait for the database to wake.
 3. Developer: create the first admins with `npm run dgl:admin -- --name "<name>" --role SUPER_ADMIN`. The script writes to the database named by `DATABASE_URL` in your local `.env`. Confirm it is the same Neon database Vercel uses before relying on it, otherwise nobody can sign in on the night. Running it again with an existing name resets that admin's passcode and role and reactivates the account. That is the recovery path for a forgotten passcode, or for an admin locked out once the 15 minute lockout window has passed. The script asks for the passcode with hidden input. Run it again for each person with `--role OPERATOR`, `HOST` or `VOLUNTEER` for the others. Make ONE volunteer account PER kiosk device, because the kiosk rate limit is per admin id and two devices on one account slow each other down. Passcodes need at least 6 characters.
    Developer: run `npm run dgl:admin` once against production before the event so the tables exist (the script creates them). The app also creates them on first use, but doing it once avoids first-request latency during the show.
-   Vercel shares environment variables across environments by default. If previews use the production database, the load check's votes and Reset show act on the production show. Give previews a separate Neon branch or database, or run the load check only before any real data exists.
+   Vercel scopes each environment variable to Production, Preview and Development, and the dashboard ticks all three by default when you add one. So unless you untick Preview, previews use the production database, and the load check's votes and Reset show act on the production show. Give previews their own `DATABASE_URL` (a separate Neon branch or database), or run the load check only before any real data exists.
 4. Organiser: sign in at `/dgl/admin` as a super admin and open Setup. Add the contestants in running order (lowest sort number first). Add the prompts. "Load the starter prompts" adds a draft list from the code: replace it with the real prompts.
 5. Organiser: reset rehearsal data: Setup, Reset show, type `RESET`. It clears every performance and vote and keeps contestants, prompts and admins. Never use it once the real show has started.
 6. Organiser: open `/dgl/stage` full screen (F11) on the projector laptop. Leave the mouse alone: the pointer hides after 3 s.
 7. Organiser: the stage shows the QR for `https://devfest2k26.gdgnoida.com/dgl`. The address comes from `EVENT.url` and is drawn at build time, so even a preview deployment's stage points phones at the production address. For a rehearsal on a preview, open the preview's `/dgl` by hand on the phones.
 8. Organiser: put two volunteer phones on mobile data (not the venue Wi-Fi) and sign them in at `/dgl/kiosk`.
+   Organiser: sign in on every admin and kiosk device before doors. Sessions last 12 hours, so a sign in on the morning of the show lasts through it.
 9. Organiser: ask the venue for a dedicated SSID for the audience and the admin devices. Hundreds of phones on a shared guest network is the biggest risk on the night.
-10. Developer: on the preview, run `curl -sI https://<preview>/api/dgl/state` twice within a second. The second response must show `x-vercel-cache: HIT`. The one second CDN cache is what the design relies on: without it every phone polling reaches the database. If Vercel Deployment Protection is on, the preview answers 401 to curl and to the load script: turn protection off for that preview, or use Vercel's protection bypass token as its documentation describes.
+10. Developer: freeze deploys for the DGL segment. Nothing is deployed from the first act to the last reveal (see the service worker section).
+11. Developer: on the preview, run `curl -sI https://<preview>/api/dgl/state` twice within a second. The second response must show `x-vercel-cache: HIT`. The one second CDN cache is what the design relies on: without it every phone polling reaches the database. If Vercel Deployment Protection is on, the preview answers 401 to curl and to the load script: turn protection off for that preview, or use Vercel's protection bypass token as its documentation describes.
 
 ## Roles
 
@@ -48,12 +50,12 @@ What the audience sees on a phone: before the first act "DevFest Got Latent star
 ## Failure drills
 
 - The admin laptop dies. Open `/dgl/admin` on a phone and sign in. The show state lives on the server, so the console comes back exactly where it was. Sessions last 12 hours.
-- Wrong contestant selected. Pause voting, use Reassign to pick the right one, then Resume voting. Votes already cast stay with the act and only the name changes. Reassign is offered in Ready, Performing, Time up and Paused, not while voting is open.
+- Wrong contestant selected. Pause voting, use Reassign to pick the right one (it needs a second tap to confirm), then Resume voting. Votes already cast stay with the act and only the name changes. Reassign is offered in Ready, Performing, Time up and Paused, not while voting is open.
 - The network drops on a phone. The vote is kept on the phone and the page says "Vote queued, waiting for connection". It sends when the connection returns and then says "Vote recorded". Tell the room to keep the page open and not to refresh.
 - A kiosk press shows "Not sent". Pressing again is safe: each press carries an id, so a repeat cannot count twice. The id is kept in that browser tab, so a reload or signing in again after "Your session ended" still resends it for the same act. Closing the tab or opening the kiosk in a new tab loses it: if you do that between a lost answer and the next press and the first press had actually arrived, a second press counts again, so check the Kiosk count in the admin bar first.
 - A double tap on the big button. The button ignores taps for 800 ms after the phase changes and the console shows "Updating". If two admins press at once, the second sees "Someone else just changed the show. Updated."
 - The host paused by mistake. Press Resume voting.
-- Voting stopped by mistake. In Voting closed press Reopen voting (two taps). A phone whose vote was refused as closed can vote again after the reopen.
+- Voting stopped by mistake. In Voting closed press Reopen voting (two taps). A phone whose vote was refused as closed can vote again after the reopen. Reopen voting is not possible after Reveal.
 - A phone says "Voting closed before your vote arrived, so it was not counted". The vote reached the server after Stop. Reopen voting if the room should still be able to vote.
 
 ## Moderation
@@ -67,12 +69,15 @@ To judge abuse, look at the vote count against the room size (a count well above
 ## Known limits and decisions
 
 - A passcode reset does not end an existing admin session. Sessions are signed tokens with only the admin id. Deactivating an admin does sign them out on their next request.
-- After five sign in attempts for one name inside 15 minutes, a sixth is refused until the window passes. Someone who knows an admin name could lock it out on purpose. Existing sessions keep working.
+- After five sign in attempts for one name inside 15 minutes, a sixth is refused until the window passes. Someone who knows an admin name could lock it out on purpose. Existing sessions keep working. A locked out admin waits 15 minutes, or another admin who is signed in runs the show meanwhile.
+- One address gets 10 sign in attempts a minute (per server instance, a speed bump). More answer "Too many attempts. Try again in a minute."
+- The audit log in Setup shows the last 50 rows, newest first.
 - The average is hidden until 5 votes.
-- The public state can be up to 2 s old (the CDN caches it for 1 s). The timer is computed from the server's `endsAtMs` plus a measured clock offset, so phones and the stage agree within about a second.
+- The public state can be up to 3 s old (the CDN keeps it for 1 s and may serve it for 2 s more while it refreshes). The timer is computed from the server's `endsAtMs` plus a measured clock offset, so phones and the stage agree within about a second.
 - One vote per browser per act, tied to a cookie. Clearing cookies allows a second vote, which is why one-address bursts are flagged. Rate limits live in each server instance's memory and are a speed bump, not a global limit.
 - A vote that arrives without the voter cookie is never counted: the server sets the cookie and asks the phone to send it again, which it does within a second. A browser with cookies fully disabled therefore cannot vote. After three tries the phone says "Your browser is blocking cookies, so this vote cannot be sent. Allow cookies for this site and reload." and the vote stays queued. Such a voter can use the kiosk.
-- Setup actions never change the show version, so editing a prompt mid-act does not make the host's next tap stale.
+- Editing contestants, prompts and admins (and moderation) never changes the show version, so editing a prompt mid-act does not make the host's next tap stale. Reset show does change it.
+- The contestant's own score stays out of every public response until Reveal: the public query selects it only behind REVEAL. Admin roles other than VOLUNTEER (super admin, operator, host) can read it before the reveal; a volunteer's console and kiosk never get it.
 - A kiosk vote and its audit row are written in one statement. Either both exist or neither.
 - On phones the audience average appears only after the person has voted, so early votes do not anchor later ones (`DGL.showLiveAverage` is "after-vote"; set it to "always" in `src/data/dgl.ts` for the original reading). The stage shows the average only at the reveal.
 - The first visit to a page must be online. The offline shell only works after the page has loaded once with the service worker active. The shell for `/dgl/stage`, `/dgl/kiosk` and `/dgl/admin` is only there if you opened that page online first.
@@ -93,12 +98,12 @@ If the offline shell misbehaves in production:
 
 Organiser (with the developer): use real phones, the projector laptop and, if possible, the venue network. Run three acts end to end, including one wrong contestant fix and one admin handover. Then Reset show.
 
-Not verified in any browser: every screen. The layout at 360 and 390 px wide, the 360 x 640 fit of "Lock in" (about 4 px of slack, worked out not measured), the stage at the projector's resolution (the column widths are derived), focus order and keyboard use, screen reader announcements, contrast, reduced motion, hydration warnings in the console, the service worker and offline behaviour, and the timing numbers on a slow connection. Interactive within 5 s on Slow 4G was not measured. Transfer size is about 395 KB with gzip and about 361 KB with brotli for `/dgl`, a little over the 350 KB plan ceiling (SPEC section 38). Watch the console and report anything odd.
+Not verified in any browser: every screen. The layout at 360 and 390 px wide, the 360 x 640 fit of "Lock in" (about 4 px of slack, worked out not measured), the stage at the projector's resolution (the column widths are derived), focus order and keyboard use, screen reader announcements, contrast, reduced motion, hydration warnings in the console, the service worker and offline behaviour, and the timing numbers on a slow connection. Interactive within 5 s on Slow 4G was not measured. Transfer size for `/dgl` is about 395 KB with gzip (13% over the 350 KB plan ceiling) and about 361 KB with brotli (3% over), see SPEC section 38. Two cheap trims if it matters on the venue network: stop preloading Google Sans Code (`preload: false`, about 35 KB) and load Motion's features asynchronously through `LazyMotion` (about 15 to 20 KB). Watch the console and report anything odd.
 
 ### Phone (`/dgl`)
 
 - Open `/dgl` at 390 x 844 and at 360 x 640. The whole grid and "Lock in" are visible without scrolling, every cell is at least 56 px tall, and a long contestant name or prompt does not push "Lock in" below the fold.
-- Before the first poll the page shows the idle screen. Note whether "Live" shows too early.
+- Before the first poll the page shows the idle screen and the pill says "Connecting" with a grey dot. It turns "Live" once the first poll answers.
 - Walk every phase: idle, ready, performing, time up, voting, paused, closed, reveal, completed.
 - Vote, then refresh: the score stays locked. Open a second tab: it shows the same locked score within a poll.
 - Before voting no average is shown. After voting the average shows once there are 5 votes.
@@ -167,8 +172,12 @@ Developer: run this against a PREVIEW deployment, never production, with the sho
 
 1. Organiser: in the admin console select a contestant, start the performance and start voting.
 2. Run `node scripts/dgl-load-check.mjs --base https://<preview-url> --voters 300 --confirm`.
-3. Expect about 300 recorded (200), no 429 and no 503, p95 under 1.5 s, and the vote count after equal to before plus the recorded count.
+3. Expect about 300 recorded (200) and "Other answers: none" (any 409, 429, 503 or network is listed there by status), p95 under 1.5 s, and the vote count after equal to before plus the recorded count. The script waits 4 s for the CDN before reading the count back, and gives up on any request after 10 s.
 4. The admin console will show the votes as flagged, because they all come from one address. That is expected. 429 answers are not expected, since each fake voter votes once.
 5. Stop voting and Reset show.
 
 The script only casts votes. It does not log in or change the show, and it prints no cookies or secrets.
+
+### CDN check with real browsers
+
+Developer: with 20 or more real phones polling the preview, confirm `x-vercel-cache: HIT` or `STALE` on the browsers' `/api/dgl/state` requests (not only curl): the client fetches with `cache: "no-store"`, which makes browsers send `Cache-Control: no-cache`; if the CDN misses, change that fetch to `cache: "default"` in `src/lib/dgl/use-dgl-state.ts` (the response's `max-age=0, must-revalidate` still keeps browsers fresh).
