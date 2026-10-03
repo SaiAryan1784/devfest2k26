@@ -72,21 +72,54 @@ export type LoginResult =
   | { ok: true; admin: Admin }
   | { ok: false; code: "bad_credentials" | "locked" };
 
+const MAX_NAME = 64;
+const MAX_PASS = 256;
+const CONTROL = /[\u0000-\u001f\u007f]/;
+
 /**
- * Checks a name and passcode. Locked when `loginFailures` failed attempts for
- * that name sit inside the last `loginWindowMin` minutes, even for the right
- * passcode. Every attempt that is not locked out writes one audit row; no
- * passcode, hash or token is ever stored in it.
+ * Checks a name and passcode. The name is trimmed (as the bootstrap script
+ * does); an empty, over-long or control-character name, or an empty or
+ * over-long passcode, is `bad_credentials` with no query and no audit row.
+ *
+ * The lockout claims a slot BEFORE verifying, so parallel attempts cannot all
+ * read the same low failure count:
+ *  1. insert an audit row as `loginFailed` and take its id;
+ *  2. count `loginFailed` rows for the name in the last `loginWindowMin`
+ *     minutes with id <= ours (our own row included); above `loginFailures`
+ *     the attempt is `locked`: the row becomes `loginLocked` (non-counting, so
+ *     a lock never extends itself) and the passcode is never checked;
+ *  3. otherwise verify. Success turns the row into `login` (stops counting);
+ *     failure leaves it as `loginFailed`.
+ * So at most `loginFailures` attempts per name per window reach scrypt, and
+ * an attempt past the limit is refused even with the right passcode.
+ * Residual: a bigserial id can be allocated out of commit order, so two racing
+ * attempts can briefly see each other's ranks out of order. That is a tiny
+ * window, far tighter than read-count-then-write.
+ * No passcode, hash or token is ever stored in an audit row.
  */
-export async function login(db: Db, name: string, pass: string, now: number): Promise<LoginResult> {
+export async function login(db: Db, rawName: string, pass: string, now: number): Promise<LoginResult> {
+  const name = rawName.trim();
+  if (!name || name.length > MAX_NAME || CONTROL.test(name) || !pass || pass.length > MAX_PASS) {
+    return { ok: false, code: "bad_credentials" };
+  }
   await ensureSchema(db);
-  const [{ failures }] = await db.query<{ failures: number }>(
-    `SELECT count(*)::int AS failures FROM dgl_audit
-     WHERE action = 'loginFailed' AND admin_name = $1::text
-       AND at > to_timestamp($2::float8 / 1000.0) - make_interval(mins => $3::int)`,
-    [name, now, DGL.limits.loginWindowMin],
+
+  const [{ id: attemptId }] = await db.query<{ id: string }>(
+    `INSERT INTO dgl_audit (at, admin_id, admin_name, action, detail)
+     VALUES (to_timestamp($1::float8 / 1000.0), NULL, $2::text, 'loginFailed', '{}'::jsonb)
+     RETURNING id::text AS id`,
+    [now, name],
   );
-  if (failures >= DGL.limits.loginFailures) return { ok: false, code: "locked" };
+  const [{ n }] = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM dgl_audit
+     WHERE action = 'loginFailed' AND admin_name = $1::text AND id <= $2::bigint
+       AND at > to_timestamp($3::float8 / 1000.0) - make_interval(mins => $4::int)`,
+    [name, attemptId, now, DGL.limits.loginWindowMin],
+  );
+  if (n > DGL.limits.loginFailures) {
+    await db.query("UPDATE dgl_audit SET action = 'loginLocked' WHERE id = $1::bigint", [attemptId]);
+    return { ok: false, code: "locked" };
+  }
 
   const [row] = await db.query<AdminRow>(
     "SELECT id, name, role, passcode_hash, active FROM dgl_admins WHERE name = $1::text",
@@ -96,9 +129,8 @@ export async function login(db: Db, name: string, pass: string, now: number): Pr
   const ok = !!row && row.active && matches;
 
   await db.query(
-    `INSERT INTO dgl_audit (at, admin_id, admin_name, action, detail)
-     VALUES (to_timestamp($1::float8 / 1000.0), $2::uuid, $3::text, $4::text, '{}'::jsonb)`,
-    [now, row?.id ?? null, ok ? row.name : name, ok ? "login" : "loginFailed"],
+    "UPDATE dgl_audit SET action = $2::text, admin_id = $3::uuid WHERE id = $1::bigint",
+    [attemptId, ok ? "login" : "loginFailed", row?.id ?? null],
   );
   return ok
     ? { ok: true, admin: { id: row.id, name: row.name, role: row.role } }

@@ -21,6 +21,7 @@ export function parseArgs(argv: string[]): { name: string; role: Role } | { erro
   const name = get("--name")?.trim();
   const role = get("--role");
   if (!name) return { error: "Missing --name." };
+  if (name.length > 64 || /[\u0000-\u001f\u007f]/.test(name)) return { error: "Invalid --name (max 64 characters, no control characters)." };
   if (!role) return { error: "Missing --role." };
   if (!ROLES.includes(role as Role)) return { error: `Unknown role "${role}".` };
   return { name, role: role as Role };
@@ -57,15 +58,26 @@ async function main() {
   } catch {
     // No .env file: DATABASE_URL may already be in the environment.
   }
-  const db = neonDb();
+  // Errors from the database layer can quote the connection string (a malformed
+  // URL does), so those paths only ever print this fixed message.
+  const dbFailed = () => {
+    console.error("Could not connect to the database. Check DATABASE_URL.");
+    process.exit(1);
+  };
+  let db: ReturnType<typeof neonDb>;
+  try {
+    db = neonDb();
+  } catch {
+    return dbFailed();
+  }
   if (!db) {
     console.error("DATABASE_URL is not set. Add it to .env or the environment.");
     process.exit(1);
   }
 
   const pass = await askHidden("Passcode: ");
-  if (pass.length < 6) {
-    console.error("Passcode must be at least 6 characters.");
+  if (pass.length < 6 || pass.length > 256) {
+    console.error("Passcode must be 6 to 256 characters.");
     process.exit(1);
   }
   const again = await askHidden("Repeat passcode: ");
@@ -74,20 +86,25 @@ async function main() {
     process.exit(1);
   }
 
-  await ensureSchema(db);
   const hash = await hashPasscode(pass);
-  await db.query(
-    `INSERT INTO dgl_admins (name, role, passcode_hash) VALUES ($1::text, $2::text, $3::text)
-     ON CONFLICT (name) DO UPDATE SET role = EXCLUDED.role, passcode_hash = EXCLUDED.passcode_hash, active = true`,
-    [args.name, args.role, hash],
-  );
+  try {
+    await ensureSchema(db);
+    await db.query(
+      `INSERT INTO dgl_admins (name, role, passcode_hash) VALUES ($1::text, $2::text, $3::text)
+       ON CONFLICT (name) DO UPDATE SET role = EXCLUDED.role, passcode_hash = EXCLUDED.passcode_hash, active = true`,
+      [args.name, args.role, hash],
+    );
+  } catch {
+    return dbFailed();
+  }
   console.log(`Saved admin "${args.name}" as ${args.role}.`);
 }
 
 // Only run when executed directly, so parseArgs stays importable.
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
-  main().catch((err) => {
-    console.error(err instanceof Error ? err.message : "Failed.");
+  // Never print err.message or a stack: it may quote the connection string.
+  main().catch(() => {
+    console.error("Failed.");
     process.exit(1);
   });
 }

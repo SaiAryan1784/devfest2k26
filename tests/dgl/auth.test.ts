@@ -161,6 +161,65 @@ describe("login and currentAdmin", () => {
     expect((await login(db, "Sai", "right", T0 + 1000)).ok).toBe(true);
   });
 
+  test("concurrent attempts cannot bypass the lock", async () => {
+    const limit = DGL.limits.loginFailures;
+    const attempts = Array.from({ length: 30 }, (_, i) => login(db, "Sai", i === 29 ? "right" : `wrong${i}`, T0));
+    const results = await Promise.all(attempts);
+    // The correct passcode arrives last, after the limit is spent: refused.
+    expect(results[29]).toEqual({ ok: false, code: "locked" });
+    expect(results.some((r) => r.ok)).toBe(false);
+    const rows = await audit();
+    const evaluated = rows.filter((r) => r.action === "loginFailed" || r.action === "login");
+    expect(evaluated.length).toBeLessThanOrEqual(limit);
+    expect(rows.filter((r) => r.action === "loginLocked").length).toBe(30 - evaluated.length);
+    expect(results.filter((r) => !r.ok && r.code === "locked").length).toBe(30 - evaluated.length);
+    // And the lock holds afterwards.
+    expect(await login(db, "Sai", "right", T0 + 1000)).toEqual({ ok: false, code: "locked" });
+  });
+
+  test("a successful login does not count toward the lock", async () => {
+    for (let i = 0; i < DGL.limits.loginFailures - 2; i++) await login(db, "Sai", "nope", T0);
+    for (let i = 0; i < 10; i++) expect((await login(db, "Sai", "right", T0)).ok).toBe(true);
+    expect(await login(db, "Sai", "nope", T0)).toEqual({ ok: false, code: "bad_credentials" });
+    expect((await login(db, "Sai", "right", T0)).ok).toBe(true);
+    const rows = await audit();
+    expect(rows.filter((r) => r.action === "loginFailed")).toHaveLength(DGL.limits.loginFailures - 1);
+  });
+
+  test("a locked attempt is audited as loginLocked, which does not extend the lock", async () => {
+    for (let i = 0; i < DGL.limits.loginFailures; i++) await login(db, "Sai", "nope", T0);
+    for (let i = 0; i < 3; i++) await login(db, "Sai", "right", T0 + 10 * MIN);
+    expect((await audit()).filter((r) => r.action === "loginLocked")).toHaveLength(3);
+    // Window measured from the original failures: unlocked after they age out.
+    expect((await login(db, "Sai", "right", T0 + DGL.limits.loginWindowMin * MIN + 1)).ok).toBe(true);
+  });
+
+  test("the name is trimmed, so ' Sai ' matches admin Sai", async () => {
+    const r = await login(db, "  Sai ", "right", T0);
+    expect(r).toEqual({ ok: true, admin: { id, name: "Sai", role: "OPERATOR" } });
+    expect((await audit())[0].admin_name).toBe("Sai");
+  });
+
+  test("invalid names and passcodes fail without a query or an audit row", async () => {
+    const bad: [string, string][] = [
+      ["Sai\u0000", "right"],
+      ["Sa\ni", "right"],
+      ["Sai\u007f", "right"],
+      ["x".repeat(65), "right"],
+      ["", "right"],
+      ["   ", "right"],
+      ["Sai", ""],
+      ["Sai", "p".repeat(257)],
+    ];
+    for (const [n, p] of bad) {
+      expect(await login(db, n, p, T0)).toEqual({ ok: false, code: "bad_credentials" });
+    }
+    expect(await audit()).toHaveLength(0);
+    // The limits themselves are inclusive.
+    expect((await login(db, "x".repeat(64), "right", T0)).ok).toBe(false);
+    expect((await audit())).toHaveLength(1);
+  });
+
   test("currentAdmin reads the live row", async () => {
     const t = signSession(id, T0 + 60 * MIN, SECRET);
     expect(await currentAdmin(db, t, T0)).toEqual({ id, name: "Sai", role: "OPERATOR" });
