@@ -1,0 +1,106 @@
+import { describe, expect, test } from "vitest";
+import { screenKey, showsQr, stageView, type StageView } from "@/lib/dgl/stage-view";
+import type { Phase, PublicState } from "@/lib/dgl/types";
+
+const ID = "11111111-1111-4111-8111-111111111111";
+const act = { contestant: "Riya Sharma", prompt: "Explain Kubernetes to your grandmother" };
+
+const st = (over: Partial<PublicState> = {}): PublicState => ({
+  phase: "VOTING",
+  performanceId: ID,
+  ...act,
+  endsAtMs: null,
+  votes: 0,
+  average: null,
+  reveal: null,
+  ...over,
+});
+
+describe("stageView", () => {
+  test("before the first poll, and with no act, it waits", () => {
+    expect(stageView(null)).toEqual({ kind: "idle" });
+    expect(stageView(st({ phase: "IDLE", performanceId: null, contestant: null, prompt: null }))).toEqual({ kind: "idle" });
+  });
+
+  test("between acts it is neutral", () => {
+    expect(stageView(st({ phase: "COMPLETED" }))).toEqual({ kind: "completed" });
+  });
+
+  test("ready shows who is up next", () => {
+    expect(stageView(st({ phase: "READY" }))).toEqual({ kind: "ready", id: ID, act });
+  });
+
+  test("performing runs the clock, performed holds it at time", () => {
+    expect(stageView(st({ phase: "PERFORMING", endsAtMs: 90_000 }))).toEqual({ kind: "clock", id: ID, act, endsAtMs: 90_000, running: true });
+    expect(stageView(st({ phase: "PERFORMED", endsAtMs: 90_000 }))).toEqual({ kind: "clock", id: ID, act, endsAtMs: 90_000, running: false });
+  });
+
+  test("voting shows the live count and never the average", () => {
+    const v = stageView(st({ phase: "VOTING", votes: 143, average: 8.2 }));
+    expect(v).toEqual({ kind: "voting", id: ID, act, votes: 143, paused: false });
+    expect(v).not.toHaveProperty("average");
+    const p = stageView(st({ phase: "VOTING_PAUSED", votes: 143, average: 8.2 }));
+    expect(p).toEqual({ kind: "voting", id: ID, act, votes: 143, paused: true });
+    expect(p).not.toHaveProperty("average");
+  });
+
+  test("closed shows the final count, still no average", () => {
+    const v = stageView(st({ phase: "VOTING_CLOSED", votes: 151, average: 8.2 }));
+    expect(v).toEqual({ kind: "closed", id: ID, act, votes: 151 });
+    expect(v).not.toHaveProperty("average");
+  });
+
+  test("reveal passes the server's comparison through untouched", () => {
+    const reveal = { self: 8, audience: 7.4, result: { kind: "diff" as const, diff: 0.6 } };
+    const v = stageView(st({ phase: "REVEAL", votes: 151, average: 7.4, reveal }));
+    expect(v).toEqual({ kind: "reveal", id: ID, act, ...reveal });
+    expect((v as Extract<StageView, { kind: "reveal" }>).result).toBe(reveal.result);
+  });
+
+  test("reveal with too few votes keeps the null audience", () => {
+    const reveal = { self: 8, audience: null, result: { kind: "insufficient" as const } };
+    expect(stageView(st({ phase: "REVEAL", votes: 3, reveal }))).toEqual({ kind: "reveal", id: ID, act, ...reveal });
+  });
+
+  test("a REVEAL poll without reveal data stays on the closed count", () => {
+    expect(stageView(st({ phase: "REVEAL", votes: 151, reveal: null }))).toEqual({ kind: "closed", id: ID, act, votes: 151 });
+  });
+
+  test("an act phase without a performance id waits rather than guessing", () => {
+    expect(stageView(st({ phase: "VOTING", performanceId: null }))).toEqual({ kind: "idle" });
+  });
+});
+
+describe("showsQr", () => {
+  const phases: [Phase, boolean][] = [
+    ["IDLE", true],
+    ["READY", true],
+    ["PERFORMING", false],
+    ["PERFORMED", false],
+    ["VOTING", true],
+    ["VOTING_PAUSED", true],
+    ["VOTING_CLOSED", false],
+    ["COMPLETED", true],
+  ];
+  test.each(phases)("%s shows the QR: %s", (phase, qr) => {
+    expect(showsQr(stageView(st({ phase, endsAtMs: 1 })))).toBe(qr);
+  });
+  test("REVEAL does not", () => {
+    expect(showsQr(stageView(st({ phase: "REVEAL", reveal: { self: 8, audience: 8, result: { kind: "match" } } })))).toBe(false);
+  });
+});
+
+describe("screenKey", () => {
+  test("the clock keeps one screen from performing to performed", () => {
+    const a = stageView(st({ phase: "PERFORMING", endsAtMs: 9 }));
+    const b = stageView(st({ phase: "PERFORMED", endsAtMs: 9 }));
+    expect(screenKey(a)).toBe(screenKey(b));
+  });
+  test("pausing does not swap the voting screen", () => {
+    expect(screenKey(stageView(st({ phase: "VOTING" })))).toBe(screenKey(stageView(st({ phase: "VOTING_PAUSED" }))));
+  });
+  test("a new act is a new screen", () => {
+    const other = "22222222-2222-4222-8222-222222222222";
+    expect(screenKey(stageView(st({ phase: "READY" })))).not.toBe(screenKey(stageView(st({ phase: "READY", performanceId: other }))));
+  });
+});

@@ -1,0 +1,62 @@
+import type { Comparison } from "./score";
+import type { PublicState } from "./types";
+
+/**
+ * What the stage display (/dgl/stage) shows, decided from the polled show
+ * state. Pure: no React, no DOM. The components only render it.
+ *
+ * The stage never carries the running average: voting shows the count only,
+ * and the audience score appears at REVEAL, from the server's own reveal
+ * (which already holds compareScores' result; nothing here recomputes it).
+ */
+
+export type StageAct = { contestant: string | null; prompt: string | null };
+
+export type StageView =
+  | { kind: "idle" }
+  | { kind: "completed" }
+  | { kind: "ready"; id: string; act: StageAct }
+  /** PERFORMING (running) and PERFORMED (time up) share one screen so the timer never remounts at 0. */
+  | { kind: "clock"; id: string; act: StageAct; endsAtMs: number | null; running: boolean }
+  | { kind: "voting"; id: string; act: StageAct; votes: number; paused: boolean }
+  | { kind: "closed"; id: string; act: StageAct; votes: number }
+  | { kind: "reveal"; id: string; act: StageAct; self: number; audience: number | null; result: Comparison };
+
+export function stageView(state: PublicState | null): StageView {
+  // Before the first poll (and on the server) there is nothing to show but the waiting screen.
+  if (!state) return { kind: "idle" };
+  const { phase, performanceId: id } = state;
+  if (phase === "COMPLETED") return { kind: "completed" };
+  if (phase === "IDLE" || !id) return { kind: "idle" };
+  const act: StageAct = { contestant: state.contestant, prompt: state.prompt };
+
+  switch (phase) {
+    case "READY":
+      return { kind: "ready", id, act };
+    case "PERFORMING":
+    case "PERFORMED":
+      return { kind: "clock", id, act, endsAtMs: state.endsAtMs, running: phase === "PERFORMING" };
+    case "VOTING":
+    case "VOTING_PAUSED":
+      return { kind: "voting", id, act, votes: state.votes, paused: phase === "VOTING_PAUSED" };
+    case "VOTING_CLOSED":
+      return { kind: "closed", id, act, votes: state.votes };
+    case "REVEAL":
+      if (!state.reveal) return { kind: "closed", id, act, votes: state.votes };
+      return { kind: "reveal", id, act, ...state.reveal };
+  }
+}
+
+/** The QR is up whenever someone could usefully join: waiting, up next, voting, between acts. */
+export function showsQr(v: StageView): boolean {
+  return v.kind === "idle" || v.kind === "ready" || v.kind === "voting" || v.kind === "completed";
+}
+
+/**
+ * Which screen the right-hand column is on, for cross-fades. Phases that only
+ * change a detail of one screen (the clock running out, voting pausing) keep
+ * the key; a new act always gets a new one.
+ */
+export function screenKey(v: StageView): string {
+  return v.kind === "idle" || v.kind === "completed" ? v.kind : `${v.kind}:${v.id}`;
+}

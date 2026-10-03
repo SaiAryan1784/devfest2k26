@@ -10,6 +10,8 @@ export const DGL = {
   performanceMs: 90_000,
   /** The last N seconds of the timer are made visually obvious. */
   finalCountdownS: 10,
+  /** The last N seconds turn the stage timer red. */
+  criticalCountdownS: 3,
   /** The audience average stays hidden below this many votes. */
   minVotes: 5,
   /**
@@ -19,6 +21,16 @@ export const DGL = {
    */
   showLiveAverage: "after-vote" as "after-vote" | "always",
   poll: { votingMs: 1500, idleMs: 3000, adminMs: 1000 },
+  stage: {
+    /** The projector hides the mouse pointer after this long without movement. */
+    cursorIdleMs: 3000,
+    /**
+     * QR module colours: dark modules on a near-white plate (--color-canvas on
+     * --color-paper). A projector greys out black, and some scanners do not
+     * read light-on-dark codes, so the stage never inverts the code.
+     */
+    qr: { dark: "#050505", light: "#f4f4f2" },
+  },
   limits: {
     votePerVoterPerMin: 6,
     votePerIpPerMin: 600,
@@ -61,6 +73,16 @@ export const DGL = {
     notEnoughVotes: "Not enough votes for an audience score",
     completed: "Next act coming up",
     connection: { live: "Live", reconnecting: "Reconnecting", offline: "Offline" },
+
+    // Stage display (/dgl/stage)
+    stageTitle: "DevFest Got Latent stage",
+    stageIdleBody: "Scan the code to score each act from your phone.",
+    scanToVote: "Scan to vote",
+    voteNow: "Vote now",
+    stageTime: "Time",
+    stageVotingOpen: "Voting open",
+    stageYou: "You",
+    outOf: "/ 10",
   },
   // Draft: organisers to confirm
   promptSeed: [
