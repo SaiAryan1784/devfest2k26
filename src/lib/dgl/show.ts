@@ -132,7 +132,7 @@ export async function readPublicState(db: Db, now: number): Promise<PublicState>
 
 export async function readAdminState(
   db: Db,
-  admin: { id: string; role: Role },
+  admin: Admin,
   now: number,
 ): Promise<AdminState> {
   await ensureSchema(db);
@@ -140,6 +140,7 @@ export async function readAdminState(
   const [r] = await db.query<AdminRow>(ADMIN_SQL, [full]);
   const state: AdminState = {
     ...toPublic(r, now),
+    me: { name: admin.name, role: admin.role },
     version: Number(r.version),
     serverNow: now,
     selfScore: num(r.self_score),

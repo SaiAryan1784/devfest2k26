@@ -77,6 +77,8 @@ export type PublicState = {
 export type ContestantStatus = "upcoming" | "current" | "done";
 
 export type AdminState = PublicState & {
+  /** The signed-in admin, so the console can show who it is and decide what to offer. */
+  me: { name: string; role: Role };
   version: number;
   serverNow: number;
   selfScore: number | null;

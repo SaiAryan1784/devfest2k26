@@ -39,7 +39,7 @@ beforeEach(async () => {
 });
 
 function admin(role: Role = "SUPER_ADMIN") {
-  return readAdminState(db, { id: sa.id, role }, T0);
+  return readAdminState(db, { id: sa.id, name: sa.name, role }, T0);
 }
 
 async function run(action: Action, now = T0) {
@@ -293,6 +293,13 @@ test("readAdminState gives admins and audit to SUPER_ADMIN only", async () => {
     expect("audit" in other).toBe(false);
     expect(other.contestant).toBe("Riya Sharma");
   }
+});
+
+test("admin state names the signed-in admin and their role, nothing more", async () => {
+  expect((await admin()).me).toEqual({ name: "Super", role: "SUPER_ADMIN" });
+  expect((await admin("HOST")).me).toEqual({ name: "Super", role: "HOST" });
+  const r = await run({ type: "selectContestant", contestantId: riya });
+  expect(r.state.me).toEqual({ name: "Super", role: "SUPER_ADMIN" });
 });
 
 test("upsertAdmin is not available yet", async () => {
