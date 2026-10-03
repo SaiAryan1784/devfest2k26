@@ -17,13 +17,16 @@ import {
   type Secondary,
   type SecondaryKey,
 } from "@/lib/dgl/admin-view";
+import { setupSections } from "@/lib/dgl/setup-view";
 import { useAdmin, type UseAdmin } from "@/lib/dgl/use-admin";
 import type { AdminState, ContestantStatus } from "@/lib/dgl/types";
 import { cn } from "@/lib/utils";
 import { ActClock } from "./ActClock";
+import { ARMED, BTN, CAREFUL, DANGER, GHOST, OFF, PRIMARY } from "./admin-styles";
 import { AdminLogin, INPUT } from "./AdminLogin";
 import { ConnectionPill } from "./ConnectionPill";
 import { ScoreGrid } from "./ScoreGrid";
+import { SetupPanel, ViewSwitch, type View } from "./SetupPanel";
 
 const c = DGL.copy.admin;
 const CONFIRM_MS = 3000;
@@ -31,22 +34,6 @@ const CONFIRM_MS = 3000;
 /** Secondary controls that are plain buttons (the rest are the prompt, own score and reassign panels). */
 type Simple = "pauseVoting" | "resumeVoting" | "stopVoting" | "reopenVoting";
 const SIMPLE = new Set<SecondaryKey>(["pauseVoting", "resumeVoting", "stopVoting", "reopenVoting"]);
-
-/*
- * Button styles. Plain elements (the shared Button uses `motion.*`, which
- * throws under the /dgl LazyMotion strict). `rounded-pill!` because the
- * global :focus-visible rule sets a 6 px radius and is unlayered. Disabled
- * buttons use `aria-disabled` (not `disabled`) so they stay focusable and a
- * screen reader reaches the reason linked by aria-describedby; their text is
- * --color-muted on near-black, well above AA.
- */
-const BTN = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill! font-medium transition-colors duration-200";
-const OFF = "cursor-not-allowed border border-hair bg-white/5 text-muted";
-const PRIMARY = "cursor-pointer bg-text text-[#0a0a0c] hover:bg-white";
-const DANGER = "cursor-pointer bg-red-lo text-white hover:brightness-110";
-const GHOST = "glass-pill cursor-pointer text-text hover:bg-white/10";
-const CAREFUL = "cursor-pointer border border-red-hi/60 bg-white/5 text-red-hi hover:bg-white/10";
-const ARMED = "ring-2 ring-yellow-hi ring-offset-2 ring-offset-canvas";
 
 /**
  * The settle guard, handed to every guarded control (the big button, the
@@ -143,59 +130,74 @@ function Console({ admin, state }: { admin: UseAdmin; state: AdminState }) {
 
   const armedLabel = pending ? armedName(pending.key) : null;
 
+  // Live and Setup stay mounted (the hidden one keeps its state, timers and
+  // in-flight guard); a role without setup always sees Live.
+  const [view, setView] = useState<View>("live");
+  const setup = setupSections(state).length > 0;
+  const shown: View = setup ? view : "live";
+
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 pb-56 pt-4 sm:px-6 lg:px-8 lg:pb-12">
+    <div className={cn("mx-auto flex w-full max-w-[1200px] flex-col px-4 pt-4 sm:px-6 lg:px-8 lg:pb-12", shown === "live" ? "pb-56" : "pb-12")}>
       <TopBar admin={admin} state={state} />
+      {setup && <ViewSwitch view={shown} onChange={setView} />}
 
-      {/* Screen reader only: the confirm prompt. Outcomes have their own visible region by the big button. */}
-      <p role="status" className="sr-only">
-        {armedLabel ? c.confirmAnnounce(armedLabel) : ""}
-      </p>
+      <div hidden={shown !== "live"}>
+        {/* Screen reader only: the confirm prompt. Outcomes have their own visible region by the big button. */}
+        <p role="status" className="sr-only">
+          {armedLabel ? c.confirmAnnounce(armedLabel) : ""}
+        </p>
 
-      {!primary && secondary.length === 0 ? (
-        <p className="mt-6 text-[17px] text-muted">{c.volunteer}</p>
-      ) : null}
+        {!primary && secondary.length === 0 ? (
+          <p className="mt-6 text-[17px] text-muted">{c.volunteer}</p>
+        ) : null}
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:gap-8">
-        <div className="flex min-w-0 flex-col gap-6">
-          <PrimaryBar
-            primary={primary}
-            state={state}
-            admin={admin}
-            gate={gate}
-            armed={primary ? armed(primary.labelKey) : false}
-            // Always guarded, Stop voting included: it is where a double tap lands.
-            onTap={() => primary && tap(primary.labelKey, primary.needsConfirm, () => void runPrimary(primary), true)}
-            offset={admin.offset}
-          />
-
-          <SecondaryRow
-            items={secondary.filter((s): s is Secondary & { key: Simple } => SIMPLE.has(s.key))}
-            busy={admin.busy}
-            gate={gate}
-            armed={armed}
-            onTap={(s) => tap(s.key, s.needsConfirm, () => void admin.act({ type: s.key }, v))}
-          />
-
-          {state.performanceId && state.phase !== "COMPLETED" && (
-            <PromptPanel state={state} admin={admin} gate={gate} draw={has("drawPrompt")} type={has("setPrompt")} />
-          )}
-
-          {has("setSelfScore") && <OwnScorePanel key={state.performanceId ?? "none"} state={state} admin={admin} gate={gate} />}
-
-          {has("reassignContestant") && (
-            <ReassignPanel
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] lg:gap-8">
+          <div className="flex min-w-0 flex-col gap-6">
+            <PrimaryBar
+              primary={primary}
               state={state}
-              item={has("reassignContestant")!}
-              busy={admin.busy}
-              armed={armed}
-              onReassign={(id) => tap(`reassign:${id}`, true, () => void admin.act({ type: "reassignContestant", contestantId: id }, v))}
+              admin={admin}
+              gate={gate}
+              armed={primary ? armed(primary.labelKey) : false}
+              // Always guarded, Stop voting included: it is where a double tap lands.
+              onTap={() => primary && tap(primary.labelKey, primary.needsConfirm, () => void runPrimary(primary), true)}
+              offset={admin.offset}
             />
-          )}
-        </div>
 
-        <Queue state={state} gate={gate} admin={admin} headingRef={queueHeading} />
+            <SecondaryRow
+              items={secondary.filter((s): s is Secondary & { key: Simple } => SIMPLE.has(s.key))}
+              busy={admin.busy}
+              gate={gate}
+              armed={armed}
+              onTap={(s) => tap(s.key, s.needsConfirm, () => void admin.act({ type: s.key }, v))}
+            />
+
+            {state.performanceId && state.phase !== "COMPLETED" && (
+              <PromptPanel state={state} admin={admin} gate={gate} draw={has("drawPrompt")} type={has("setPrompt")} />
+            )}
+
+            {has("setSelfScore") && <OwnScorePanel key={state.performanceId ?? "none"} state={state} admin={admin} gate={gate} />}
+
+            {has("reassignContestant") && (
+              <ReassignPanel
+                state={state}
+                item={has("reassignContestant")!}
+                busy={admin.busy}
+                armed={armed}
+                onReassign={(id) => tap(`reassign:${id}`, true, () => void admin.act({ type: "reassignContestant", contestantId: id }, v))}
+              />
+            )}
+          </div>
+
+          <Queue state={state} gate={gate} admin={admin} headingRef={queueHeading} />
+        </div>
       </div>
+
+      {setup && (
+        <div hidden={shown !== "setup"}>
+          <SetupPanel admin={admin} state={state} />
+        </div>
+      )}
     </div>
   );
 }
