@@ -68,3 +68,17 @@ export async function castVote(db: Db, v: CastVoteInput): Promise<VoteResult> {
   }
   return { status: "closed" };
 }
+
+/** The voter's own vote on the CURRENT performance, or null. Never creates a vote. */
+export async function myVote(
+  db: Db,
+  voterId: string,
+): Promise<{ performanceId: string; score: number } | null> {
+  const [row] = await db.query<{ performance_id: string; score: number }>(
+    `SELECT v.performance_id, v.score FROM dgl_show s
+     JOIN dgl_votes v ON v.performance_id = s.current_performance_id
+     WHERE s.id = 1 AND v.voter_id = $1::text`,
+    [voterId],
+  );
+  return row ? { performanceId: row.performance_id, score: Number(row.score) } : null;
+}
