@@ -10,6 +10,7 @@ import {
   queueAction,
   reassignTargets,
   secondaryActions,
+  tapAllowed,
   type DisabledReason,
   type Pending,
   type Primary,
@@ -48,6 +49,26 @@ const CAREFUL = "cursor-pointer border border-red-hi/60 bg-white/5 text-red-hi h
 const ARMED = "ring-2 ring-yellow-hi ring-offset-2 ring-offset-canvas";
 
 /**
+ * The settle guard, handed to every guarded control (the big button, the
+ * queue's Select, and every secondary action that does not need a second
+ * tap). For SETTLE_MS after the big button changes those controls render
+ * aria-disabled, described by the "Updating" line under the big button, and
+ * `canTap()` (checked at tap time, on the exact window) refuses them, so a
+ * double tap cannot run the next phase's action. Confirm-gated controls are
+ * not guarded: they already need a second, deliberate tap.
+ */
+type Gate = {
+  /** In flight or settling: draw guarded controls as off. */
+  blocked: boolean;
+  settling: boolean;
+  /** The id of the "Updating" line, for aria-describedby while settling. */
+  updatingId: string;
+  canTap(): boolean;
+  /** The version this render shows; every action carries it (see useAdmin.act). */
+  version: number;
+};
+
+/**
  * /dgl/admin: the sign-in form when signed out, the show console when signed
  * in. The first render (and the server's) is the neutral "Checking session"
  * screen: useAdmin starts in "checking" with no state and reads nothing from
@@ -81,6 +102,15 @@ function Console({ admin, state }: { admin: UseAdmin; state: AdminState }) {
   const secondary = secondaryActions(state, role);
   const has = (k: SecondaryKey) => secondary.find((s) => s.key === k) ?? null;
   const queueHeading = useRef<HTMLHeadingElement>(null);
+  const updatingId = useId();
+  const v = state.version;
+  const gate: Gate = {
+    blocked: admin.busy || admin.settling,
+    settling: admin.settling,
+    updatingId,
+    canTap: () => !admin.busy && tapAllowed(admin.changedAt, performance.now()),
+    version: v,
+  };
 
   // Confirm on a second tap. The key carries the show version, so a change by someone else disarms it.
   const [pending, setPending] = useState<Pending | null>(null);
@@ -91,8 +121,9 @@ function Console({ admin, state }: { admin: UseAdmin; state: AdminState }) {
   }, [pending]);
   const keyOf = (k: string) => `${k}@${state.version}`;
   const armed = (k: string) => pending?.key === keyOf(k);
-  const tap = (k: string, needsConfirm: boolean, run: () => void) => {
+  const tap = (k: string, needsConfirm: boolean, run: () => void, guarded = !needsConfirm) => {
     if (admin.busy) return;
+    if (guarded && !gate.canTap()) return;
     if (!needsConfirm) {
       setPending(null);
       run();
@@ -106,7 +137,7 @@ function Console({ admin, state }: { admin: UseAdmin; state: AdminState }) {
 
   const runPrimary = async (p: Primary) => {
     if (!p.action) return focusQueue();
-    const r = await admin.act(p.action);
+    const r = await admin.act(p.action, v);
     if (r?.ok && p.labelKey === "complete") focusQueue();
   };
 
@@ -131,23 +162,26 @@ function Console({ admin, state }: { admin: UseAdmin; state: AdminState }) {
             primary={primary}
             state={state}
             admin={admin}
+            gate={gate}
             armed={primary ? armed(primary.labelKey) : false}
-            onTap={() => primary && tap(primary.labelKey, primary.needsConfirm, () => void runPrimary(primary))}
+            // Always guarded, Stop voting included: it is where a double tap lands.
+            onTap={() => primary && tap(primary.labelKey, primary.needsConfirm, () => void runPrimary(primary), true)}
             offset={admin.offset}
           />
 
           <SecondaryRow
             items={secondary.filter((s): s is Secondary & { key: Simple } => SIMPLE.has(s.key))}
             busy={admin.busy}
+            gate={gate}
             armed={armed}
-            onTap={(s) => tap(s.key, s.needsConfirm, () => void admin.act({ type: s.key }))}
+            onTap={(s) => tap(s.key, s.needsConfirm, () => void admin.act({ type: s.key }, v))}
           />
 
           {state.performanceId && state.phase !== "COMPLETED" && (
-            <PromptPanel state={state} admin={admin} draw={has("drawPrompt")} type={has("setPrompt")} />
+            <PromptPanel state={state} admin={admin} gate={gate} draw={has("drawPrompt")} type={has("setPrompt")} />
           )}
 
-          {has("setSelfScore") && <OwnScorePanel key={state.performanceId ?? "none"} state={state} admin={admin} />}
+          {has("setSelfScore") && <OwnScorePanel key={state.performanceId ?? "none"} state={state} admin={admin} gate={gate} />}
 
           {has("reassignContestant") && (
             <ReassignPanel
@@ -155,12 +189,12 @@ function Console({ admin, state }: { admin: UseAdmin; state: AdminState }) {
               item={has("reassignContestant")!}
               busy={admin.busy}
               armed={armed}
-              onReassign={(id) => tap(`reassign:${id}`, true, () => void admin.act({ type: "reassignContestant", contestantId: id }))}
+              onReassign={(id) => tap(`reassign:${id}`, true, () => void admin.act({ type: "reassignContestant", contestantId: id }, v))}
             />
           )}
         </div>
 
-        <Queue state={state} admin={admin} headingRef={queueHeading} />
+        <Queue state={state} gate={gate} admin={admin} headingRef={queueHeading} />
       </div>
     </div>
   );
@@ -225,6 +259,7 @@ type PrimaryBarProps = {
   primary: Primary | null;
   state: AdminState;
   admin: UseAdmin;
+  gate: Gate;
   armed: boolean;
   onTap(): void;
   offset: number;
@@ -236,9 +271,9 @@ type PrimaryBarProps = {
  * always under the thumb, whatever is scrolled into view); in the left
  * column at lg and up.
  */
-function PrimaryBar({ primary, state, admin, armed, onTap, offset }: PrimaryBarProps) {
-  const reasonId = useId();
-  const off = !primary || primary.disabled || admin.busy;
+function PrimaryBar({ primary, state, admin, gate, armed, onTap, offset }: PrimaryBarProps) {
+  const off = !primary || primary.disabled || gate.blocked;
+  const reason = gate.settling ? c.updating : primary?.disabledReason ? reasonText(primary.disabledReason) : "";
   const stale = admin.error === c.outcome.stale;
 
   return (
@@ -268,7 +303,7 @@ function PrimaryBar({ primary, state, admin, armed, onTap, offset }: PrimaryBarP
             type="button"
             onClick={() => !off && onTap()}
             aria-disabled={off || undefined}
-            aria-describedby={primary.disabledReason ? reasonId : undefined}
+            aria-describedby={reason ? gate.updatingId : undefined}
             className={cn(
               BTN,
               "min-h-16 w-full px-6 text-[19px] font-semibold",
@@ -278,11 +313,10 @@ function PrimaryBar({ primary, state, admin, armed, onTap, offset }: PrimaryBarP
           >
             {armed ? c.tapAgain : c.primary[primary.labelKey]}
           </button>
-          {primary.disabledReason && (
-            <p id={reasonId} className="text-[15px] text-muted">
-              {reasonText(primary.disabledReason)}
-            </p>
-          )}
+          {/* Always present and one line tall, so "Updating" coming and going never moves the layout. */}
+          <p id={gate.updatingId} className="min-h-[1.5em] text-[15px] leading-[1.5] text-muted">
+            {reason}
+          </p>
         </>
       )}
     </div>
@@ -294,25 +328,31 @@ const reasonText = (r: DisabledReason) => c.reason[r];
 type SecondaryRowProps = {
   items: (Secondary & { key: Simple })[];
   busy: boolean;
+  gate: Gate;
   armed(key: string): boolean;
   onTap(s: Secondary & { key: Simple }): void;
 };
 
-function SecondaryRow({ items, busy, armed, onTap }: SecondaryRowProps) {
+function SecondaryRow({ items, busy, gate, armed, onTap }: SecondaryRowProps) {
   if (items.length === 0) return null;
   return (
     <section aria-label={c.secondaryTitle} className="flex flex-wrap gap-3">
-      {items.map((s) => (
-        <button
-          key={s.key}
-          type="button"
-          onClick={() => !busy && onTap(s)}
-          aria-disabled={busy || undefined}
-          className={cn(BTN, "h-12 px-5 text-[15px]", busy ? OFF : s.needsConfirm ? CAREFUL : GHOST, armed(s.key) && ARMED)}
-        >
-          {armed(s.key) ? c.tapAgain : c.secondary[s.key]}
-        </button>
-      ))}
+      {items.map((s) => {
+        const settling = !s.needsConfirm && gate.settling;
+        const off = busy || settling;
+        return (
+          <button
+            key={s.key}
+            type="button"
+            onClick={() => !off && onTap(s)}
+            aria-disabled={off || undefined}
+            aria-describedby={settling ? gate.updatingId : undefined}
+            className={cn(BTN, "h-12 px-5 text-[15px]", off ? OFF : s.needsConfirm ? CAREFUL : GHOST, armed(s.key) && ARMED)}
+          >
+            {armed(s.key) ? c.tapAgain : c.secondary[s.key]}
+          </button>
+        );
+      })}
     </section>
   );
 }
@@ -328,22 +368,22 @@ function Panel({ title, titleId, children }: { title: string; titleId?: string; 
   );
 }
 
-type PromptPanelProps = { state: AdminState; admin: UseAdmin; draw: Secondary | null; type: Secondary | null };
+type PromptPanelProps = { state: AdminState; admin: UseAdmin; gate: Gate; draw: Secondary | null; type: Secondary | null };
 
 /** The act's prompt: what is set now, "Draw prompt", and a field to type one from the spinwheel. */
-function PromptPanel({ state, admin, draw, type }: PromptPanelProps) {
+function PromptPanel({ state, admin, gate, draw, type }: PromptPanelProps) {
   const ids = { title: useId(), input: useId(), error: useId(), hint: useId(), draw: useId() };
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const busy = admin.busy;
+  const busy = gate.blocked;
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (busy) return;
+    if (!gate.canTap()) return;
     const t = text.trim();
     if (!t) return setError(c.prompt.empty);
     setError(null);
-    const r = await admin.act({ type: "setPrompt", text: t });
+    const r = await admin.act({ type: "setPrompt", text: t }, gate.version);
     if (r?.ok) setText("");
     else if (r && !r.ok && r.code === "invalid") setError(c.outcome.invalid);
   };
@@ -356,9 +396,9 @@ function PromptPanel({ state, admin, draw, type }: PromptPanelProps) {
         <div className="flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => !drawOff && void admin.act({ type: "drawPrompt" })}
+            onClick={() => !drawOff && gate.canTap() && void admin.act({ type: "drawPrompt" }, gate.version)}
             aria-disabled={drawOff || undefined}
-            aria-describedby={draw.disabledReason ? ids.draw : undefined}
+            aria-describedby={draw.disabledReason ? ids.draw : gate.settling ? gate.updatingId : undefined}
             className={cn(BTN, "h-12 self-start px-5 text-[15px]", drawOff ? OFF : GHOST)}
           >
             {c.secondary.drawPrompt}
@@ -390,7 +430,7 @@ function PromptPanel({ state, admin, draw, type }: PromptPanelProps) {
               aria-describedby={`${ids.hint} ${ids.error}`}
               className={cn(INPUT, "min-w-0 flex-1")}
             />
-            <button type="submit" aria-disabled={busy || undefined} className={cn(BTN, "h-12 shrink-0 px-5 text-[15px]", busy ? OFF : GHOST)}>
+            <button type="submit" aria-disabled={busy || undefined} aria-describedby={gate.settling ? gate.updatingId : undefined} className={cn(BTN, "h-12 shrink-0 px-5 text-[15px]", busy ? OFF : GHOST)}>
               {c.secondary.setPrompt}
             </button>
           </div>
@@ -410,15 +450,15 @@ function PromptPanel({ state, admin, draw, type }: PromptPanelProps) {
  * The contestant's own predicted score, 1 to 10: pick on the grid, then save.
  * Keyed by performance by the caller, so a new act starts unpicked.
  */
-function OwnScorePanel({ state, admin }: { state: AdminState; admin: UseAdmin }) {
+function OwnScorePanel({ state, admin, gate }: { state: AdminState; admin: UseAdmin; gate: Gate }) {
   const titleId = useId();
   const [pick, setPick] = useState<number | null>(null);
   const shown = pick ?? state.selfScore;
-  const canSave = pick !== null && pick !== state.selfScore && !admin.busy;
+  const canSave = pick !== null && pick !== state.selfScore && !gate.blocked;
 
   const save = async () => {
-    if (!canSave || pick === null) return;
-    const r = await admin.act({ type: "setSelfScore", score: pick });
+    if (!canSave || pick === null || !gate.canTap()) return;
+    const r = await admin.act({ type: "setSelfScore", score: pick }, gate.version);
     if (r?.ok) setPick(null);
   };
 
@@ -433,6 +473,7 @@ function OwnScorePanel({ state, admin }: { state: AdminState; admin: UseAdmin })
         type="button"
         onClick={() => void save()}
         aria-disabled={!canSave || undefined}
+        aria-describedby={gate.settling ? gate.updatingId : undefined}
         className={cn(BTN, "h-12 w-full px-5 text-[15px] sm:w-auto sm:self-start", canSave ? PRIMARY : OFF)}
       >
         {pick === null || pick === state.selfScore ? c.ownScore.pick : c.ownScore.save(pick)}
@@ -496,10 +537,10 @@ const GROUPS: { status: ContestantStatus; label: string }[] = [
   { status: "done", label: c.queue.done },
 ];
 
-type QueueProps = { state: AdminState; admin: UseAdmin; headingRef: React.RefObject<HTMLHeadingElement | null> };
+type QueueProps = { state: AdminState; admin: UseAdmin; gate: Gate; headingRef: React.RefObject<HTMLHeadingElement | null> };
 
 /** Every contestant, grouped on now / up next / done, with "Select" where selecting is possible. */
-function Queue({ state, admin, headingRef }: QueueProps) {
+function Queue({ state, admin, gate, headingRef }: QueueProps) {
   const role = state.me.role;
   return (
     <section aria-labelledby="dgl-queue" className="glass flex min-w-0 flex-col gap-5 self-start rounded-panel p-5 lg:sticky lg:top-6">
@@ -529,9 +570,10 @@ function Queue({ state, admin, headingRef }: QueueProps) {
                         {action === "select" && (
                           <button
                             type="button"
-                            onClick={() => !admin.busy && void admin.act({ type: "selectContestant", contestantId: k.id })}
-                            aria-disabled={admin.busy || undefined}
-                            className={cn(BTN, "h-11 shrink-0 px-4 text-[15px]", admin.busy ? OFF : GHOST)}
+                            onClick={() => !gate.blocked && gate.canTap() && void admin.act({ type: "selectContestant", contestantId: k.id }, gate.version)}
+                            aria-disabled={gate.blocked || undefined}
+                            aria-describedby={gate.settling ? gate.updatingId : undefined}
+                            className={cn(BTN, "h-11 shrink-0 px-4 text-[15px]", gate.blocked ? OFF : GHOST)}
                           >
                             {c.queue.select}
                             <span className="sr-only"> {k.name}</span>

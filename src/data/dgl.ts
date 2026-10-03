@@ -150,6 +150,8 @@ export const DGL = {
         setSelfScore: "Save own score",
       },
       tapAgain: "Tap again to confirm",
+      /** Under the big button for a moment after it changes, while taps are ignored. */
+      updating: "Updating",
       confirmAnnounce: (label: string) => `${label}: tap again within 3 seconds to confirm.`,
       reason: {
         needsPrompt: "Add a prompt first",

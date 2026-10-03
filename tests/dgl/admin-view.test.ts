@@ -7,6 +7,9 @@ import {
   queueAction,
   reassignTargets,
   secondaryActions,
+  settleKey,
+  SETTLE_MS,
+  tapAllowed,
   type SecondaryKey,
 } from "@/lib/dgl/admin-view";
 import type { ActionResult, AdminState, Phase, Role } from "@/lib/dgl/types";
@@ -276,5 +279,46 @@ describe("outcomeOf", () => {
 
   test("no result is a network failure", () => {
     expect(outcomeOf(null)).toBe("network");
+  });
+});
+
+describe("tapAllowed: the settle guard after the big button changes", () => {
+  test("the window is 800 ms", () => {
+    expect(SETTLE_MS).toBe(800);
+  });
+
+  test("nothing has changed yet: allowed", () => {
+    expect(tapAllowed(null, 5000)).toBe(true);
+  });
+
+  test("blocked from the change up to 799 ms, allowed from 800 ms", () => {
+    expect(tapAllowed(5000, 5000)).toBe(false);
+    expect(tapAllowed(5000, 5799)).toBe(false);
+    expect(tapAllowed(5000, 5800)).toBe(true);
+    expect(tapAllowed(5000, 60_000)).toBe(true);
+  });
+
+  test("a change stamped in the future (clock stepped back) is not allowed", () => {
+    expect(tapAllowed(5000, 4999)).toBe(false);
+  });
+
+  test("the window is adjustable", () => {
+    expect(tapAllowed(0, 199, 200)).toBe(false);
+    expect(tapAllowed(0, 200, 200)).toBe(true);
+  });
+});
+
+describe("settleKey: what counts as the big button changing", () => {
+  const ready = inPhase("READY");
+
+  test("a new phase, act or button changes it", () => {
+    expect(settleKey(inPhase("PERFORMING"))).not.toBe(settleKey(ready));
+    expect(settleKey(inPhase("READY", { performanceId: "66666666-6666-4666-8666-666666666666" }))).not.toBe(settleKey(ready));
+    expect(settleKey(inPhase("REVEAL"))).not.toBe(settleKey(inPhase("COMPLETED")));
+    expect(settleKey(inPhase("READY", { me: { name: "Sai", role: "VOLUNTEER" } }))).not.toBe(settleKey(ready));
+  });
+
+  test("votes, version, prompt and own score do not (the button keeps its label)", () => {
+    expect(settleKey(inPhase("READY", { votes: 40, version: 99, prompt: null, selfScore: 6 }))).toBe(settleKey(ready));
   });
 });

@@ -178,3 +178,31 @@ export function outcomeOf(r: ActionResult | null): Outcome | null {
   if (!r) return "network";
   return r.ok ? null : r.code;
 }
+
+/**
+ * How long guarded controls ignore taps after the big button changed (a new
+ * phase, act or label). A double tap whose second tap lands after the round
+ * trip would otherwise run the NEXT phase's action: "Start performance" then
+ * "Start voting", "Reveal" then "Next contestant".
+ */
+export const SETTLE_MS = 800;
+
+/**
+ * Whether a tap may act now, `changedAt` being when the big button last
+ * changed (null: it has not). Both times come from one monotonic clock
+ * (performance.now() in the console); a negative gap is treated as not settled.
+ */
+export function tapAllowed(changedAt: number | null, now: number, settleMs: number = SETTLE_MS): boolean {
+  if (changedAt === null) return true;
+  return now - changedAt >= settleMs;
+}
+
+/**
+ * What the big button depends on: phase, act and the button itself (for the
+ * signed-in role). When this changes between two adopted states, the console
+ * settles. Counts, the version, the prompt and the own score leave it alone.
+ */
+export function settleKey(s: AdminState): string {
+  const p = primaryAction(s, s.me.role);
+  return [s.phase, s.performanceId ?? "", s.me.role, p ? `${p.labelKey}:${p.action?.type ?? ""}` : ""].join("|");
+}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { DGL } from "@/data/dgl";
-import { outcomeOf } from "./admin-view";
+import { outcomeOf, settleKey, SETTLE_MS } from "./admin-view";
 import { estimateOffset, pickOffset } from "./clock";
 import { timeoutSignal } from "./client-http";
 import type { Action, ActionResult, AdminState } from "./types";
@@ -14,8 +14,12 @@ export type Session = "checking" | "signedIn" | "signedOut";
 export type UseAdmin = {
   /** The last good admin state (kept through network failures), null when signed out. */
   state: AdminState | null;
-  /** Sends `a` with the version last seen. Null when nothing was sent or no answer came back. */
-  act(a: Action): Promise<ActionResult | null>;
+  /**
+   * Sends `a` with `expectedVersion` (the version of the state the control
+   * was rendered from) or, without it, the latest version seen. Null when
+   * nothing was sent or no answer came back.
+   */
+  act(a: Action, expectedVersion?: number): Promise<ActionResult | null>;
   /** The note for the last action or sign out that did not simply work (stale, refused, network). */
   error: string | null;
   session: Session;
@@ -24,6 +28,10 @@ export type UseAdmin = {
   offset: number;
   /** True while an action is in flight. */
   busy: boolean;
+  /** performance.now() when an adopted state last changed the big button (settleKey), else null. */
+  changedAt: number | null;
+  /** True for SETTLE_MS after `changedAt`: guarded controls render as "Updating". */
+  settling: boolean;
   /** Re-check the session now (after signing in). */
   refresh(): void;
   signOut(): Promise<void>;
@@ -92,11 +100,13 @@ function stateKey(s: AdminState): string {
  * - One timer chain (setTimeout, never setInterval). It does not run while
  *   the tab is hidden and fires straight away on becoming visible or online.
  *   Network trouble keeps the last good state and shows in `connection`.
- * - `act` sends the version it last saw and adopts the state in the answer
- *   at once. `stale` means someone else changed the show first: the fresh
+ * - `act` sends the version the control was rendered from (or, without
+ *   one, the latest seen) and adopts the state in the answer at once. `stale` means someone else changed the show first: the fresh
  *   state is adopted and the note says so; the action is NOT retried. A poll
  *   that left before an action's answer arrived is ignored, so an older read
  *   never overwrites a newer result. An in-flight ref blocks double submits.
+ * - When an adopted state changes the big button (settleKey), `changedAt`
+ *   and `settling` let the console ignore guarded taps for SETTLE_MS.
  * - The clock offset comes from each poll's round trip (lowest of the last
  *   five), ignoring changes under 25 ms.
  */
@@ -109,6 +119,9 @@ export function useAdmin(): UseAdmin {
   const [busy, setBusy] = useState(false);
   // Bumped to restart polling (sign in, sign out); the old loop's answers are dropped.
   const [epoch, setEpoch] = useState(0);
+  const [changedAt, setChangedAt] = useState<number | null>(null);
+  const [settling, setSettling] = useState(false);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const online = useSyncExternalStore(subscribeOnline, isOnline, serverOnline);
 
   const latest = useRef<AdminState | null>(null);
@@ -121,12 +134,28 @@ export function useAdmin(): UseAdmin {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      clearTimeout(settleTimer.current);
     };
   }, []);
 
-  /** The one place a new state lands: the ref always, render state only when something besides serverNow changed. */
+  /**
+   * The one place a new state lands: the ref always, render state only when
+   * something besides serverNow changed. When the big button changes (from an
+   * action's answer or another admin's change seen in a poll) guarded
+   * controls settle for SETTLE_MS. Not on the first state after loading or
+   * signing in: nobody is mid-tap then.
+   */
   const adopt = useCallback((next: AdminState | null) => {
+    const prev = latest.current;
     latest.current = next;
+    if (prev && next && settleKey(prev) !== settleKey(next)) {
+      setChangedAt(performance.now());
+      setSettling(true);
+      clearTimeout(settleTimer.current);
+      settleTimer.current = setTimeout(() => {
+        if (mounted.current) setSettling(false);
+      }, SETTLE_MS);
+    }
     const key = next ? stateKey(next) : "";
     if (key !== lastKey.current) {
       lastKey.current = key;
@@ -205,7 +234,7 @@ export function useAdmin(): UseAdmin {
   }, [epoch, adopt]);
 
   const act = useCallback(
-    async (action: Action): Promise<ActionResult | null> => {
+    async (action: Action, expectedVersion?: number): Promise<ActionResult | null> => {
       const cur = latest.current;
       if (inFlight.current || !cur) return null;
       inFlight.current = true;
@@ -215,7 +244,8 @@ export function useAdmin(): UseAdmin {
         const res = await fetch("/api/dgl/admin/action", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action, version: cur.version }),
+          // The rendered version: a button re-labelled since it was drawn comes back stale, not as the new action.
+          body: JSON.stringify({ action, version: expectedVersion ?? cur.version }),
           cache: "no-store",
           signal: timeoutSignal(),
         });
@@ -270,5 +300,5 @@ export function useAdmin(): UseAdmin {
   }, [adopt]);
 
   const connection: Connection = !online ? "offline" : failing ? "reconnecting" : "live";
-  return { state, act, error, session, connection, offset, busy, refresh, signOut };
+  return { state, act, error, session, connection, offset, busy, changedAt, settling, refresh, signOut };
 }
