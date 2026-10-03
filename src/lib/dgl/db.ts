@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import { SCHEMA } from "./schema";
+import { SCHEMA, SCHEMA_PROBE } from "./schema";
 
 /** The one database surface DGL code uses: parameterised text in, rows out. */
 export interface Db {
@@ -29,13 +29,20 @@ export function neonDb(): Db | null {
 const ready = new WeakMap<Db, Promise<void>>();
 
 /**
- * Creates the tables on first use. Memoised per Db instance; a failed attempt
- * is forgotten so the next call retries.
+ * Creates the tables on first use. One lock-free probe first (SCHEMA_PROBE):
+ * when every table and index already exists, as on every cold instance once
+ * the show is set up, that one read is all it costs, and no DDL lock queues
+ * behind vote inserts while a burst scales out new instances. Otherwise the
+ * DDL runs in order (each statement is idempotent, so a partial schema is
+ * repaired). Memoised per Db instance; a failed attempt is forgotten so the
+ * next call retries.
  */
 export function ensureSchema(db: Db): Promise<void> {
   let p = ready.get(db);
   if (!p) {
     p = (async () => {
+      const [probe] = await db.query<{ ok: boolean | null }>(SCHEMA_PROBE);
+      if (probe?.ok === true) return;
       for (const statement of SCHEMA) await db.query(statement);
     })().catch((err) => {
       ready.delete(db);

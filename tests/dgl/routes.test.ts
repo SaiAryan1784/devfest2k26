@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { DGL } from "@/data/dgl";
 import { hashPasscode, signSession } from "@/lib/dgl/auth";
 import type { Db } from "@/lib/dgl/db";
+import { ipLimiter } from "@/lib/dgl/route";
 import { applyAction, readAdminState } from "@/lib/dgl/show";
 import type { Action, Role } from "@/lib/dgl/types";
 import { createTestDb } from "./pg";
@@ -250,6 +251,17 @@ describe("vote route", () => {
     expect(codes.at(-1)).toBe(429);
     const last = await vote(pid, 5, cookie);
     expect(await last.json()).toEqual({ status: "rate_limited" });
+  });
+
+  test("one IP (a hall behind venue NAT) can cast votePerIpPerMin votes a minute, and that is at least 5000", () => {
+    expect(DGL.limits.votePerIpPerMin).toBeGreaterThanOrEqual(5000);
+    const key = `ip:hall-${crypto.randomUUID()}`;
+    const t = 1_000_000;
+    let allowed = 0;
+    for (let i = 0; i < DGL.limits.votePerIpPerMin; i++) if (ipLimiter.hit(key, t + i)) allowed++;
+    expect(allowed).toBe(DGL.limits.votePerIpPerMin);
+    expect(ipLimiter.hit(key, t + 59_000)).toBe(false);
+    expect(ipLimiter.hit(key, t + 60_000)).toBe(true);
   });
 
   test("503 when the database is not configured", async () => {

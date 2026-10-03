@@ -33,7 +33,12 @@ export const DGL = {
   },
   limits: {
     votePerVoterPerMin: 6,
-    votePerIpPerMin: 600,
+    /**
+     * A whole hall can sit behind one venue or carrier address, so this is
+     * high on purpose: the burst flag records the signal and the
+     * (performance, voter) unique key is the real guard.
+     */
+    votePerIpPerMin: 5000,
     burstWindowS: 10,
     burstFlagAt: 25,
     loginFailures: 5,

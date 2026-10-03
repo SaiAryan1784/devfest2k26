@@ -10,7 +10,8 @@
 //
 // One IP casting many votes WILL be flagged by the burst rule (25 or more in 10 s). That is
 // expected and the admin console shows the flagged count. 429 answers are NOT expected: each
-// fake voter casts exactly once, so a 429 means the per-IP limiter or a bug.
+// fake voter casts exactly once, so a 429 means the per-IP limiter (DGL.limits.votePerIpPerMin,
+// 5000 a minute per server instance) or a bug.
 // Output never includes cookies, tokens or environment values.
 
 import { randomUUID } from "node:crypto";
