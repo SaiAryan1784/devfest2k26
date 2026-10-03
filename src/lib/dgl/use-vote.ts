@@ -6,11 +6,13 @@ import type { PublicState } from "./types";
 import {
   KEY_PREFIX,
   applyVoteResult,
+  canSubmit,
   loadVote,
   mergeVotes,
   parseVote,
   queuedVotes,
   saveVote,
+  shouldRetry,
   toVoteResult,
   type LocalVote,
 } from "./vote-queue";
@@ -89,18 +91,16 @@ export function useVote(state: PublicState | null): { local: LocalVote | null; s
   );
 
   /**
-   * Send what is queued. `force` ignores the pause back-off: a vote the server
-   * answered "paused" is not re-sent on the timer until voting is open again
-   * (the per-voter limit is 6 a minute, and a paused show would burn it).
+   * Send what is queued. `force` (the network came back, voting opened) skips
+   * the checks in `shouldRetry`, which holds back a paused vote while its
+   * performance is still paused.
    */
   const flush = useCallback(
     (force: boolean) => {
-      if (navigator.onLine === false && !force) return;
+      const online = navigator.onLine !== false;
       for (const v of Object.values(mem.current)) {
         if (v.state !== "queued") continue;
-        const waitingOnPause =
-          v.reason === "paused" && v.performanceId === currentId.current && currentPhase.current !== "VOTING";
-        if (waitingOnPause && !force) continue;
+        if (!force && !shouldRetry(v, currentId.current, currentPhase.current, online)) continue;
         void send(v);
       }
     },
@@ -190,8 +190,9 @@ export function useVote(state: PublicState | null): { local: LocalVote | null; s
     (score: number) => {
       const id = currentId.current;
       if (!id || !Number.isInteger(score) || score < 1 || score > 10) return;
-      // One vote per performance, and none while one is already on its way.
-      if (mem.current[id] || sending.current.has(id)) return;
+      // One vote per performance (a rejected one may be replaced once voting is open again), and none
+      // while one is already on its way.
+      if (!canSubmit(mem.current[id] ?? null, currentPhase.current) || sending.current.has(id)) return;
       const v: LocalVote = { performanceId: id, score, state: "queued", at: Date.now() };
       commit(v, true);
       void send(v);

@@ -1,3 +1,4 @@
+import type { Phase } from "./types";
 import type { VoteResult } from "./votes";
 
 /**
@@ -144,4 +145,28 @@ export async function toVoteResult(res: Response | null): Promise<VoteOutcome> {
   if (b.status === "paused") return { status: "paused" };
   if (b.status === "closed") return { status: "closed" };
   return { status: "network" };
+}
+
+/**
+ * Whether the retry timer (or a tab coming back) should send this vote now.
+ * Only a queued vote is ever sent, and never offline. A vote the server
+ * answered "paused" backs off while its own performance is VOTING_PAUSED (the
+ * per-voter limit is 6 a minute, and a long pause would burn it); in every
+ * other phase it is sent, so a vote that can no longer count gets the
+ * server's "closed" and becomes rejected instead of sitting as "paused".
+ * Resuming is covered separately: the phase turning VOTING flushes by force.
+ */
+export function shouldRetry(v: LocalVote, currentPerformanceId: string | null, phase: Phase | null, online: boolean): boolean {
+  if (v.state !== "queued" || !online) return false;
+  return !(v.reason === "paused" && v.performanceId === currentPerformanceId && phase === "VOTING_PAUSED");
+}
+
+/**
+ * Whether a tap on the score may start a new vote: only while voting is open,
+ * and only with no vote yet or a rejected one (voting closed on it, then was
+ * reopened). A queued or recorded vote always blocks.
+ */
+export function canSubmit(existing: LocalVote | null, phase: Phase | null): boolean {
+  if (phase !== "VOTING") return false;
+  return existing === null || existing.state === "rejected";
 }

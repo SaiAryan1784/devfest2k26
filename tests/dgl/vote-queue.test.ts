@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { applyVoteResult, loadVote, mergeVotes, parseVote, queuedVotes, saveVote, toVoteResult, type LocalVote } from "@/lib/dgl/vote-queue";
+import type { Phase } from "@/lib/dgl/types";
+import { applyVoteResult, canSubmit, loadVote, mergeVotes, parseVote, queuedVotes, saveVote, shouldRetry, toVoteResult, type LocalVote } from "@/lib/dgl/vote-queue";
 
 const q = (score: number): LocalVote => ({ performanceId: "p", score, state: "queued", at: 1 });
 
@@ -124,4 +125,50 @@ test("mergeVotes lets a decided vote win and never replaces this tab's decided v
   expect(mergeVotes(rec, q(3))).toEqual(rec);
   expect(mergeVotes(rec, rej)).toEqual(rec);
   expect(mergeVotes(q(3), q(5))).toEqual(q(3));
+});
+
+const paused = (id = "p"): LocalVote => ({ performanceId: id, score: 3, state: "queued", reason: "paused", at: 1 });
+const ALL_PHASES: Phase[] = ["IDLE", "READY", "PERFORMING", "PERFORMED", "VOTING", "VOTING_PAUSED", "VOTING_CLOSED", "REVEAL", "COMPLETED"];
+
+test("shouldRetry backs off only while the current performance is VOTING_PAUSED", () => {
+  expect(shouldRetry(paused(), "p", "VOTING_PAUSED", true)).toBe(false);
+  for (const ph of ALL_PHASES.filter((x) => x !== "VOTING_PAUSED")) expect(shouldRetry(paused(), "p", ph, true)).toBe(true);
+  expect(shouldRetry(paused(), "p", null, true)).toBe(true);
+});
+
+test("shouldRetry retries a paused vote for an old performance in any phase", () => {
+  for (const ph of ALL_PHASES) expect(shouldRetry(paused("old"), "p", ph, true)).toBe(true);
+  expect(shouldRetry(paused("old"), null, "VOTING_PAUSED", true)).toBe(true);
+});
+
+test("shouldRetry retries a plain queued vote (network failure) in any phase", () => {
+  for (const ph of ALL_PHASES) expect(shouldRetry(q(3), "p", ph, true)).toBe(true);
+});
+
+test("shouldRetry never retries a decided vote", () => {
+  const rec: LocalVote = { performanceId: "p", score: 3, state: "recorded", at: 1 };
+  const rej: LocalVote = { performanceId: "p", score: 3, state: "rejected", reason: "closed", at: 1 };
+  for (const ph of ALL_PHASES) {
+    expect(shouldRetry(rec, "p", ph, true)).toBe(false);
+    expect(shouldRetry(rej, "p", ph, true)).toBe(false);
+  }
+});
+
+test("shouldRetry never retries offline", () => {
+  expect(shouldRetry(q(3), "p", "VOTING", false)).toBe(false);
+  expect(shouldRetry(paused("old"), "p", "VOTING", false)).toBe(false);
+});
+
+test("canSubmit allows a first vote or a replacement of a rejected one, only while VOTING", () => {
+  const rec: LocalVote = { performanceId: "p", score: 3, state: "recorded", at: 1 };
+  const rej: LocalVote = { performanceId: "p", score: 3, state: "rejected", reason: "closed", at: 1 };
+  expect(canSubmit(null, "VOTING")).toBe(true);
+  expect(canSubmit(rej, "VOTING")).toBe(true);
+  expect(canSubmit(rej, "VOTING_CLOSED")).toBe(false);
+  expect(canSubmit(q(3), "VOTING")).toBe(false);
+  expect(canSubmit(paused(), "VOTING")).toBe(false);
+  expect(canSubmit(rec, "VOTING")).toBe(false);
+  expect(canSubmit(null, "VOTING_PAUSED")).toBe(false);
+  expect(canSubmit(null, null)).toBe(false);
+  for (const ph of ALL_PHASES.filter((x) => x !== "VOTING")) expect(canSubmit(null, ph)).toBe(false);
 });
