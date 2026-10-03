@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DglMotion } from "@/components/dgl/DglMotion";
+import { RegisterSw } from "@/components/dgl/RegisterSw";
 import { DGL } from "@/data/dgl";
 import { EVENT } from "@/data/event";
 
@@ -20,5 +21,10 @@ export const metadata: Metadata = {
 };
 
 export default function DglLayout({ children }: LayoutProps<"/dgl">) {
-  return <DglMotion>{children}</DglMotion>;
+  return (
+    <DglMotion>
+      <RegisterSw />
+      {children}
+    </DglMotion>
+  );
 }
