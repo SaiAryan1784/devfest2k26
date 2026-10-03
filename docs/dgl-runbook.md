@@ -70,6 +70,7 @@ To judge abuse, look at the vote count against the room size (a count well above
 - The average is hidden until 5 votes.
 - The public state can be up to 2 s old (the CDN caches it for 1 s). The timer is computed from the server's `endsAtMs` plus a measured clock offset, so phones and the stage agree within about a second.
 - One vote per browser per act, tied to a cookie. Clearing cookies allows a second vote, which is why one-address bursts are flagged. Rate limits live in each server instance's memory and are a speed bump, not a global limit.
+- A vote that arrives without the voter cookie is never counted: the server sets the cookie and asks the phone to send it again, which it does within a second. A browser with cookies fully disabled therefore cannot vote. After three tries the phone says "Your browser is blocking cookies, so this vote cannot be sent. Allow cookies for this site and reload." and the vote stays queued. Such a voter can use the kiosk.
 - Setup actions never change the show version, so editing a prompt mid-act does not make the host's next tap stale.
 - A kiosk vote and its audit row are written in one statement. Either both exist or neither.
 - On phones the audience average appears only after the person has voted, so early votes do not anchor later ones (`DGL.showLiveAverage` is "after-vote"; set it to "always" in `src/data/dgl.ts` for the original reading). The stage shows the average only at the reveal.

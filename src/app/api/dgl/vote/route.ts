@@ -1,4 +1,4 @@
-import type { NextRequest, NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { ensureSchema } from "@/lib/dgl/db";
 import { sameOrigin } from "@/lib/dgl/http";
 import {
@@ -19,7 +19,13 @@ import {
 } from "@/lib/dgl/route";
 import { castVote } from "@/lib/dgl/votes";
 
-/** An audience vote. The voter is the `dgl_voter` cookie, minted here if missing. */
+/**
+ * An audience vote. The voter is the `dgl_voter` cookie. A request without a
+ * valid one never casts: it gets a fresh cookie and 409 `{ status: "retry" }`,
+ * and the phone resends with the cookie. Casting under an id minted here would
+ * let a lost answer (and its Set-Cookie) turn the resend into a second voter.
+ * The retry answer touches no limiter and no database.
+ */
 export async function POST(req: NextRequest) {
   const now = Date.now();
   if (!sameOrigin(req)) return forbidden();
@@ -29,12 +35,13 @@ export async function POST(req: NextRequest) {
   if (!cfg) return unavailable();
 
   const voter = voterFrom(req);
-  const finish = (res: NextResponse) => (voter.minted ? setVoterCookie(res, voter.id) : res);
+  if (voter.minted) return setVoterCookie(json({ status: "retry" }, 409), voter.id);
+
   const ip = hashedIp(req, cfg.secret);
   // Both limiters are hit on every attempt; either one blocking is a 429.
   const voterOk = voterLimiter.hit(`voter:${voter.id}`, now);
   const ipOk = ipLimiter.hit(`ip:${ip}`, now);
-  if (!voterOk || !ipOk) return finish(json({ status: "rate_limited" }, 429));
+  if (!voterOk || !ipOk) return json({ status: "rate_limited" }, 429);
 
   try {
     await ensureSchema(cfg.db);
@@ -46,8 +53,8 @@ export async function POST(req: NextRequest) {
       source: "web",
       now,
     });
-    return finish(voteResponse(result));
+    return voteResponse(result);
   } catch (err) {
-    return finish(fail(err));
+    return fail(err);
   }
 }

@@ -4,7 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMe, timeoutSignal } from "./client-http";
 import type { PublicState } from "./types";
 import {
+  COOKIE_RETRY_MS,
   KEY_PREFIX,
+  afterAnswer,
   applyVoteResult,
   canSubmit,
   loadVote,
@@ -39,11 +41,20 @@ function store(): Storage | null {
  * It is flushed even once the performance has moved on, so the answer is
  * always the server's. A decided vote is never sent again.
  *
+ * A "retry" answer (the request carried no voter cookie, the server set one
+ * and cast nothing) resends soon instead of waiting for the timer; after a few
+ * in a row `cookiesBlocked` turns true and the page says why the vote is stuck
+ * (see afterAnswer). The vote stays queued either way, never "recorded".
+ *
  * Every branch lives in vote-queue.ts (unit tested); this file only wires it
  * to fetch, storage and the page lifecycle. Votes are kept in a ref (the
  * source of truth for async work) and mirrored to state for rendering.
  */
-export function useVote(state: PublicState | null): { local: LocalVote | null; submit: (score: number) => void } {
+export function useVote(state: PublicState | null): {
+  local: LocalVote | null;
+  submit: (score: number) => void;
+  cookiesBlocked: boolean;
+} {
   const performanceId = state?.performanceId ?? null;
   const phase = state?.phase ?? null;
 
@@ -53,6 +64,10 @@ export function useVote(state: PublicState | null): { local: LocalVote | null; s
   const alive = useRef(false);
   const currentId = useRef<string | null>(null);
   const currentPhase = useRef<PublicState["phase"] | null>(null);
+  const retryStreak = useRef(0);
+  const soonTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const flushRef = useRef<(force: boolean) => void>(() => {});
+  const [cookiesBlocked, setCookiesBlocked] = useState(false);
 
   /** The one place a vote changes: ref, storage, then (if still mounted) render state. */
   const commit = useCallback((v: LocalVote, persist: boolean) => {
@@ -82,6 +97,13 @@ export function useVote(state: PublicState | null): { local: LocalVote | null; s
       }
       const outcome = await toVoteResult(res);
       sending.current.delete(v.performanceId);
+      const next = afterAnswer(retryStreak.current, outcome);
+      retryStreak.current = next.streak;
+      if (alive.current) setCookiesBlocked(next.blocked);
+      if (next.soon && alive.current) {
+        clearTimeout(soonTimer.current);
+        soonTimer.current = setTimeout(() => flushRef.current(true), COOKIE_RETRY_MS);
+      }
       // Something else (the server seed, another tab) may have decided it meanwhile.
       const cur = mem.current[v.performanceId] ?? v;
       if (cur.state !== "queued") return;
@@ -113,6 +135,11 @@ export function useVote(state: PublicState | null): { local: LocalVote | null; s
     currentPhase.current = phase;
   }, [performanceId, phase]);
 
+  // `send` schedules the quick resend through this ref, since `flush` is built on `send`.
+  useEffect(() => {
+    flushRef.current = flush;
+  }, [flush]);
+
   // Mount: recover queued votes a refresh left behind, mirror other tabs, and wire the lifecycle triggers.
   useEffect(() => {
     alive.current = true;
@@ -140,6 +167,7 @@ export function useVote(state: PublicState | null): { local: LocalVote | null; s
     flush(false);
     return () => {
       alive.current = false;
+      clearTimeout(soonTimer.current);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibility);
@@ -200,5 +228,5 @@ export function useVote(state: PublicState | null): { local: LocalVote | null; s
     [commit, send],
   );
 
-  return { local: performanceId ? (votes[performanceId] ?? null) : null, submit };
+  return { local: performanceId ? (votes[performanceId] ?? null) : null, submit, cookiesBlocked };
 }

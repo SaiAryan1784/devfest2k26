@@ -120,6 +120,36 @@ describe("voteLine", () => {
     expect(voteLine(vote("queued", { reason: "paused" }), "VOTING_CLOSED")).toBe("voteQueued");
     expect(voteLine(vote("queued"), "VOTING")).toBe("voteQueued");
   });
+
+  test("a queued vote in a browser that blocks cookies says so, in any phase; decided votes are unaffected", () => {
+    expect(voteLine(vote("queued"), "VOTING", true)).toBe("voteCookiesBlocked");
+    expect(voteLine(vote("queued"), "VOTING_PAUSED", true)).toBe("voteCookiesBlocked");
+    expect(voteLine(vote("queued", { reason: "paused" }), "VOTING_CLOSED", true)).toBe("voteCookiesBlocked");
+    expect(voteLine(vote("recorded"), "VOTING", true)).toBe("voteRecorded");
+    expect(voteLine(vote("rejected", { reason: "closed" }), "VOTING", true)).toBe("voteNotCounted");
+  });
+});
+
+describe("cookies blocked", () => {
+  test("viewFor shows the queued vote with the cookies line, never recorded", () => {
+    expect(viewFor(st({ votes: 3 }), vote("queued"), true)).toEqual({
+      kind: "voted",
+      act,
+      tally: { votes: 3, average: null, showAverage: true },
+      vote: { score: 7, state: "queued", line: "voteCookiesBlocked" },
+    });
+    const paused = viewFor(st({ phase: "VOTING_PAUSED" }), vote("queued"), true);
+    expect(paused.kind === "paused" && paused.vote?.line).toBe("voteCookiesBlocked");
+    expect(viewFor(st(), vote("queued"))).toMatchObject({ vote: { line: "voteQueued" } });
+  });
+
+  test("the line is one plain sentence in DGL.copy, read out by the live region", () => {
+    const line = DGL.copy.voteCookiesBlocked;
+    expect(line).toMatch(/cookies/i);
+    expect(line).not.toMatch(/[\u2013\u2014]/);
+    expect(liveText(viewFor(st(), vote("queued"), true))).toContain(line);
+    expect(liveText(viewFor(st({ phase: "VOTING_PAUSED" }), vote("queued"), true))).toContain(line);
+  });
 });
 
 describe("gridKey (5 x 2 grid of 1 to 10)", () => {

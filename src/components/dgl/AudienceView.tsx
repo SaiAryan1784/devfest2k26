@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
-import { CheckCircle, HourglassMedium, PauseCircle, XCircle } from "@phosphor-icons/react";
+import { CheckCircle, HourglassMedium, PauseCircle, WarningCircle, XCircle } from "@phosphor-icons/react";
 import { DGL } from "@/data/dgl";
 import { liveText, revealLines, viewFor, type Act, type AudienceView as View, type Tally, type VoteShown } from "@/lib/dgl/audience-view";
 import { formatAverage } from "@/lib/dgl/score";
@@ -28,12 +28,14 @@ const LINE_TONE: Record<VoteShown["line"], string> = {
   voteNotCounted: "text-red-hi",
   voteQueued: "text-muted",
   votePaused: "text-muted",
+  voteCookiesBlocked: "text-yellow-hi",
 };
 const LINE_ICON = {
   voteRecorded: CheckCircle,
   voteNotCounted: XCircle,
   voteQueued: HourglassMedium,
   votePaused: PauseCircle,
+  voteCookiesBlocked: WarningCircle,
 } as const;
 
 /**
@@ -45,8 +47,8 @@ const LINE_ICON = {
  */
 export function AudienceView() {
   const { state, offset, connection } = useDglState();
-  const { local, submit } = useVote(state);
-  const view = viewFor(state, local);
+  const { local, submit, cookiesBlocked } = useVote(state);
+  const view = viewFor(state, local, cookiesBlocked);
   const reduce = useReducedMotion();
   const fade = reduce ? { duration: 0 } : { duration: 0.2 };
 

@@ -126,11 +126,11 @@ describe("state route", () => {
 });
 
 describe("vote route", () => {
-  test("sets dgl_voter when missing and reuses it", async () => {
+  test("a POST with no voter cookie casts nothing: 409 retry with a cookie, and the retry with it is recorded", async () => {
     const pid = await toVoting();
     const first = await votePOST(req("/api/dgl/vote", "POST", { body: { performanceId: pid, score: 7 }, ip: ip() }));
-    expect(first.status).toBe(200);
-    expect(await first.json()).toEqual({ status: "recorded", score: 7 });
+    expect(first.status).toBe(409);
+    expect(await first.json()).toEqual({ status: "retry" });
     expect(first.headers.get("cache-control")).toBe("no-store");
     const set = first.headers.get("set-cookie") ?? "";
     expect(set).toMatch(/dgl_voter=/);
@@ -141,15 +141,46 @@ describe("vote route", () => {
     expect(set).not.toMatch(/Secure/i);
     const id = first.cookies.get("dgl_voter")?.value ?? "";
     expect(id).toMatch(UUID);
+    expect(await db.query("SELECT 1 FROM dgl_votes")).toHaveLength(0);
 
     const again = await votePOST(
-      req("/api/dgl/vote", "POST", { body: { performanceId: pid, score: 3 }, cookie: `dgl_voter=${id}`, ip: ip() }),
+      req("/api/dgl/vote", "POST", { body: { performanceId: pid, score: 7 }, cookie: `dgl_voter=${id}`, ip: ip() }),
     );
-    expect(again.status).toBe(409);
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ status: "recorded", score: 7 });
     expect(again.headers.get("set-cookie")).toBeNull();
     const rows = await db.query("SELECT voter_id FROM dgl_votes");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ voter_id: id });
+  });
+
+  test("cookieless retries whose answers are lost never store a vote, so a phone cannot count twice", async () => {
+    const pid = await toVoting();
+    // The first answer (and its Set-Cookie) is lost; the resend again carries no cookie.
+    for (let i = 0; i < 3; i++) {
+      const res = await votePOST(req("/api/dgl/vote", "POST", { body: { performanceId: pid, score: 7 }, ip: ip() }));
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({ status: "retry" });
+    }
+    expect(await db.query("SELECT 1 FROM dgl_votes")).toHaveLength(0);
+  });
+
+  test("a cookieless POST does no database work", async () => {
+    const pid = await toVoting();
+    const spy = vi.spyOn(db, "query");
+    const res = await votePOST(req("/api/dgl/vote", "POST", { body: { performanceId: pid, score: 7 }, ip: ip() }));
+    expect(res.status).toBe(409);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("a POST with a valid voter cookie is recorded with no Set-Cookie", async () => {
+    const pid = await toVoting();
+    const id = crypto.randomUUID();
+    const res = await vote(pid, 6, `dgl_voter=${id}`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: "recorded", score: 6 });
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(await db.query("SELECT voter_id FROM dgl_votes")).toEqual([{ voter_id: id }]);
   });
 
   test("409 duplicate carries the first score", async () => {
@@ -199,13 +230,15 @@ describe("vote route", () => {
     expect(await db.query("SELECT 1 FROM dgl_votes")).toHaveLength(0);
   });
 
-  test("replaces a malformed voter cookie with a fresh uuid", async () => {
+  test("replaces a malformed voter cookie with a fresh uuid and asks for a retry", async () => {
     const pid = await toVoting();
     const res = await votePOST(
       req("/api/dgl/vote", "POST", { body: { performanceId: pid, score: 5 }, cookie: "dgl_voter=../../x", ip: ip() }),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ status: "retry" });
     expect(res.cookies.get("dgl_voter")?.value).toMatch(UUID);
+    expect(await db.query("SELECT 1 FROM dgl_votes")).toHaveLength(0);
   });
 
   test("429 after votePerVoterPerMin attempts from one voter", async () => {

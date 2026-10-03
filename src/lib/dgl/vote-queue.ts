@@ -17,8 +17,12 @@ export type LocalVote = {
   at: number;
 };
 
-/** What a vote attempt can come back as: the server's answer, or no answer. */
-export type VoteOutcome = VoteResult | { status: "network" } | { status: "rate_limited" };
+/**
+ * What a vote attempt can come back as: the server's answer, or no answer.
+ * "retry" is the server saying the request carried no voter cookie: it set
+ * one and cast nothing, so the vote must be sent again.
+ */
+export type VoteOutcome = VoteResult | { status: "network" } | { status: "rate_limited" } | { status: "retry" };
 
 export const KEY_PREFIX = "dgl:vote:";
 export const voteKey = (performanceId: string) => `${KEY_PREFIX}${performanceId}`;
@@ -114,17 +118,38 @@ export function applyVoteResult(v: LocalVote, r: VoteOutcome): LocalVote {
       return { ...v, state: "rejected", reason: "closed" };
     case "network":
     case "rate_limited":
+    case "retry":
       return v;
   }
+}
+
+/** The quick resend after a "retry" answer, and how many in a row before the phone says cookies are blocked. */
+export const COOKIE_RETRY_MS = 400;
+export const COOKIE_RETRY_MAX = 3;
+
+/**
+ * After a vote attempt's outcome: the count of "retry" answers in a row,
+ * whether to resend soon (once per retry answer, at most COOKIE_RETRY_MAX in a
+ * row, instead of waiting for the 4 s timer), and whether the browser looks
+ * like it blocks cookies (COOKIE_RETRY_MAX retry answers in a row: the cookie
+ * the server sets never comes back). No answer ("network") says nothing about
+ * cookies and leaves the count; any other answer means the cookie arrived.
+ */
+export function afterAnswer(streak: number, outcome: VoteOutcome): { streak: number; soon: boolean; blocked: boolean } {
+  if (outcome.status === "network") return { streak, soon: false, blocked: streak >= COOKIE_RETRY_MAX };
+  if (outcome.status !== "retry") return { streak: 0, soon: false, blocked: false };
+  const next = streak + 1;
+  return { streak: next, soon: next <= COOKIE_RETRY_MAX, blocked: next >= COOKIE_RETRY_MAX };
 }
 
 const isScore = (x: unknown): x is number => typeof x === "number" && Number.isInteger(x) && x >= 1 && x <= 10;
 
 /**
  * The HTTP outcome of POST /api/dgl/vote as a VoteOutcome. `null` is a fetch
- * that threw (offline, timeout). Anything unexpected (5xx, 400, 403, a body
- * that does not match its status) is "network": the vote stays queued and is
- * never shown as recorded.
+ * that threw (offline, timeout). A 409 "retry" (no voter cookie came with the
+ * request) is its own outcome. Anything unexpected (5xx, 400, 403, an unknown
+ * 409, a body that does not match its status) is "network": the vote stays
+ * queued and is never shown as recorded.
  */
 export async function toVoteResult(res: Response | null): Promise<VoteOutcome> {
   if (!res) return { status: "network" };
@@ -144,6 +169,7 @@ export async function toVoteResult(res: Response | null): Promise<VoteOutcome> {
   if (b.status === "duplicate" && isScore(b.score)) return { status: "duplicate", score: b.score };
   if (b.status === "paused") return { status: "paused" };
   if (b.status === "closed") return { status: "closed" };
+  if (b.status === "retry") return { status: "retry" };
   return { status: "network" };
 }
 

@@ -9,7 +9,7 @@ import type { LocalVote } from "./vote-queue";
  */
 
 /** Which DGL.copy line describes this phone's vote right now. */
-export type VoteLineKey = "voteRecorded" | "voteQueued" | "votePaused" | "voteNotCounted";
+export type VoteLineKey = "voteRecorded" | "voteQueued" | "votePaused" | "voteNotCounted" | "voteCookiesBlocked";
 
 export type VoteShown = { score: number; state: LocalVote["state"]; line: VoteLineKey };
 export type Act = { contestant: string | null; prompt: string | null };
@@ -32,21 +32,24 @@ export type AudienceView =
  * The line for a vote, from its state and the CURRENT phase. A queued vote's
  * `reason: "paused"` can outlive the pause (a later network error keeps it),
  * so the reason is never read here: only a queued vote while the show is
- * actually paused says "paused".
+ * actually paused says "paused". `cookiesBlocked` (see afterAnswer in
+ * vote-queue.ts) replaces a queued vote's line in any phase: the vote cannot
+ * be sent until the voter allows cookies, and that is the thing to say.
  */
-export function voteLine(v: LocalVote, phase: Phase): VoteLineKey {
+export function voteLine(v: LocalVote, phase: Phase, cookiesBlocked = false): VoteLineKey {
   if (v.state === "recorded") return "voteRecorded";
   if (v.state === "rejected") return "voteNotCounted";
+  if (cookiesBlocked) return "voteCookiesBlocked";
   return phase === "VOTING_PAUSED" ? "votePaused" : "voteQueued";
 }
 
-export function viewFor(state: PublicState | null, local: LocalVote | null): AudienceView {
+export function viewFor(state: PublicState | null, local: LocalVote | null, cookiesBlocked = false): AudienceView {
   // Before the first poll (and on the server) there is nothing to show but the waiting screen.
   if (!state) return { kind: "idle" };
   const { phase } = state;
   const act: Act = { contestant: state.contestant, prompt: state.prompt };
   const mine = local && local.performanceId === state.performanceId ? local : null;
-  const shown: VoteShown | null = mine ? { score: mine.score, state: mine.state, line: voteLine(mine, phase) } : null;
+  const shown: VoteShown | null = mine ? { score: mine.score, state: mine.state, line: voteLine(mine, phase, cookiesBlocked) } : null;
   const tally = (showAverage: boolean): Tally => ({ votes: state.votes, average: state.average, showAverage });
 
   switch (phase) {

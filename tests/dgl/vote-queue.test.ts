@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { Phase } from "@/lib/dgl/types";
-import { applyVoteResult, canSubmit, loadVote, mergeVotes, parseVote, queuedVotes, saveVote, shouldRetry, toVoteResult, type LocalVote } from "@/lib/dgl/vote-queue";
+import { COOKIE_RETRY_MAX, COOKIE_RETRY_MS, afterAnswer, applyVoteResult, canSubmit, loadVote, mergeVotes, parseVote, queuedVotes, saveVote, shouldRetry, toVoteResult, type LocalVote } from "@/lib/dgl/vote-queue";
 
 const q = (score: number): LocalVote => ({ performanceId: "p", score, state: "queued", at: 1 });
 
@@ -171,4 +171,49 @@ test("canSubmit allows a first vote or a replacement of a rejected one, only whi
   expect(canSubmit(null, "VOTING_PAUSED")).toBe(false);
   expect(canSubmit(null, null)).toBe(false);
   for (const ph of ALL_PHASES.filter((x) => x !== "VOTING")) expect(canSubmit(null, ph)).toBe(false);
+});
+
+test("toVoteResult maps 409 retry to retry, and any other unknown 409 stays network", async () => {
+  expect(await toVoteResult(res(409, { status: "retry" }))).toEqual({ status: "retry" });
+  expect(await toVoteResult(res(409, { status: "nope" }))).toEqual({ status: "network" });
+  expect(await toVoteResult(res(200, { status: "retry" }))).toEqual({ status: "network" });
+});
+
+test("a retry answer keeps the vote queued and unchanged", () => {
+  expect(applyVoteResult(q(3), { status: "retry" })).toEqual(q(3));
+  const p = applyVoteResult(q(3), { status: "paused" });
+  expect(applyVoteResult(p, { status: "retry" })).toEqual(p);
+});
+
+test("afterAnswer: each retry answer asks for one quick resend, up to COOKIE_RETRY_MAX in a row", () => {
+  expect(COOKIE_RETRY_MS).toBeGreaterThanOrEqual(300);
+  expect(COOKIE_RETRY_MS).toBeLessThanOrEqual(500);
+  let streak = 0;
+  const soon: boolean[] = [];
+  for (let i = 0; i < COOKIE_RETRY_MAX + 2; i++) {
+    const r = afterAnswer(streak, { status: "retry" });
+    expect(r.streak).toBe(streak + 1);
+    soon.push(r.soon);
+    streak = r.streak;
+  }
+  expect(soon).toEqual([...Array(COOKIE_RETRY_MAX).fill(true), false, false]);
+});
+
+test("afterAnswer: cookies count as blocked only after COOKIE_RETRY_MAX retry answers in a row", () => {
+  expect(afterAnswer(COOKIE_RETRY_MAX - 2, { status: "retry" }).blocked).toBe(false);
+  expect(afterAnswer(COOKIE_RETRY_MAX - 1, { status: "retry" }).blocked).toBe(true);
+  expect(afterAnswer(COOKIE_RETRY_MAX + 5, { status: "retry" }).blocked).toBe(true);
+});
+
+test("afterAnswer: any real answer resets the streak; no answer leaves it as it was", () => {
+  const real = [
+    { status: "recorded", score: 4 },
+    { status: "duplicate", score: 4 },
+    { status: "paused" },
+    { status: "closed" },
+    { status: "rate_limited" },
+  ] as const;
+  for (const r of real) expect(afterAnswer(COOKIE_RETRY_MAX + 1, r)).toEqual({ streak: 0, soon: false, blocked: false });
+  expect(afterAnswer(2, { status: "network" })).toEqual({ streak: 2, soon: false, blocked: 2 >= COOKIE_RETRY_MAX });
+  expect(afterAnswer(COOKIE_RETRY_MAX, { status: "network" }).blocked).toBe(true);
 });

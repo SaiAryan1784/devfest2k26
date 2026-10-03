@@ -47,6 +47,7 @@ export const DGL = {
     perfectMatch: "Perfect match",
     votePaused: "Voting is paused",
     voteNotCounted: "Voting closed before your vote arrived, so it was not counted",
+    voteCookiesBlocked: "Your browser is blocking cookies, so this vote cannot be sent. Allow cookies for this site and reload.",
 
     // Audience page (/dgl)
     metaDescription: "Live audience voting for DevFest Got Latent at DevFest Noida 2026. Score each act from your phone.",
