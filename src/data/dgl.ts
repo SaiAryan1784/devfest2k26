@@ -86,6 +86,8 @@ export const DGL = {
     stageTitle: "DevFest Got Latent stage",
     stageIdleBody: "Scan the code to score each act from your phone.",
     scanToVote: "Scan to vote",
+    /** Alt text for the DevFest Got Latent artwork shown on the stage while the QR is up. */
+    posterAlt: "DevFest Got Latent: a gold title on a stage with blue curtains",
     voteNow: "Vote now",
     stageTime: "Time",
     stageVotingOpen: "Voting open",

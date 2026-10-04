@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import Image from "next/image";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { PauseCircle } from "@phosphor-icons/react";
 import { DGL } from "@/data/dgl";
@@ -103,9 +104,42 @@ function status(view: View): { text: string; tone: string } | null {
 }
 
 function Left({ view }: { view: View }) {
-  if (view.kind === "idle") return <Message title={c.idleTitle} body={c.stageIdleBody} />;
-  if (view.kind === "completed") return <Message title={c.completed} body={c.stageIdleBody} />;
-  return <ActBlock act={view.act} status={status(view)} />;
+  // The artwork rides along whenever the QR is up: big when the left column is
+  // otherwise just a message (waiting, between acts), a shorter banner above
+  // the act's name and prompt (up next, voting) so those never get squeezed.
+  const poster = showsQr(view);
+  const between = view.kind === "idle" || view.kind === "completed";
+  return (
+    <div className="flex flex-col gap-8">
+      {poster && <Poster compact={!between} />}
+      {view.kind === "idle" ? (
+        <Message title={c.idleTitle} body={c.stageIdleBody} />
+      ) : view.kind === "completed" ? (
+        <Message title={c.completed} body={c.stageIdleBody} />
+      ) : (
+        <ActBlock act={view.act} status={status(view)} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The DevFest Got Latent artwork (public/brand/dgl/dgl-poster.webp, 1502 x 1047).
+ * Height-capped so the name, prompt and QR beside it always keep their room on
+ * a projector; the image scales down to fit its box, never crops.
+ */
+function Poster({ compact }: { compact: boolean }) {
+  return (
+    <Image
+      src="/brand/dgl/dgl-poster.webp"
+      alt={c.posterAlt}
+      width={1502}
+      height={1047}
+      priority
+      sizes="(min-width: 1024px) 45vw, 100vw"
+      className={cn("h-auto w-auto max-w-full rounded-panel border border-hair object-contain", compact ? "max-h-[24vh]" : "max-h-[38vh]")}
+    />
+  );
 }
 
 function Message({ title, body }: { title: string; body: string }) {
