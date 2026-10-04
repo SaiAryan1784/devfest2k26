@@ -112,14 +112,14 @@ export function Hero() {
               <dd className="label !text-text">{EVENT.venue.shortLabel}</dd>
             </div>
             <div className="flex items-baseline gap-2">
-              <dt className="label">{saleOpen ? "Tickets" : `${TICKET_SALE.label} opens in`}</dt>
+              <dt className="label">{saleOpen ? "Tickets" : "Tickets open in"}</dt>
               <dd>
                 {saleOpen ? (
                   <a href="#tickets" className="label !text-text underline-offset-4 hover:underline">
-                    Sale is live
+                    Live now
                   </a>
                 ) : (
-                  <Countdown to={TICKET_SALE.opensAt} label="Ticket sale opens in" variant="inline" padDays={2} />
+                  <Countdown to={TICKET_SALE.opensAt} label="Tickets open in" variant="inline" padDays={2} />
                 )}
               </dd>
             </div>

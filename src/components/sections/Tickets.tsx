@@ -57,7 +57,7 @@ export function Tickets() {
                 animate={{ opacity: reduce || !inView ? 1 : [1, 0.35, 1] }}
                 transition={reduce || !inView ? { duration: 0 } : { duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
               />
-              {TICKET_SALE.label} {open ? "is live" : "opens soon"}
+              {open ? "Tickets are live" : "Tickets open soon"}
             </p>
             <p className="mt-3 text-[15px] leading-relaxed text-muted">
               {open ? "Opened" : "Opens"} {TICKET_SALE.opensLabel}.

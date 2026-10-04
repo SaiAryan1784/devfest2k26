@@ -31,28 +31,35 @@ export const TICKETS_ON_SALE = true;
 
 /** Shown on both buttons, and beneath them, while `TICKETS_ON_SALE` is false. */
 export const TICKETS_PAUSED = {
-  cta: "Opens 3 Oct, 9 PM",
+  cta: "Opens 4 Oct, 9 PM",
   note: "We're refuelling the rocket. Check back at 9 PM.",
 };
 
 /** The ticket sale: counted down to until it opens, then shown as live. */
 export const TICKET_SALE = {
-  label: "Ticket sale",
-  /** 3 October 2026, 9 PM IST. Moved from 27 Sep, then 1 Oct. */
-  opensAt: "2026-10-03T21:00:00+05:30",
-  opensLabel: "3 October 2026, 9 PM IST",
+  label: "Tickets",
+  /** 4 October 2026, 9 PM IST. Moved from 27 Sep, then 1 Oct, then 3 Oct. */
+  opensAt: "2026-10-04T21:00:00+05:30",
+  opensLabel: "4 October 2026, 9 PM IST",
   /** The "remind me" calendar invite, and the pop-up once the sale is live. */
   reminder: {
-    title: "DevFest Noida 2026: ticket sale opens",
-    details: "The DevFest Noida 2026 ticket sale is live. Get your pass before they're gone.",
+    title: "DevFest Noida 2026: tickets go live",
+    details: "DevFest Noida 2026 tickets are live. Get your pass before they're gone.",
     /** How long the calendar entry lasts, in minutes. */
     minutes: 30,
   },
   live: {
-    title: "Ticket sale is live",
+    title: "Tickets are live",
     line: "Passes for DevFest Noida 2026 are open. Get yours before they're gone.",
     cta: "Get your pass",
   },
+};
+
+/** Shown to everyone who opens the site before the sale starts. */
+export const FINAL_SALE = {
+  title: "This is the final sale",
+  line: "Passes for DevFest Noida 2026 go on sale one last time. Be ready.",
+  cta: "See the passes",
 };
 
 /** For anyone stuck registering or with a problem on their pass. Shown under the ticket cards. */

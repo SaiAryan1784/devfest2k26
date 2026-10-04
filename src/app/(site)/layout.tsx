@@ -2,6 +2,7 @@ import { Loader } from "@/components/loader/Loader";
 import { CursorFx } from "@/components/ui/CursorFx";
 import { ExcitedButton } from "@/components/ui/ExcitedButton";
 import { EarlyBirdToast } from "@/components/ui/EarlyBirdToast";
+import { FinalSalePopup } from "@/components/ui/FinalSalePopup";
 
 // The marketing site's heavy chrome lives here, not in the root layout, so the
 // light /dgl pages (weak venue Wi-Fi) never ship or mount it. Nested layout:
@@ -14,6 +15,7 @@ export default function SiteLayout({ children }: LayoutProps<"/">) {
       <CursorFx />
       <ExcitedButton />
       <EarlyBirdToast />
+      <FinalSalePopup />
     </>
   );
 }

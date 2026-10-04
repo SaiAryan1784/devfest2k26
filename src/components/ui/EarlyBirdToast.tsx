@@ -13,7 +13,7 @@ import { Z } from "@/lib/z";
 const DISMISSED_KEY = "devfest-earlybird-live-dismissed";
 
 /**
- * The "early bird is live" reminder, once the sale has opened. Anyone with
+ * The "tickets are live" reminder, once the sale has opened. Anyone with
  * the page already open when it opens sees it arrive on its own (useIsPast
  * rechecks every 30s). Stays out of the way while the tickets section itself
  * is on screen, and never comes back once dismissed or clicked through.
