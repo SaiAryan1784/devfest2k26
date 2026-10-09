@@ -1,4 +1,5 @@
 import { allowed, can, effectivePhase } from "./machine";
+import { formatRaw } from "./score";
 import type { ActionResult, AdminState, LiveAction, Phase, Role, StoredStatus } from "./types";
 
 /**
@@ -162,13 +163,13 @@ export function confirmStep(
 }
 
 /**
- * The admin-only raw average, two decimals (same rounding rule as
- * formatAverage: Math.round on the scaled value). Null with no votes, so the
- * console says "No votes yet" instead of a number.
+ * The admin-only raw average, the exact figure to two decimals through
+ * formatRaw (the public sees a whole number instead). Null with no votes, so
+ * the console says "No votes yet" instead of a number.
  */
 export function formatRawAverage(avg: number | null, votes: number): string | null {
   if (avg === null || votes === 0) return null;
-  return (Math.round(avg * 100) / 100).toFixed(2);
+  return formatRaw(avg);
 }
 
 export type Outcome = Extract<ActionResult, { ok: false }>["code"] | "network";

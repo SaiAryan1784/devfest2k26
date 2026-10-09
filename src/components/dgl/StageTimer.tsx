@@ -5,7 +5,7 @@ import { m, useMotionValue } from "motion/react";
 import { LightPipe } from "@/components/brand/LightPipe";
 import { DGL } from "@/data/dgl";
 import { remainingMs } from "@/lib/dgl/clock";
-import { clockText, RING_COLOR, timerTone, type TimerTone } from "@/lib/dgl/stage-timer";
+import { clockText, clockUnit, RING_COLOR, timerTone, type TimerTone } from "@/lib/dgl/stage-timer";
 import { cn } from "@/lib/utils";
 
 const TONE_TEXT: Record<TimerTone, string> = {
@@ -24,13 +24,21 @@ type Props = {
 };
 
 /**
- * The stage's big M:SS, from the server's end time and this screen's clock
- * offset. The digits are a continuous value, so they live in a MotionValue
- * written by requestAnimationFrame and rendered by `m.span` (no React render
- * per tick; the MotionValue is only written when the text changes). The tone
- * is discrete (calm, final, critical: at most two changes per act), so it is
- * React state, set only on a change, and it recolours the digits and the one
- * LightPipe ring behind them (`run` stays off: no paint animation here).
+ * The stage's big whole seconds ("90" with a smaller "sec" beside it, then the
+ * time copy at 0), from the server's end time and this screen's clock offset.
+ * The digits are a continuous value, so they live in a MotionValue written by
+ * requestAnimationFrame and rendered by `m.span` (no React render per tick;
+ * the MotionValue is only written when the text changes), and so is the unit,
+ * which is empty once the timer reads the time copy. The tone is discrete
+ * (calm, final, critical: at most two changes per act), so it is React state,
+ * set only on a change, and it recolours the digits and the one LightPipe ring
+ * behind them (`run` stays off: no paint animation here).
+ *
+ * The row is never narrower than four digits (4ch, the width of the time copy),
+ * so the column does not change width when "Time" replaces the digits and the
+ * act's name beside it does not re-wrap. The type is min(20vw, 22vh): the QR
+ * sits under the timer while the act runs, and the vh term keeps both inside a
+ * short projector's screen (1280 x 720 leaves about 490 px for the column).
  *
  * The loop runs only while running and the tab is visible, and is cancelled
  * on unmount. Under reduced motion it still ticks (the time is information,
@@ -38,6 +46,7 @@ type Props = {
  */
 export function StageTimer({ endsAtMs, offset, running }: Props) {
   const text = useMotionValue("");
+  const unit = useMotionValue("");
   const [tone, setTone] = useState<TimerTone>("calm");
   const toneRef = useRef<TimerTone>("calm");
 
@@ -46,6 +55,8 @@ export function StageTimer({ endsAtMs, offset, running }: Props) {
     const show = (ms: number) => {
       const next = clockText(ms);
       if (text.get() !== next) text.set(next);
+      const nextUnit = clockUnit(ms);
+      if (unit.get() !== nextUnit) unit.set(nextUnit);
       const t = timerTone(ms);
       if (t !== toneRef.current) {
         toneRef.current = t;
@@ -54,7 +65,9 @@ export function StageTimer({ endsAtMs, offset, running }: Props) {
     };
 
     // Painted before the first frame so the digits never flash empty.
-    text.set(clockText(read()));
+    const first = read();
+    text.set(clockText(first));
+    unit.set(clockUnit(first));
     let raf = 0;
     const frame = () => {
       show(read());
@@ -71,7 +84,7 @@ export function StageTimer({ endsAtMs, offset, running }: Props) {
       cancelAnimationFrame(raf);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [endsAtMs, offset, running, text]);
+  }, [endsAtMs, offset, running, text, unit]);
 
   return (
     <div className="relative grid place-items-center">
@@ -81,17 +94,15 @@ export function StageTimer({ endsAtMs, offset, running }: Props) {
         tubes={3}
         className="pointer-events-none absolute left-1/2 top-1/2 size-[clamp(16rem,36vw,42rem)] -translate-x-1/2 -translate-y-1/2 opacity-45"
       />
-      <p className="relative">
+      <p className="relative flex min-w-[4ch] items-baseline justify-center gap-[clamp(0.75rem,1.5vw,2rem)] font-mono text-[clamp(8rem,min(20vw,22vh),18rem)] leading-none">
         <span className="sr-only">{DGL.copy.timeLeft} </span>
         <m.span
-          className={cn(
-            "block whitespace-nowrap font-mono font-medium leading-none tabular-nums transition-colors duration-300 motion-reduce:transition-none",
-            "text-[clamp(8rem,20vw,18rem)]",
-            TONE_TEXT[tone],
-          )}
+          className={cn("block whitespace-nowrap font-medium tabular-nums transition-colors duration-300 motion-reduce:transition-none", TONE_TEXT[tone])}
         >
           {text}
         </m.span>
+        {/* Empty (and so display: none) once the digits give way to the time copy. */}
+        <m.span className="text-[clamp(1.5rem,2.5vw,3rem)] font-medium text-muted empty:hidden">{unit}</m.span>
       </p>
     </div>
   );

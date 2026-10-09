@@ -47,8 +47,22 @@ export function stageView(state: PublicState | null): StageView {
   }
 }
 
-/** The QR is up whenever someone could usefully join: waiting, up next, voting, between acts. */
+/**
+ * The QR code and the URL line under it are up only while the act is running
+ * or voting is open: PERFORMING and PERFORMED (the `clock` screen) and VOTING
+ * and VOTING_PAUSED (the `voting` screen). Waiting, up next, voting closed,
+ * the reveal and between acts have neither.
+ */
 export function showsQr(v: StageView): boolean {
+  return v.kind === "clock" || v.kind === "voting";
+}
+
+/**
+ * The DevFest Got Latent artwork rides along on the waiting, up next, voting
+ * and between-acts screens. Kept apart from showsQr on purpose: the QR rule
+ * changed, where the artwork sits did not.
+ */
+export function showsPoster(v: StageView): boolean {
   return v.kind === "idle" || v.kind === "ready" || v.kind === "voting" || v.kind === "completed";
 }
 

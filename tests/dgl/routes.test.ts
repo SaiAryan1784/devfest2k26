@@ -102,6 +102,15 @@ describe("state route", () => {
     expect(await res.json()).toMatchObject({ phase: "IDLE", votes: 0, average: null, reveal: null });
   });
 
+  test("one vote is already the audience score, and it is a whole number", async () => {
+    const pid = await toVoting();
+    expect(await (await stateGET()).json()).toMatchObject({ phase: "VOTING", votes: 0, average: null });
+    expect((await vote(pid, 7)).status).toBe(200);
+    expect(await (await stateGET()).json()).toMatchObject({ phase: "VOTING", votes: 1, average: 7 });
+    expect((await vote(pid, 8)).status).toBe(200);
+    expect(await (await stateGET()).json()).toMatchObject({ votes: 2, average: 8 }); // 7.5 shows as 8
+  });
+
   test("503 when the database is not configured", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     holder.db = null;

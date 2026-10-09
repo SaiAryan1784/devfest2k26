@@ -12,8 +12,6 @@ export const DGL = {
   finalCountdownS: 10,
   /** The last N seconds turn the stage timer red. */
   criticalCountdownS: 3,
-  /** The audience average stays hidden below this many votes. */
-  minVotes: 5,
   /**
    * When the phone shows the average. "after-vote" hides it until the voter
    * has voted (or voting closed) so early votes do not anchor later ones;
@@ -64,6 +62,8 @@ export const DGL = {
     upNext: "Up next",
     onStageNow: "On stage now",
     timeLeft: "Time left",
+    /** After the whole-second clock: "90 sec", never "1:30". */
+    secondsUnit: "sec",
     performed: "Time. Voting opens in a moment.",
     votingTitle: "Score the act",
     lockIn: (n: number) => `Lock in ${n}`,
@@ -72,21 +72,22 @@ export const DGL = {
     yourScore: "Your score",
     voteCount: (n: number) => (n === 1 ? "1 vote" : `${n} votes`),
     audienceAverage: "Audience average",
-    outOfTen: (avg: string) => `${avg} / 10`,
+    outOfTen: (n: number) => `${n} / 10`,
     pausedBody: "Hang on, the host will reopen it.",
     votingClosed: "Voting closed",
     ownScore: "Own score",
     audience: "Audience",
-    difference: (d: string) => `Difference ${d}`,
-    notEnoughVotes: "Not enough votes for an audience score",
+    difference: (d: number) => `Difference ${d}`,
+    /** The reveal's line, and the tally line once voting closed, when nobody voted. */
+    noVotes: "No votes",
     completed: "Next act coming up",
     connection: { connecting: "Connecting", live: "Live", reconnecting: "Reconnecting", offline: "Offline" },
 
     // Stage display (/dgl/stage)
     stageTitle: "DevFest Got Latent stage",
-    stageIdleBody: "Scan the code to score each act from your phone.",
+    stageIdleBody: "The QR code to vote appears when the act begins.",
     scanToVote: "Scan to vote",
-    /** Alt text for the DevFest Got Latent artwork shown on the stage while the QR is up. */
+    /** Alt text for the DevFest Got Latent artwork shown on the stage (waiting, up next, voting, between acts). */
     posterAlt: "DevFest Got Latent: a gold title on a stage with blue curtains",
     voteNow: "Vote now",
     stageTime: "Time",

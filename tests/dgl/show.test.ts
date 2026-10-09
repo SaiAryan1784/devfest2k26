@@ -114,10 +114,55 @@ test("hides self score until reveal", async () => {
   expect((await readPublicState(db, T0)).reveal).toEqual({ self: 8, audience: 8, result: { kind: "match" } });
 });
 
-test("average null below MIN_VOTES in public, present for admin", async () => {
+test("a single vote is the public average", async () => {
+  await toVoting({ votes: [10] });
+  const s = await readPublicState(db, T0);
+  expect(s.votes).toBe(1);
+  expect(s.average).toBe(10); // no minimum number of votes
+  expect((await admin()).rawAverage).toBe(10);
+});
+
+test("average is a whole number", async () => {
+  await toVoting({ votes: [8, 9] });
+  expect((await readPublicState(db, T0)).average).toBe(9); // 8.5 rounds up
+  await addVotes([8]);
+  expect((await readPublicState(db, T0)).average).toBe(8); // 8.33 rounds down
+});
+
+test("staff keep the exact average while the public sees the whole one", async () => {
   await toVoting({ votes: [10, 9, 9, 10] });
-  expect((await readPublicState(db, T0)).average).toBeNull();
-  expect((await admin()).rawAverage).toBeCloseTo(9.5);
+  expect((await readPublicState(db, T0)).average).toBe(10); // 9.5 rounds up
+  const s = await admin();
+  expect(s.average).toBe(10);
+  expect(s.rawAverage).toBe(9.5);
+});
+
+test("no votes gives a null average and reveal audience null", async () => {
+  await toVotingClosed({ votes: [], self: 7 });
+  const open = await readPublicState(db, T0);
+  expect(open).toMatchObject({ votes: 0, average: null, reveal: null });
+  await must({ type: "reveal" });
+  const s = await readPublicState(db, T0);
+  expect(s).toMatchObject({ votes: 0, average: null });
+  expect(s.reveal).toEqual({ self: 7, audience: null, result: { kind: "insufficient" } });
+});
+
+test("reveal results use whole-number diff", async () => {
+  await toVotingClosed({ votes: [8, 9], self: 6 }); // 8.5 shows as 9
+  await must({ type: "reveal" });
+  expect((await readPublicState(db, T0)).reveal).toEqual({ self: 6, audience: 9, result: { kind: "diff", diff: 3 } });
+});
+
+test("reveal is a perfect match when the own score equals the whole-number average", async () => {
+  await toVotingClosed({ votes: [8, 9], self: 9 }); // 8.5 shows as 9
+  await must({ type: "reveal" });
+  expect((await readPublicState(db, T0)).reveal).toEqual({ self: 9, audience: 9, result: { kind: "match" } });
+});
+
+test("reveal below the old minimum still compares, and a lone vote can be a miss", async () => {
+  await toVotingClosed({ votes: [3], self: 8 });
+  await must({ type: "reveal" });
+  expect((await readPublicState(db, T0)).reveal).toEqual({ self: 8, audience: 3, result: { kind: "diff", diff: 5 } });
 });
 
 test("reveal needs self score", async () => {
@@ -137,6 +182,7 @@ test("excluding flagged votes changes the average, and is audited", async () => 
   expect(before.votes).toBe(30);
   expect(before.flagged).toBe(25);
   expect(before.rawAverage).toBeCloseTo(65 / 30);
+  expect(before.average).toBe(2); // 2.17 shows as 2
 
   const r = await run({ type: "setFlaggedExcluded", performanceId: p, excluded: true });
   expect(r.ok).toBe(true);

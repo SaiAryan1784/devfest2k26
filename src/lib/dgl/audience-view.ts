@@ -1,5 +1,5 @@
 import { DGL } from "@/data/dgl";
-import { formatAverage, type Comparison } from "./score";
+import type { Comparison } from "./score";
 import type { Phase, PublicState } from "./types";
 import type { LocalVote } from "./vote-queue";
 
@@ -13,7 +13,7 @@ export type VoteLineKey = "voteRecorded" | "voteQueued" | "votePaused" | "voteNo
 
 export type VoteShown = { score: number; state: LocalVote["state"]; line: VoteLineKey };
 export type Act = { contestant: string | null; prompt: string | null };
-/** `average` is the public one (null below DGL.minVotes); `showAverage` says whether to show it at all. */
+/** `average` is the public one, a whole number (null with no counted votes); `showAverage` says whether to show it at all. */
 export type Tally = { votes: number; average: number | null; showAverage: boolean };
 
 export type AudienceView =
@@ -98,13 +98,17 @@ export function gridKey(n: number, key: string): number | null {
   }
 }
 
-/** M:SS, a part second rounded up, so the clock reads 0:00 only once time is up. */
+/** Whole seconds, a part second rounded up, so the clock reads 0 only once time is up: 90, never 1:30. */
 export function formatClock(ms: number): string {
-  const s = Math.max(0, Math.ceil(ms / 1000));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  return String(Math.max(0, Math.ceil(ms / 1000)));
 }
 
-/** The last DGL.finalCountdownS seconds (the clock reads 0:10 or less). */
+/** The phone's clock text: the whole seconds and their unit, "90 sec". */
+export function clockLabel(ms: number): string {
+  return `${formatClock(ms)} ${DGL.copy.secondsUnit}`;
+}
+
+/** The last DGL.finalCountdownS seconds (the clock reads 10 or less). */
 export function isFinalCountdown(ms: number): boolean {
   return ms <= DGL.finalCountdownS * 1000;
 }
@@ -147,13 +151,26 @@ export function liveText(v: AudienceView): string {
 }
 
 /**
- * The reveal's audience figure ("8.2 / 10", or null with too few votes) and
- * its verdict line, shared by the page and the live region.
+ * The reveal's audience figure ("8 / 10", or null with no votes) and its
+ * verdict line, shared by the page and the live region. Both numbers are the
+ * server's whole numbers; nothing is rounded or recomputed here.
  */
 export function revealLines(v: Extract<AudienceView, { kind: "reveal" }>): { audience: string | null; verdict: string } {
-  if (v.result.kind === "insufficient" || v.audience === null) return { audience: null, verdict: c.notEnoughVotes };
+  if (v.result.kind === "insufficient" || v.audience === null) return { audience: null, verdict: c.noVotes };
   return {
-    audience: c.outOfTen(formatAverage(v.audience)),
-    verdict: v.result.kind === "match" ? c.perfectMatch : c.difference(formatAverage(v.result.diff)),
+    audience: c.outOfTen(v.audience),
+    verdict: v.result.kind === "match" ? c.perfectMatch : c.difference(v.result.diff),
   };
+}
+
+/**
+ * The audience-average part of the tally line, or null while it is not meant
+ * to show yet (see DGL.showLiveAverage). With no counted votes there is no
+ * average: "Waiting for audience..." while voting is open, "No votes" once it
+ * has closed. One vote is already an average.
+ */
+export function tallyAverage(tally: Tally, closed: boolean): string | null {
+  if (!tally.showAverage) return null;
+  if (tally.average === null) return closed ? c.noVotes : c.waitingForAudience;
+  return `${c.audienceAverage} ${c.outOfTen(tally.average)}`;
 }

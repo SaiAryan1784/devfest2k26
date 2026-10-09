@@ -4,8 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { CheckCircle, HourglassMedium, PauseCircle, WarningCircle, XCircle } from "@phosphor-icons/react";
 import { DGL } from "@/data/dgl";
-import { liveText, revealLines, viewFor, type Act, type AudienceView as View, type Tally, type VoteShown } from "@/lib/dgl/audience-view";
-import { formatAverage } from "@/lib/dgl/score";
+import { liveText, revealLines, tallyAverage, viewFor, type Act, type AudienceView as View, type Tally, type VoteShown } from "@/lib/dgl/audience-view";
 import { useDglState } from "@/lib/dgl/use-dgl-state";
 import { useVote } from "@/lib/dgl/use-vote";
 import { cn } from "@/lib/utils";
@@ -244,11 +243,7 @@ function ActBlock({ act, status, compact = false }: { act: Act; status?: string;
 }
 
 function TallyLine({ tally, closed = false }: { tally: Tally; closed?: boolean }) {
-  let average: string | null = null;
-  if (tally.showAverage) {
-    if (tally.average !== null) average = `${c.audienceAverage} ${c.outOfTen(formatAverage(tally.average))}`;
-    else average = closed ? c.notEnoughVotes : c.waitingForAudience;
-  }
+  const average = tallyAverage(tally, closed);
   return (
     <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[14px] tabular-nums text-muted">
       <span>{c.voteCount(tally.votes)}</span>

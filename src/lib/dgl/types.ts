@@ -65,7 +65,7 @@ export type PublicState = {
   endsAtMs: number | null;
   /** Counted votes (excluded votes are not counted). */
   votes: number;
-  /** Null below DGL.minVotes, else one decimal. */
+  /** The audience score: a whole number from the first counted vote, null with none. */
   average: number | null;
   reveal: {
     self: number;
