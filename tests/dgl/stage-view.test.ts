@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { screenKey, showsPoster, showsQr, stageView, type StageView } from "@/lib/dgl/stage-view";
+import { bannerFor, screenKey, showsQr, stageView, type StageView } from "@/lib/dgl/stage-view";
 import type { Phase, PublicState } from "@/lib/dgl/types";
 
 const ID = "11111111-1111-4111-8111-111111111111";
@@ -28,6 +28,12 @@ describe("stageView", () => {
 
   test("between acts it is neutral", () => {
     expect(stageView(st({ phase: "COMPLETED" }))).toEqual({ kind: "completed" });
+  });
+
+  test("the winner view carries the names and the audience score", () => {
+    const winner = { names: ["Riya Sharma", "Dev Patel"], audience: 9 };
+    expect(stageView(st({ phase: "COMPLETED", winner }))).toEqual({ kind: "winner", ...winner });
+    expect(stageView(st({ phase: "COMPLETED", winner }), true)).toEqual({ kind: "winner", ...winner });
   });
 
   test("ready shows who is up next", () => {
@@ -114,7 +120,7 @@ describe("showsQr", () => {
   test("showsQr is true only while the act is running or voting is open", () => {
     for (const v of views.clock) expect(showsQr(v)).toBe(true); // PERFORMING and PERFORMED
     for (const v of views.voting) expect(showsQr(v)).toBe(true); // VOTING and VOTING_PAUSED
-    for (const kind of ["idle", "ready", "closed", "reveal", "completed"] as const) {
+    for (const kind of ["idle", "ready", "closed", "reveal", "completed", "winner"] as const) {
       for (const v of views[kind]) expect(showsQr(v)).toBe(false);
     }
   });
@@ -138,14 +144,21 @@ describe("showsQr", () => {
   });
 });
 
-describe("showsPoster", () => {
-  test("the artwork stays on waiting, up next, voting and between acts, as before the QR rule changed", () => {
-    for (const kind of ["idle", "ready", "voting", "completed"] as const) {
-      for (const v of views[kind]) expect(showsPoster(v)).toBe(true);
+describe("bannerFor", () => {
+  test("the full poster is only for waiting and between acts; every other screen carries the strip", () => {
+    for (const kind of ["idle", "completed"] as const) {
+      for (const v of views[kind]) expect(bannerFor(v)).toBe("poster");
     }
-    for (const kind of ["clock", "closed", "reveal"] as const) {
-      for (const v of views[kind]) expect(showsPoster(v)).toBe(false);
+    for (const kind of ["winner", "ready", "clock", "voting", "closed", "reveal"] as const) {
+      for (const v of views[kind]) expect(bannerFor(v)).toBe("strip");
     }
+  });
+  test("a spinning act keeps the strip", () => {
+    const spun = st({ phase: "READY", spunAtMs: 1_000 });
+    expect(bannerFor(stageView(spun, true))).toBe("strip");
+  });
+  test("every kind is covered", () => {
+    expect(Object.keys(views).sort()).toEqual(["clock", "closed", "completed", "idle", "ready", "reveal", "voting", "winner"]);
   });
 });
 

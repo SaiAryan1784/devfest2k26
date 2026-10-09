@@ -62,12 +62,12 @@ export function showsQr(v: StageView): boolean {
 }
 
 /**
- * The DevFest Got Latent artwork rides along on the waiting, up next, voting
- * and between-acts screens. Kept apart from showsQr on purpose: the QR rule
- * changed, where the artwork sits did not.
+ * How the DevFest Got Latent artwork is shown: the full poster fills the
+ * screen while nothing is on (waiting, and between acts with no winner), a
+ * wide banner strip tops every other screen so the act always has the room.
  */
-export function showsPoster(v: StageView): boolean {
-  return v.kind === "idle" || v.kind === "ready" || v.kind === "voting" || v.kind === "completed";
+export function bannerFor(v: StageView): "poster" | "strip" {
+  return v.kind === "idle" || v.kind === "completed" ? "poster" : "strip";
 }
 
 /**

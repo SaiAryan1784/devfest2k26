@@ -193,5 +193,5 @@ Developer: with 20 or more real phones polling the preview, confirm `x-vercel-ca
   - `npm run dgl:admin -- --name "Think Admin" --role SUPER_ADMIN --track think`
   - Give each kiosk its own Host account (`--track` as needed); a Host can also run that track's show.
 - Run an act: type the name, Put on stage, optionally Spin the wheel (can spin again), Start performance, Start voting, Stop voting, enter the own score, Reveal, Finish act. Between acts, Show winner puts the highest scorer on the stage (and phones); Hide winner or the next act clears it.
-- Not yet built (next push): the poster and banner stage layout, the wheel graphic, winner confetti, the refined phone screen. The stage and phone currently show plain text for the spin and the winner.
+- Stage: poster fills the screen while waiting and between acts; every other screen has the title strip on top. The wheel spins on the stage while the host's spin runs (about 4.5 s, then holds 1.2 s); the winner screen has confetti (large screens, never under reduced motion). Phones get the refined gold-on-dark voting screen, no banner, no confetti.
 - Not verified in any browser: every screen above. Rehearse each track on a real device before doors open.

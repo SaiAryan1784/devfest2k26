@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { AudienceView } from "@/components/dgl/AudienceView";
-import { StaticLockup } from "@/components/dgl/StaticLockup";
-import { DGL, DGL_TRACKS } from "@/data/dgl";
+import { DGL_TRACKS } from "@/data/dgl";
 import { isTrack } from "@/lib/dgl/tracks";
 
 // Only the three tracks exist; any other value is a 404. The static admin and kiosk pages win over this.
@@ -12,20 +11,17 @@ export function generateStaticParams() {
 
 /**
  * The audience voting page for one track, opened from that stage's QR code.
- * The shell (mark and heading) is server HTML; everything live is the
- * AudienceView leaf. One column sized for a phone held in one hand.
+ * The shell is this one column, sized for a phone held in one hand: the
+ * header (name, track chip, connection pill) and everything live is the
+ * AudienceView leaf, server-rendered in its neutral first state. No bottom
+ * padding here: the voting screen pins "Lock in" to the bottom edge itself
+ * (above the safe area) and the other screens pad themselves.
  */
 export default async function TrackPage({ params }: { params: Promise<{ track: string }> }) {
   const { track } = await params;
   if (!isTrack(track)) notFound();
-  const label = DGL_TRACKS.find((t) => t.id === track)!.label;
   return (
-    <main id="main" className="relative mx-auto flex min-h-[100dvh] w-full max-w-[440px] flex-col px-4 pb-6 pt-4">
-      <div className="flex items-center justify-between gap-3">
-        <StaticLockup className="w-[92px]" />
-        <span className="glass-pill px-3 py-1 text-[15px] font-medium text-text">{label}</span>
-      </div>
-      <h1 className="display mt-4 text-[20px] font-semibold leading-tight text-text">{DGL.name}</h1>
+    <main id="main" className="relative mx-auto flex min-h-[100dvh] w-full max-w-[440px] flex-col px-4 pt-4 [@media(max-height:700px)]:pt-3">
       <AudienceView track={track} />
     </main>
   );

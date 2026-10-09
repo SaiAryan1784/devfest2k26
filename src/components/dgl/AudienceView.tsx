@@ -2,15 +2,15 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
-import { CheckCircle, HourglassMedium, PauseCircle, WarningCircle, XCircle } from "@phosphor-icons/react";
+import { CheckCircle, HourglassMedium, LockSimple, PauseCircle, Trophy, WarningCircle, XCircle } from "@phosphor-icons/react";
 import { DGL, type Track } from "@/data/dgl";
-import { liveText, revealLines, tallyAverage, viewFor, type Act, type AudienceView as View, type Tally, type VoteShown } from "@/lib/dgl/audience-view";
+import { audienceSoFar, liveText, revealLines, tallyAverage, viewFor, type AudienceView as View, type Tally, type VoteShown } from "@/lib/dgl/audience-view";
 import { useDglState } from "@/lib/dgl/use-dgl-state";
 import { useSpinning } from "@/lib/dgl/use-spin";
 import { useVote } from "@/lib/dgl/use-vote";
 import { cn } from "@/lib/utils";
-import { ActClock } from "./ActClock";
-import { ConnectionPill } from "./ConnectionPill";
+import { ActCard } from "./ActCard";
+import { PhoneHeader } from "./PhoneHeader";
 import { ScoreGrid } from "./ScoreGrid";
 
 const c = DGL.copy;
@@ -68,7 +68,7 @@ export function AudienceView({ track }: { track: Track }) {
 
   return (
     <>
-      <ConnectionPill connection={connection} className="absolute right-4 top-[18px]" />
+      <PhoneHeader track={track} connection={connection} />
       <p aria-live="polite" className="sr-only">
         {liveText(view)}
       </p>
@@ -79,7 +79,11 @@ export function AudienceView({ track }: { track: Track }) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={fade}
-          className={cn("mt-6 flex flex-1 flex-col gap-5", view.kind === "voting-grid" && "[@media(max-height:700px)]:mt-3 [@media(max-height:700px)]:gap-2")}
+          className={cn(
+            "mt-6 flex flex-1 flex-col gap-5",
+            // The voting screen ends in the pinned footer, which carries its own bottom padding; the rest need theirs here.
+            view.kind === "voting-grid" ? "[@media(max-height:700px)]:mt-3 [@media(max-height:700px)]:gap-2" : "pb-6",
+          )}
         >
           <Screen
             view={view}
@@ -110,71 +114,74 @@ function Screen({ view, offset, picked, onPick, onLockIn, focusLockedRef, fade }
   const scoreTitle = useId();
   switch (view.kind) {
     case "idle":
-      return <Message title={c.idleTitle} body={c.idleBody} />;
+      return <Message icon={HourglassMedium} title={c.startsSoon} body={c.idleBody} />;
     case "completed":
-      return <Message title={c.completed} body={c.idleBody} />;
+      return <Message icon={HourglassMedium} title={c.completed} body={c.idleBody} />;
     case "winner":
       return (
-        <div className="glass flex flex-col gap-3 rounded-[20px] p-6">
-          <p className="text-[17px] font-medium text-yellow-hi">{view.names.length > 1 ? c.winnersTitle : c.winnerTitle}</p>
+        <div className="flex flex-col gap-3 rounded-[20px] border border-yellow bg-yellow/10 p-6">
+          <p className="flex items-center gap-2 text-[17px] font-medium text-yellow-hi">
+            <Trophy aria-hidden="true" weight="regular" className="size-6 shrink-0" />
+            {view.names.length > 1 ? c.winnersTitle : c.winnerTitle}
+          </p>
           <h2 className="display break-words text-[36px] font-semibold leading-[1.1]">{view.names.join(" and ")}</h2>
-          <p className="font-mono text-[20px] tabular-nums text-muted">{c.winnerScore(view.audience)}</p>
+          <p className="font-mono text-[20px] tabular-nums text-yellow-hi">{c.winnerScore(view.audience)}</p>
         </div>
       );
     case "ready":
-      return <ActBlock act={view.act} status={c.upNext} />;
+      return <ActCard act={view.act} status={c.upNext} />;
     case "performing":
-      return (
-        <>
-          <ActBlock act={view.act} status={c.onStageNow} />
-          {view.endsAtMs !== null && <ActClock endsAtMs={view.endsAtMs} offset={offset} />}
-        </>
-      );
+      return <ActCard act={view.act} status={c.onStageNow} clock={view.endsAtMs !== null ? { endsAtMs: view.endsAtMs, offset } : undefined} />;
     case "performed":
       return (
         <>
-          <ActBlock act={view.act} />
+          <ActCard act={view.act} />
           <p className="text-[17px] font-medium text-text">{c.performed}</p>
         </>
       );
     case "voting-grid":
       return (
         <>
-          <ActBlock act={view.act} compact />
+          <ActCard act={view.act} compact />
           <div className="flex flex-col gap-3 [@media(max-height:700px)]:gap-2">
             {view.notCounted && <p className="text-[15px] text-red-hi [@media(max-height:700px)]:text-[14px] [@media(max-height:700px)]:leading-[1.3]">{c.earlierNotCounted}</p>}
-            <h3 id={scoreTitle} className="text-[17px] font-semibold text-blue-hi [@media(max-height:700px)]:leading-tight">
-              {c.votingTitle}
-            </h3>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h3 id={scoreTitle} className="text-[17px] font-semibold text-text [@media(max-height:700px)]:leading-tight">
+                {c.votingTitle}
+              </h3>
+              <TallyLine tally={view.tally} />
+            </div>
             <ScoreGrid value={picked} onChange={onPick} labelledBy={scoreTitle} />
-            <TallyLine tally={view.tally} />
           </div>
-          <button
-            type="button"
-            onClick={onLockIn}
-            disabled={picked === null}
-            className={cn(
-              "inline-flex h-12 w-full shrink-0 items-center justify-center whitespace-nowrap rounded-pill! px-6 text-[15px] font-medium transition-colors duration-200",
-              picked === null ? "cursor-not-allowed border border-hair bg-white/5 text-muted" : "cursor-pointer bg-text text-[#0a0a0c] hover:bg-white",
-            )}
-          >
-            {picked === null ? c.pickScore : c.lockIn(picked)}
-          </button>
+          {/* Pinned: sticks to the bottom of the viewport while the page is taller than the screen, sits under the grid otherwise. */}
+          <div className="sticky bottom-0 z-10 -mx-4 mt-auto border-t border-hair bg-canvas px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 [@media(max-height:700px)]:pb-[max(0.75rem,env(safe-area-inset-bottom))] [@media(max-height:700px)]:pt-2">
+            <button
+              type="button"
+              onClick={onLockIn}
+              disabled={picked === null}
+              className={cn(
+                "inline-flex h-12 w-full shrink-0 items-center justify-center whitespace-nowrap rounded-pill! px-6 text-[17px] font-semibold transition-colors duration-200",
+                picked === null ? "cursor-not-allowed border border-hair bg-white/5 text-muted" : "cursor-pointer bg-yellow text-[#0a0a0c] hover:bg-yellow-hi",
+              )}
+            >
+              {picked === null ? c.pickScore : c.lockIn(picked)}
+            </button>
+          </div>
         </>
       );
     case "voted":
       return (
         <>
-          <ActBlock act={view.act} />
+          <ActCard act={view.act} />
           <VoteBlock vote={view.vote} focusLockedRef={focusLockedRef} fade={fade} />
-          <TallyLine tally={view.tally} />
+          <SoFar tally={view.tally} label={c.audienceSoFar} />
         </>
       );
     case "paused":
       return (
         <>
-          <ActBlock act={view.act} />
-          <Message title={c.votePaused} body={c.pausedBody} />
+          <ActCard act={view.act} />
+          <Message icon={PauseCircle} title={c.votePaused} body={c.pausedBody} />
           {/* A queued vote's own line would repeat the heading, so it is left off. */}
           {view.vote && <VoteBlock vote={view.vote} hideLine={view.vote.line === "votePaused"} fade={fade} />}
         </>
@@ -182,28 +189,20 @@ function Screen({ view, offset, picked, onPick, onLockIn, focusLockedRef, fade }
     case "closed":
       return (
         <>
-          <ActBlock act={view.act} />
-          <Message title={c.votingClosed} />
-          <TallyLine tally={view.tally} closed />
+          <ActCard act={view.act} />
+          <Message icon={LockSimple} title={c.votingClosed} />
           {view.vote && <VoteBlock vote={view.vote} fade={fade} />}
+          <SoFar tally={view.tally} label={c.audience} closed />
         </>
       );
     case "reveal": {
       const { audience, verdict } = revealLines(view);
       return (
         <>
-          <ActBlock act={view.act} />
-          <dl className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1">
-              <dt className="text-[15px] text-muted">{c.ownScore}</dt>
-              <dd className="font-mono text-[44px] font-medium leading-none tabular-nums">{view.self}</dd>
-            </div>
-            {audience && (
-              <div className="flex flex-col gap-1">
-                <dt className="text-[15px] text-muted">{c.audience}</dt>
-                <dd className="font-mono text-[44px] font-medium leading-none tabular-nums">{audience}</dd>
-              </div>
-            )}
+          <ActCard act={view.act} />
+          <dl className={cn("grid gap-3", audience ? "grid-cols-2" : "grid-cols-1")}>
+            <Figure label={c.ownScore} value={view.self} />
+            {audience && view.audience !== null && <Figure label={c.audience} value={view.audience} />}
           </dl>
           {verdict && <p className="text-[17px] font-medium text-text">{verdict}</p>}
         </>
@@ -212,43 +211,53 @@ function Screen({ view, offset, picked, onPick, onLockIn, focusLockedRef, fade }
   }
 }
 
-function Message({ title, body }: { title: string; body?: string }) {
+/** One big whole number out of ten, for the reveal's side-by-side pair. */
+function Figure({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex flex-col gap-2">
-      <h2 className="display text-[26px] font-semibold leading-[1.15]">{title}</h2>
+    <div className="glass flex flex-col gap-2 rounded-[20px] p-5">
+      <dt className="text-[15px] text-muted">{label}</dt>
+      <dd className="flex items-baseline gap-1 font-mono tabular-nums">
+        <span className="text-[56px] font-medium leading-none">{value}</span>
+        <span className="text-[17px] text-muted">{c.outOf}</span>
+      </dd>
+    </div>
+  );
+}
+
+/** A clear single message for a screen with nothing to do: waiting, between acts, paused, closed. */
+function Message({ icon: Icon, title, body }: { icon: typeof HourglassMedium; title: string; body?: string }) {
+  return (
+    <div className="glass flex flex-col gap-3 rounded-[20px] p-6">
+      <Icon aria-hidden="true" weight="regular" className="size-8 text-muted" />
+      <h2 className="display text-[28px] font-semibold leading-[1.15]">{title}</h2>
       {body && <p className="text-[17px] leading-snug text-muted">{body}</p>}
     </div>
   );
 }
 
-/** Who is on, and their prompt. `status` is a plain sentence-case line, not an eyebrow. */
 /**
- * Who is on, and their prompt. `status` is a plain sentence-case line, not an eyebrow.
- * Names and prompts can be 200 characters: the name is clamped to two lines and
- * the prompt to three (visually only; a screen reader still reads all of it),
- * and long unbroken words wrap instead of running off the side. `compact` (the
- * voting grid) sets both smaller on short screens so "Lock in" stays above the fold.
+ * "Audience so far" (or "Audience" once voting closed): the live whole-number
+ * average big, the vote count beside it. The number follows tally.showAverage
+ * (DGL.showLiveAverage); until there is one it says "Waiting for audience..."
+ * (or "No votes" once closed). Never in the live region: it changes every poll.
  */
-function ActBlock({ act, status, compact = false }: { act: Act; status?: string; compact?: boolean }) {
+function SoFar({ tally, label, closed = false }: { tally: Tally; label: string; closed?: boolean }) {
+  const so = audienceSoFar(tally, closed);
+  if (!so) return null;
   return (
-    <div className="flex flex-col gap-1">
-      {status && <p className="text-[15px] text-muted">{status}</p>}
-      {act.contestant && (
-        <h2 className={cn("display line-clamp-2 break-words text-[32px] font-semibold leading-[1.1]", compact && "[@media(max-height:700px)]:text-[24px]")}>
-          {act.contestant}
-        </h2>
-      )}
-      {act.spinning && <p className="mt-1 text-[17px] leading-snug text-yellow-hi">{c.spinning}</p>}
-      {act.prompt && (
-        <p
-          className={cn(
-            "mt-1 line-clamp-3 break-words text-[17px] leading-snug text-muted",
-            compact && "[@media(max-height:700px)]:mt-0 [@media(max-height:700px)]:text-[15px] [@media(max-height:700px)]:leading-[1.3]",
-          )}
-        >
-          {act.prompt}
-        </p>
-      )}
+    <div className="glass flex items-end justify-between gap-4 rounded-[20px] p-5">
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="text-[15px] text-muted">{label}</p>
+        {so.average !== null ? (
+          <p className="flex items-baseline gap-1 font-mono tabular-nums">
+            <span className="text-[44px] font-medium leading-none">{so.average}</span>
+            <span className="text-[17px] text-muted">{c.outOf}</span>
+          </p>
+        ) : (
+          <p className="text-[17px] leading-snug text-muted">{so.empty}</p>
+        )}
+      </div>
+      <p className="shrink-0 font-mono text-[15px] tabular-nums text-muted">{c.voteCount(tally.votes)}</p>
     </div>
   );
 }
@@ -280,9 +289,18 @@ function VoteBlock({ vote, fade, hideLine = false, focusLockedRef }: VoteBlockPr
     }
   }, [focusLockedRef]);
   const Icon = LINE_ICON[vote.line];
+  const reduce = useReducedMotion();
 
   return (
-    <div ref={ref} tabIndex={-1} className="flex flex-col gap-2 rounded-card outline-offset-4">
+    // A short settle when the card appears (only the transition honours reduced motion; the target is the same).
+    <m.div
+      ref={ref}
+      tabIndex={-1}
+      initial={{ scale: 0.96 }}
+      animate={{ scale: 1 }}
+      transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 26 }}
+      className="glass flex flex-col gap-2 rounded-[20px]! p-5 outline-offset-4"
+    >
       <p className="text-[15px] text-muted">{c.yourScore}</p>
       <p className="font-mono text-[88px] font-medium leading-none tabular-nums">{vote.score}</p>
       {!hideLine && (
@@ -295,11 +313,11 @@ function VoteBlock({ vote, fade, hideLine = false, focusLockedRef }: VoteBlockPr
             transition={fade}
             className={cn("flex items-start gap-2 text-[17px] font-medium leading-snug", LINE_TONE[vote.line])}
           >
-            <Icon aria-hidden="true" weight="regular" className="mt-[3px] size-5 shrink-0" />
+            <Icon aria-hidden="true" weight="regular" className="mt-px size-6 shrink-0" />
             {c[vote.line]}
           </m.p>
         </AnimatePresence>
       )}
-    </div>
+    </m.div>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { DGL } from "@/data/dgl";
 import {
+  audienceSoFar,
   clockLabel,
   formatClock,
   gridKey,
@@ -307,5 +308,42 @@ describe("tallyAverage", () => {
     expect(closed.kind === "closed" && tallyAverage(closed.tally, true)).toBe(DGL.copy.noVotes);
     const one = viewFor(st({ phase: "VOTING_CLOSED", votes: 1, average: 7 }), null);
     expect(one.kind === "closed" && tallyAverage(one.tally, true)).toBe("Audience average 7 / 10");
+  });
+});
+
+describe("winner view", () => {
+  const winners = { names: ["Riya Sharma", "Dev Anand"], audience: 9 };
+
+  test("winner kind when state.winner is set, carrying the names and the audience score", () => {
+    const v = viewFor(st({ phase: "COMPLETED", winner: winners, performanceId: null, contestant: null, prompt: null }), null);
+    expect(v).toEqual({ kind: "winner", names: ["Riya Sharma", "Dev Anand"], audience: 9 });
+  });
+
+  test("it wins over the completed screen only while set", () => {
+    expect(viewFor(st({ phase: "COMPLETED", winner: null }), null)).toEqual({ kind: "completed" });
+    // A winner on a state that is not between acts never replaces a live act (the server sends one only between acts).
+    expect(viewFor(st({ phase: "VOTING", winner: winners }), null).kind).toBe("voting-grid");
+  });
+
+  test("the live region reads Winner or Winners, the names and the audience score", () => {
+    expect(liveText({ kind: "winner", names: ["Riya Sharma"], audience: 8 })).toBe(`${DGL.copy.winnerTitle}. Riya Sharma. Audience 8 / 10`);
+    expect(liveText({ kind: "winner", ...winners })).toBe(`${DGL.copy.winnersTitle}. Riya Sharma, Dev Anand. Audience 9 / 10`);
+  });
+});
+
+describe("audienceSoFar", () => {
+  const tally = (over: Partial<Tally> = {}): Tally => ({ votes: 0, average: null, showAverage: true, ...over });
+  test("copy", () => {
+    expect(DGL.copy.audienceSoFar).toBe("Audience so far");
+  });
+  test("a whole-number average once there is one", () => {
+    expect(audienceSoFar(tally({ votes: 12, average: 8 }), false)).toEqual({ average: 8, empty: null });
+  });
+  test("waiting while voting, no votes once closed", () => {
+    expect(audienceSoFar(tally(), false)).toEqual({ average: null, empty: DGL.copy.waitingForAudience });
+    expect(audienceSoFar(tally(), true)).toEqual({ average: null, empty: DGL.copy.noVotes });
+  });
+  test("nothing while the average is not meant to show", () => {
+    expect(audienceSoFar(tally({ votes: 5, average: 7, showAverage: false }), false)).toBeNull();
   });
 });

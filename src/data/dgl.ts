@@ -81,6 +81,8 @@ export const DGL = {
     metaDescription: "Live audience voting for DevFest Got Latent at DevFest Noida 2026. Score each act from your phone.",
     lockupLabel: "DevFest Noida 2026",
     idleTitle: "DevFest Got Latent starts soon",
+    /** The phone's waiting screen: the header above it already says the show's name. */
+    startsSoon: "Starts soon",
     idleBody: "Keep this page open. Voting opens here after each act.",
     upNext: "Up next",
     onStageNow: "On stage now",
@@ -95,6 +97,8 @@ export const DGL = {
     yourScore: "Your score",
     voteCount: (n: number) => (n === 1 ? "1 vote" : `${n} votes`),
     audienceAverage: "Audience average",
+    /** The card under a recorded vote: the live whole-number average and the count. */
+    audienceSoFar: "Audience so far",
     outOfTen: (n: number) => `${n} / 10`,
     pausedBody: "Hang on, the host will reopen it.",
     votingClosed: "Voting closed",
@@ -119,8 +123,12 @@ export const DGL = {
     stageTitle: "DevFest Got Latent stage",
     stageIdleBody: "The QR code to vote appears when the act begins.",
     scanToVote: "Scan to vote",
-    /** Alt text for the DevFest Got Latent artwork shown on the stage (waiting, up next, voting, between acts). */
+    /** Alt text for the full DevFest Got Latent poster shown on the stage while waiting and between acts. */
     posterAlt: "DevFest Got Latent: a gold title on a stage with blue curtains",
+    /** Alt text for the title strip along the top of every other stage screen. */
+    bannerAlt: "DevFest Got Latent",
+    /** Accessible name of the prompt wheel on the stage. */
+    wheelLabel: "Prompt wheel",
     voteNow: "Vote now",
     stageTime: "Time",
     stageVotingOpen: "Voting open",
