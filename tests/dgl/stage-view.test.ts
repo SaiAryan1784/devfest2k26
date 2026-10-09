@@ -3,12 +3,14 @@ import { screenKey, showsPoster, showsQr, stageView, type StageView } from "@/li
 import type { Phase, PublicState } from "@/lib/dgl/types";
 
 const ID = "11111111-1111-4111-8111-111111111111";
-const act = { contestant: "Riya Sharma", prompt: "Explain Kubernetes to your grandmother" };
+const act = { contestant: "Riya Sharma", prompt: "Explain Kubernetes to your grandmother", spinning: false };
 
 const st = (over: Partial<PublicState> = {}): PublicState => ({
   phase: "VOTING",
   performanceId: ID,
-  ...act,
+  contestant: act.contestant,
+  prompt: act.prompt,
+  spunAtMs: null,
   endsAtMs: null,
   votes: 0,
   average: null,
@@ -28,6 +30,21 @@ describe("stageView", () => {
 
   test("ready shows who is up next", () => {
     expect(stageView(st({ phase: "READY" }))).toEqual({ kind: "ready", id: ID, act });
+  });
+
+  test("while the wheel spins the prompt is hidden", () => {
+    const spun = st({ phase: "READY", spunAtMs: 1_000 });
+    expect(stageView(spun, true)).toEqual({ kind: "ready", id: ID, act: { contestant: "Riya Sharma", prompt: null, spinning: true } });
+    expect(stageView(spun, false)).toEqual({ kind: "ready", id: ID, act });
+    // Even if the act started before the wheel stopped.
+    const started = stageView(st({ phase: "PERFORMING", endsAtMs: 90_000, spunAtMs: 1_000 }), true);
+    expect(started).toMatchObject({ kind: "clock", act: { prompt: null, spinning: true } });
+  });
+
+  test("the spin changes neither the screen nor the QR rule", () => {
+    const spun = st({ phase: "READY", spunAtMs: 1_000 });
+    expect(screenKey(stageView(spun, true))).toBe(screenKey(stageView(spun, false)));
+    expect(showsQr(stageView(spun, true))).toBe(false);
   });
 
   test("performing runs the clock, performed holds it at time", () => {

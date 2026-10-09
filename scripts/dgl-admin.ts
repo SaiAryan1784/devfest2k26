@@ -8,9 +8,9 @@ import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
 import { hashPasscode } from "../src/lib/dgl/auth";
 import { ensureSchema, neonDb } from "../src/lib/dgl/db";
+import { ROLES, isRole } from "../src/lib/dgl/machine";
 import type { Role } from "../src/lib/dgl/types";
 
-const ROLES: Role[] = ["SUPER_ADMIN", "OPERATOR", "HOST", "VOLUNTEER"];
 const USAGE = `Usage: npm run dgl:admin -- --name "<name>" --role <${ROLES.join("|")}>`;
 
 export function parseArgs(argv: string[]): { name: string; role: Role } | { error: string } {
@@ -23,8 +23,9 @@ export function parseArgs(argv: string[]): { name: string; role: Role } | { erro
   if (!name) return { error: "Missing --name." };
   if (name.length > 64 || /[\u0000-\u001f\u007f]/.test(name)) return { error: "Invalid --name (max 64 characters, no control characters)." };
   if (!role) return { error: "Missing --role." };
-  if (!ROLES.includes(role as Role)) return { error: `Unknown role "${role}".` };
-  return { name, role: role as Role };
+  // The two roles only: OPERATOR and VOLUNTEER are retired (stored ones read as HOST).
+  if (!isRole(role)) return { error: `Unknown role "${role}".` };
+  return { name, role };
 }
 
 /** Reads one line from the terminal without echoing it. */

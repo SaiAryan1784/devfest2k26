@@ -19,6 +19,12 @@ export const DGL = {
    */
   showLiveAverage: "after-vote" as "after-vote" | "always",
   poll: { votingMs: 1500, idleMs: 3000, adminMs: 1000 },
+  /**
+   * The prompt wheel. A spin (READY only) stores the prompt and the server
+   * time of the spin; every screen hides the prompt until spinMs later, in
+   * server time, so the wheel and the reveal land together everywhere.
+   */
+  wheel: { spinMs: 4500, segments: 12 },
   stage: {
     /** The projector hides the mouse pointer after this long without movement. */
     cursorIdleMs: 3000,
@@ -44,6 +50,8 @@ export const DGL = {
     /** Sign in attempts per IP per minute, per server instance (best effort, see loginLimiter). */
     loginPerIpPerMin: 10,
     kioskGapMs: 2000,
+    /** An act's name (put on stage, fix the name): 1 to 80 characters once trimmed, no control characters. */
+    nameMax: 80,
   },
   copy: {
     voteQueued: "Vote queued, waiting for connection",

@@ -12,18 +12,25 @@ export type StoredStatus =
 
 /**
  * What the show is doing right now. IDLE means there is no current
- * performance; PERFORMED means PERFORMING with the time up. UPCOMING is a
- * contestant-list status, never a phase.
+ * performance; PERFORMED means PERFORMING with the time up.
  */
 export type Phase = "IDLE" | StoredStatus | "PERFORMED";
 
-export type Role = "SUPER_ADMIN" | "OPERATOR" | "HOST" | "VOLUNTEER";
+/**
+ * The two admin roles. A HOST runs the show (every live action) and may record
+ * kiosk votes; a SUPER_ADMIN can do that and everything in setup. A role
+ * stored before this pair existed (OPERATOR, VOLUNTEER) reads as HOST (see
+ * normalizeRole). The audience is not a role: it has no account.
+ */
+export type Role = "SUPER_ADMIN" | "HOST";
 
 export type LiveAction =
-  | { type: "selectContestant"; contestantId: string }
-  | { type: "reassignContestant"; contestantId: string }
-  | { type: "setPrompt"; text: string }
-  | { type: "drawPrompt" }
+  /** The host typed who is on stage: a new act, READY. */
+  | { type: "putOnStage"; name: string }
+  /** Fix a typo in the current act's name. */
+  | { type: "renameAct"; name: string }
+  /** Pick a random active prompt for the current act (READY only, repeatable). */
+  | { type: "spinWheel" }
   | { type: "startPerformance" }
   | { type: "startVoting" }
   | { type: "pauseVoting" }
@@ -35,13 +42,6 @@ export type LiveAction =
   | { type: "complete" };
 
 export type SetupAction =
-  | {
-      type: "upsertContestant";
-      id?: string;
-      name: string;
-      sort: number;
-      active: boolean;
-    }
   | { type: "upsertPrompt"; id?: string; text: string; active: boolean }
   | {
       type: "upsertAdmin";
@@ -60,8 +60,12 @@ export type Action = LiveAction | SetupAction;
 export type PublicState = {
   phase: Phase;
   performanceId: string | null;
+  /** The current act's name, as the host typed it. */
   contestant: string | null;
+  /** Set by the wheel. Screens hide it until the spin ends (spunAtMs + DGL.wheel.spinMs, server time). */
   prompt: string | null;
+  /** Server time of the current act's last spin, null before any spin. */
+  spunAtMs: number | null;
   endsAtMs: number | null;
   /** Counted votes (excluded votes are not counted). */
   votes: number;
@@ -74,23 +78,17 @@ export type PublicState = {
   } | null;
 };
 
-export type ContestantStatus = "upcoming" | "current" | "done";
-
 export type AdminState = PublicState & {
   /** The signed-in admin, so the console can show who it is and decide what to offer. */
   me: { name: string; role: Role };
   version: number;
   serverNow: number;
-  /**
-   * For a VOLUNTEER these are stripped: selfScore and rawAverage null,
-   * flagged, excluded and kiosk 0, prompts empty (see readAdminState).
-   */
   selfScore: number | null;
   rawAverage: number | null;
   flagged: number;
   excluded: number;
   kiosk: number;
-  contestants: { id: string; name: string; sort: number; active: boolean; status: ContestantStatus }[];
+  /** The whole prompt pool (the wheel draws from the active ones). */
   prompts: { id: string; text: string; active: boolean }[];
   /** SUPER_ADMIN only. */
   admins?: { id: string; name: string; role: Role; active: boolean }[];
@@ -110,6 +108,6 @@ export type ActionResult =
   | { ok: true; state: AdminState }
   | {
       ok: false;
-      code: "forbidden" | "not_allowed" | "stale" | "invalid" | "needs_prompt" | "needs_self_score";
+      code: "forbidden" | "not_allowed" | "stale" | "invalid" | "needs_self_score";
       state: AdminState;
     };

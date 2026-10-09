@@ -12,7 +12,12 @@ import type { LocalVote } from "./vote-queue";
 export type VoteLineKey = "voteRecorded" | "voteQueued" | "votePaused" | "voteNotCounted" | "voteCookiesBlocked";
 
 export type VoteShown = { score: number; state: LocalVote["state"]; line: VoteLineKey };
-export type Act = { contestant: string | null; prompt: string | null };
+/**
+ * The act on stage. While the wheel is spinning (`spinning`, from useSpinning
+ * in server time) `prompt` is null and the screen says the wheel is spinning
+ * in its place, so the prompt never shows before the wheel lands.
+ */
+export type Act = { contestant: string | null; prompt: string | null; spinning: boolean };
 /** `average` is the public one, a whole number (null with no counted votes); `showAverage` says whether to show it at all. */
 export type Tally = { votes: number; average: number | null; showAverage: boolean };
 
@@ -43,11 +48,16 @@ export function voteLine(v: LocalVote, phase: Phase, cookiesBlocked = false): Vo
   return phase === "VOTING_PAUSED" ? "votePaused" : "voteQueued";
 }
 
-export function viewFor(state: PublicState | null, local: LocalVote | null, cookiesBlocked = false): AudienceView {
+/**
+ * `spinning` comes from useSpinning(state.spunAtMs, offset). It is not tied to
+ * a phase: the prompt stays hidden until the spin ends even if the act has
+ * started by then.
+ */
+export function viewFor(state: PublicState | null, local: LocalVote | null, cookiesBlocked = false, spinning = false): AudienceView {
   // Before the first poll (and on the server) there is nothing to show but the waiting screen.
   if (!state) return { kind: "idle" };
   const { phase } = state;
-  const act: Act = { contestant: state.contestant, prompt: state.prompt };
+  const act: Act = { contestant: state.contestant, prompt: spinning ? null : state.prompt, spinning };
   const mine = local && local.performanceId === state.performanceId ? local : null;
   const shown: VoteShown | null = mine ? { score: mine.score, state: mine.state, line: voteLine(mine, phase, cookiesBlocked) } : null;
   const tally = (showAverage: boolean): Tally => ({ votes: state.votes, average: state.average, showAverage });

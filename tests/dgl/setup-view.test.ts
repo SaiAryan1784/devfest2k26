@@ -1,13 +1,11 @@
 import { describe, expect, test } from "vitest";
+import * as setupView from "@/lib/dgl/setup-view";
 import {
   canEditAdmin,
   formatAuditDetail,
   missingSeedPrompts,
-  nextSort,
-  parseSort,
   resetEnabled,
   setupSections,
-  swapSort,
 } from "@/lib/dgl/setup-view";
 
 describe("missingSeedPrompts", () => {
@@ -23,50 +21,6 @@ describe("missingSeedPrompts", () => {
   test("nothing missing, and an empty seed", () => {
     expect(missingSeedPrompts(["A", "B"], ["B", "A"])).toEqual([]);
     expect(missingSeedPrompts(["A"], [])).toEqual([]);
-  });
-});
-
-describe("swapSort", () => {
-  const list = [
-    { id: "a", sort: 1 },
-    { id: "b", sort: 5 },
-    { id: "c", sort: 9 },
-  ];
-  test("swaps the sort values of two neighbours", () => {
-    expect(swapSort(list, 1, -1)).toEqual([
-      { id: "b", sort: 1 },
-      { id: "a", sort: 5 },
-    ]);
-    expect(swapSort(list, 1, 1)).toEqual([
-      { id: "b", sort: 9 },
-      { id: "c", sort: 5 },
-    ]);
-  });
-  test("nothing past either end", () => {
-    expect(swapSort(list, 0, -1)).toEqual([]);
-    expect(swapSort(list, 2, 1)).toEqual([]);
-    expect(swapSort(list, 7, -1)).toEqual([]);
-    expect(swapSort([], 0, 1)).toEqual([]);
-  });
-  test("with tied sorts, renumbers the new order 1..n and sends only what changed", () => {
-    const tied = [
-      { id: "a", sort: 1 },
-      { id: "b", sort: 2 },
-      { id: "c", sort: 2 },
-    ];
-    expect(swapSort(tied, 2, -1)).toEqual([{ id: "b", sort: 3 }]);
-    expect(swapSort(tied, 0, 1)).toEqual([
-      { id: "b", sort: 1 },
-      { id: "a", sort: 2 },
-      { id: "c", sort: 3 },
-    ]);
-  });
-});
-
-describe("nextSort", () => {
-  test("one past the highest, 1 for an empty list", () => {
-    expect(nextSort([{ sort: 3 }, { sort: 10 }, { sort: -2 }])).toBe(11);
-    expect(nextSort([])).toBe(1);
   });
 });
 
@@ -139,34 +93,21 @@ describe("resetEnabled", () => {
   });
 });
 
-describe("parseSort", () => {
-  test("whole numbers in int range, trimmed", () => {
-    expect(parseSort(" 3 ")).toBe(3);
-    expect(parseSort("-2")).toBe(-2);
-    expect(parseSort("0")).toBe(0);
-    expect(parseSort("2147483647")).toBe(2147483647);
-  });
-  test("anything else is null", () => {
-    for (const s of ["", " ", "1.5", "1e3", "abc", "2147483648", "-2147483649", "0x10", "+"]) expect(parseSort(s), s).toBeNull();
-  });
-});
-
 describe("setupSections", () => {
   const base = { admins: undefined, audit: undefined, moderation: undefined };
   const full = { admins: [], audit: [], moderation: [] };
-  test("SUPER_ADMIN sees every section", () => {
-    expect(setupSections({ me: { role: "SUPER_ADMIN" }, ...full })).toEqual(["contestants", "prompts", "admins", "moderation", "audit", "reset"]);
+  test("SUPER_ADMIN sees every section, and there is no contestants section", () => {
+    expect(setupSections({ me: { role: "SUPER_ADMIN" }, ...full })).toEqual(["prompts", "admins", "moderation", "audit", "reset"]);
   });
-  test("OPERATOR sees contestants and prompts only", () => {
-    expect(setupSections({ me: { role: "OPERATOR" }, ...base })).toEqual(["contestants", "prompts"]);
-    // Even if the data were there, the role decides.
-    expect(setupSections({ me: { role: "OPERATOR" }, ...full })).toEqual(["contestants", "prompts"]);
-  });
-  test("HOST and VOLUNTEER get no setup", () => {
+  test("HOST gets no setup, even if the data were there", () => {
     expect(setupSections({ me: { role: "HOST" }, ...base })).toEqual([]);
-    expect(setupSections({ me: { role: "VOLUNTEER" }, ...base })).toEqual([]);
+    expect(setupSections({ me: { role: "HOST" }, ...full })).toEqual([]);
   });
   test("a SUPER_ADMIN section needs its data", () => {
-    expect(setupSections({ me: { role: "SUPER_ADMIN" }, ...base })).toEqual(["contestants", "prompts", "reset"]);
+    expect(setupSections({ me: { role: "SUPER_ADMIN" }, ...base })).toEqual(["prompts", "reset"]);
   });
+});
+
+test("the contestant sort helpers are gone", () => {
+  for (const name of ["swapSort", "parseSort", "nextSort"]) expect(Object.keys(setupView)).not.toContain(name);
 });

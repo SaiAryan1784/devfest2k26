@@ -1,4 +1,5 @@
 import { beforeEach, expect, test } from "vitest";
+import { DGL } from "@/data/dgl";
 import type { Db } from "@/lib/dgl/db";
 import { hashPasscode, login } from "@/lib/dgl/auth";
 import { applyAction, readAdminState, readPublicState } from "@/lib/dgl/show";
@@ -7,20 +8,12 @@ import { createTestDb } from "./pg";
 
 const T0 = Date.parse("2026-10-03T12:00:00Z");
 const sa = { id: "44444444-4444-4444-8444-444444444444", name: "Super", role: "SUPER_ADMIN" as const };
+const KUBERNETES = "Explain Kubernetes to your grandmother";
+const DEPRECATED = "Sell us a deprecated API";
 
 let db: Db;
-let riya: string;
-let aman: string;
-/** The current performance id once one is selected; a stray UUID before that. */
+/** The current performance id once an act is on stage; a stray UUID before that. */
 let p: string;
-
-async function insertContestant(name: string, sort: number): Promise<string> {
-  const [r] = await db.query<{ id: string }>(
-    "INSERT INTO dgl_contestants (name, sort) VALUES ($1, $2) RETURNING id",
-    [name, sort],
-  );
-  return r.id;
-}
 
 async function insertPrompt(text: string, active = true): Promise<string> {
   const [r] = await db.query<{ id: string }>(
@@ -32,10 +25,8 @@ async function insertPrompt(text: string, active = true): Promise<string> {
 
 beforeEach(async () => {
   db = await createTestDb();
-  riya = await insertContestant("Riya Sharma", 1);
-  aman = await insertContestant("Aman Gupta", 2);
-  await insertPrompt("Explain Kubernetes to your grandmother");
-  await insertPrompt("Sell us a deprecated API");
+  await insertPrompt(KUBERNETES);
+  await insertPrompt(DEPRECATED);
   p = crypto.randomUUID();
 });
 
@@ -54,8 +45,8 @@ async function runAs(role: Role, action: Action) {
 }
 
 /** Like run, but the action must succeed. */
-async function must(action: Action) {
-  const r = await run(action);
+async function must(action: Action, now = T0) {
+  const r = await run(action, now);
   if (!r.ok) throw new Error(`${action.type} failed: ${r.code}`);
   return r;
 }
@@ -71,16 +62,15 @@ async function addVotes(scores: number[], o: { flagged?: boolean; source?: "web"
   }
 }
 
-async function toVoting(o: { votes: number[]; self?: number }) {
-  await must({ type: "selectContestant", contestantId: riya });
-  await must({ type: "setPrompt", text: "Roast your own GitHub profile" });
+async function toVoting(o: { votes: number[]; self?: number; name?: string }) {
+  await must({ type: "putOnStage", name: o.name ?? "Riya Sharma" });
   await must({ type: "startPerformance" });
   await must({ type: "startVoting" });
   if (o.self !== undefined) await must({ type: "setSelfScore", score: o.self });
   await addVotes(o.votes);
 }
 
-async function toVotingClosed(o: { votes: number[]; self?: number }) {
+async function toVotingClosed(o: { votes: number[]; self?: number; name?: string }) {
   await toVoting(o);
   await must({ type: "stopVoting" });
 }
@@ -91,21 +81,201 @@ async function count(table: string): Promise<number> {
 }
 
 test("full happy path", async () => {
-  await run({ type: "selectContestant", contestantId: riya });
-  expect((await run({ type: "startPerformance" })).ok).toBe(false); // needs_prompt
-  await run({ type: "drawPrompt" }); await run({ type: "startPerformance" });
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  await must({ type: "spinWheel" });
+  await must({ type: "startPerformance" });
   const s = await readPublicState(db, T0 + 1000);
-  expect(s.phase).toBe("PERFORMING"); expect(s.endsAtMs).toBe(T0 + 90_000);
-  expect((await readPublicState(db, T0 + 90_000)).phase).toBe("PERFORMED");
+  expect(s.phase).toBe("PERFORMING");
+  expect(s.contestant).toBe("Riya Sharma");
+  expect(s.endsAtMs).toBe(T0 + DGL.performanceMs);
+  expect((await readPublicState(db, T0 + DGL.performanceMs)).phase).toBe("PERFORMED");
 });
 
 test("stale version is rejected and changes nothing", async () => {
   const v = (await admin()).version;
-  await applyAction(db, sa, { type: "selectContestant", contestantId: riya }, v, T0);
-  const r = await applyAction(db, sa, { type: "selectContestant", contestantId: aman }, v, T0);
+  await applyAction(db, sa, { type: "putOnStage", name: "Riya Sharma" }, v, T0);
+  const r = await applyAction(db, sa, { type: "putOnStage", name: "Aman Gupta" }, v, T0);
   expect(r).toMatchObject({ ok: false, code: "stale" });
   expect(r.state.contestant).toBe("Riya Sharma");
+  expect(await count("dgl_performances")).toBe(1);
 });
+
+/* Acts by name */
+
+test("putOnStage creates a READY act with the trimmed name", async () => {
+  const r = await must({ type: "putOnStage", name: "  Riya Sharma  " });
+  expect(r.state).toMatchObject({
+    phase: "READY",
+    contestant: "Riya Sharma",
+    prompt: null,
+    spunAtMs: null,
+    endsAtMs: null,
+    votes: 0,
+    version: 1,
+  });
+  const rows = await db.query<{ id: string; contestant_id: string | null; contestant_name: string; status: string; prompt: string | null }>(
+    "SELECT id, contestant_id, contestant_name, status, prompt FROM dgl_performances",
+  );
+  expect(rows).toEqual([{ id: r.state.performanceId, contestant_id: null, contestant_name: "Riya Sharma", status: "READY", prompt: null }]);
+  const [show] = await db.query<{ current_performance_id: string }>("SELECT current_performance_id FROM dgl_show WHERE id = 1");
+  expect(show.current_performance_id).toBe(r.state.performanceId);
+  expect(r.state.audit?.[0]).toEqual({ at: T0, adminName: "Super", action: "putOnStage", detail: { name: "Riya Sharma" } });
+  expect(await readPublicState(db, T0)).toMatchObject({ phase: "READY", contestant: "Riya Sharma", prompt: null });
+});
+
+test("putOnStage refuses an empty, 81 character and control character name", async () => {
+  expect(DGL.limits.nameMax).toBe(80);
+  const bad = ["", "   ", "x".repeat(81), ` ${"x".repeat(81)} `, "Riya\u0000", "Ri\nya", "Ri\tya", "Ri\u001fya", "Riya\u007fSharma"];
+  for (const name of bad) {
+    expect(await run({ type: "putOnStage", name }), JSON.stringify(name)).toMatchObject({ ok: false, code: "invalid" });
+  }
+  for (const name of [42, null, undefined, ["Riya"]]) {
+    expect(await run({ type: "putOnStage", name } as unknown as Action), String(name)).toMatchObject({ ok: false, code: "invalid" });
+  }
+  expect(await count("dgl_performances")).toBe(0);
+  expect(await count("dgl_audit")).toBe(0);
+  expect((await admin()).version).toBe(0);
+  // 80 characters is a name, and the spaces around it do not count.
+  expect((await must({ type: "putOnStage", name: ` ${"x".repeat(80)} ` })).state.contestant).toBe("x".repeat(80));
+});
+
+test("renameAct works in READY and paused voting and is not_allowed in VOTING", async () => {
+  expect(await run({ type: "renameAct", name: "Nobody" })).toMatchObject({ ok: false, code: "not_allowed" }); // IDLE
+  const on = await must({ type: "putOnStage", name: "Riya Shrma" });
+  const fixed = await must({ type: "renameAct", name: "  Riya Sharma " });
+  expect(fixed.state).toMatchObject({ phase: "READY", contestant: "Riya Sharma", performanceId: on.state.performanceId, version: on.state.version + 1 });
+  expect(fixed.state.audit?.[0]).toMatchObject({ action: "renameAct", detail: { name: "Riya Sharma" } });
+
+  await must({ type: "startPerformance" });
+  expect((await must({ type: "renameAct", name: "Riya Sharma" })).state.phase).toBe("PERFORMING");
+  await must({ type: "startVoting" });
+  await addVotes([7, 7, 7]);
+  const audits = await count("dgl_audit");
+  expect(await run({ type: "renameAct", name: "Aman Gupta" })).toMatchObject({ ok: false, code: "not_allowed" });
+  expect(await count("dgl_audit")).toBe(audits);
+
+  await must({ type: "pauseVoting" });
+  const r = await must({ type: "renameAct", name: "Aman Gupta" });
+  expect(r.state).toMatchObject({ phase: "VOTING_PAUSED", contestant: "Aman Gupta", performanceId: on.state.performanceId, votes: 3 });
+  expect(await count("dgl_votes")).toBe(3);
+  expect(await count("dgl_performances")).toBe(1);
+  // A bad name is refused the same way as on putOnStage.
+  expect(await run({ type: "renameAct", name: "x".repeat(81) })).toMatchObject({ ok: false, code: "invalid" });
+});
+
+/* The wheel */
+
+test("spinWheel sets the prompt and spun_at from now", async () => {
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  const r = await must({ type: "spinWheel" }, T0 + 5000);
+  expect([KUBERNETES, DEPRECATED]).toContain(r.state.prompt);
+  expect(r.state).toMatchObject({ phase: "READY", spunAtMs: T0 + 5000 });
+  const [row] = await db.query<{ prompt: string; spun_ms: number }>(
+    "SELECT prompt, round(extract(epoch FROM spun_at) * 1000)::float8 AS spun_ms FROM dgl_performances",
+  );
+  expect(row).toEqual({ prompt: r.state.prompt, spun_ms: T0 + 5000 });
+  expect(r.state.audit?.[0]).toEqual({ at: T0 + 5000, adminName: "Super", action: "spinWheel", detail: { text: r.state.prompt } });
+});
+
+test("spinWheel prefers an unused prompt", async () => {
+  await insertPrompt("An inactive prompt", false);
+  // An earlier act already used the first prompt.
+  await db.query(
+    "INSERT INTO dgl_performances (contestant_name, prompt, status, created_at) VALUES ('Earlier act', $1, 'COMPLETED', to_timestamp($2::float8 / 1000.0))",
+    [KUBERNETES, T0 - 60_000],
+  );
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  for (let i = 0; i < 20; i++) {
+    expect((await must({ type: "spinWheel" })).state.prompt).toBe(DEPRECATED);
+    // Forget this act's draw, so the next spin chooses between the same two again.
+    await db.query("UPDATE dgl_performances SET prompt = NULL, spun_at = NULL WHERE id = $1", [p]);
+  }
+});
+
+test("a second spin replaces the first", async () => {
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  const first = await must({ type: "spinWheel" }, T0 + 1000);
+  const second = await must({ type: "spinWheel" }, T0 + 9000);
+  // Two active prompts and no other act: the second spin takes the one the first did not.
+  expect(second.state.prompt).not.toBe(first.state.prompt);
+  expect([first.state.prompt, second.state.prompt].sort()).toEqual([KUBERNETES, DEPRECATED].sort());
+  expect(second.state.spunAtMs).toBe(T0 + 9000);
+  expect(second.state.version).toBe(first.state.version + 1);
+  expect(await readPublicState(db, T0 + 9000)).toMatchObject({ prompt: second.state.prompt, spunAtMs: T0 + 9000 });
+  // With every active prompt used, it still spins (and takes a used one).
+  const third = await must({ type: "spinWheel" }, T0 + 20_000);
+  expect([KUBERNETES, DEPRECATED]).toContain(third.state.prompt);
+  const rows = await db.query<{ detail: { text: string } }>("SELECT detail FROM dgl_audit WHERE action = 'spinWheel' ORDER BY id");
+  expect(rows.map((r) => r.detail.text)).toEqual([first.state.prompt, second.state.prompt, third.state.prompt]);
+});
+
+test("spinWheel is not_allowed outside READY", async () => {
+  const refused = async (now = T0) => {
+    const audits = await count("dgl_audit");
+    const r = await run({ type: "spinWheel" }, now);
+    expect(r, r.state.phase).toMatchObject({ ok: false, code: "not_allowed" });
+    expect(r.state).toMatchObject({ prompt: null, spunAtMs: null });
+    expect(await count("dgl_audit")).toBe(audits);
+  };
+  await refused(); // IDLE
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  await must({ type: "startPerformance" });
+  await refused(); // PERFORMING
+  await refused(T0 + DGL.performanceMs + 1); // PERFORMED
+  await must({ type: "startVoting" });
+  await refused(); // VOTING
+  await must({ type: "pauseVoting" });
+  await refused(); // VOTING_PAUSED
+  await must({ type: "stopVoting" });
+  await refused(); // VOTING_CLOSED
+  await must({ type: "setSelfScore", score: 5 });
+  await must({ type: "reveal" });
+  await refused(); // REVEAL
+  await must({ type: "complete" });
+  await refused(); // COMPLETED
+});
+
+test("spinWheel is invalid with no active prompts", async () => {
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  await db.query("UPDATE dgl_prompts SET active = false");
+  const v = (await admin()).version;
+  const audits = await count("dgl_audit");
+  const r = await run({ type: "spinWheel" });
+  expect(r).toMatchObject({ ok: false, code: "invalid" });
+  expect(r.state).toMatchObject({ prompt: null, spunAtMs: null, version: v });
+  expect(await count("dgl_audit")).toBe(audits);
+  await db.query("DELETE FROM dgl_prompts");
+  expect(await run({ type: "spinWheel" })).toMatchObject({ ok: false, code: "invalid" });
+  expect(await count("dgl_audit")).toBe(audits);
+});
+
+test("startPerformance works without a prompt", async () => {
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  const r = await must({ type: "startPerformance" });
+  expect(r.state).toMatchObject({ phase: "PERFORMING", prompt: null, spunAtMs: null, endsAtMs: T0 + DGL.performanceMs });
+});
+
+test("public state exposes spunAtMs", async () => {
+  expect((await readPublicState(db, T0)).spunAtMs).toBeNull();
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  expect((await readPublicState(db, T0)).spunAtMs).toBeNull();
+  await must({ type: "spinWheel" }, T0 + 2000);
+  const s = await readPublicState(db, T0 + 2500);
+  // The server sends the prompt with the spin time; the screens hide it until the wheel stops.
+  expect(s.spunAtMs).toBe(T0 + 2000);
+  expect(s.prompt).not.toBeNull();
+  // The next act starts unspun.
+  await must({ type: "startPerformance" });
+  await must({ type: "startVoting" });
+  await must({ type: "stopVoting" });
+  await must({ type: "setSelfScore", score: 5 });
+  await must({ type: "reveal" });
+  await must({ type: "complete" });
+  await must({ type: "putOnStage", name: "Aman Gupta" });
+  expect(await readPublicState(db, T0)).toMatchObject({ contestant: "Aman Gupta", prompt: null, spunAtMs: null });
+});
+
+/* Scores */
 
 test("hides self score until reveal", async () => {
   await toVotingClosed({ votes: [8, 8, 7, 9, 8], self: 8 });
@@ -170,9 +340,57 @@ test("reveal needs self score", async () => {
   expect(await run({ type: "reveal" })).toMatchObject({ ok: false, code: "needs_self_score" });
 });
 
-test("host cannot edit contestants; operator cannot moderate", async () => {
-  expect(await runAs("HOST", { type: "upsertContestant", name: "X", sort: 9, active: true })).toMatchObject({ code: "forbidden" });
-  expect(await runAs("OPERATOR", { type: "setFlaggedExcluded", performanceId: p, excluded: true })).toMatchObject({ code: "forbidden" });
+/* Roles */
+
+test("a HOST cannot touch the prompt pool, admins, moderation or reset", async () => {
+  await toVoting({ votes: [5] });
+  const audits = await count("dgl_audit");
+  const setup: Action[] = [
+    { type: "upsertPrompt", text: "X", active: true },
+    { type: "upsertAdmin", name: "Sneaky", role: "SUPER_ADMIN", passcode: "123456", active: true },
+    { type: "setFlaggedExcluded", performanceId: p, excluded: true },
+    { type: "resetShow", confirm: "RESET" },
+  ];
+  for (const action of setup) expect(await runAs("HOST", action), action.type).toMatchObject({ ok: false, code: "forbidden" });
+  expect(await count("dgl_audit")).toBe(audits);
+  expect(await count("dgl_admins")).toBe(0);
+});
+
+test("a HOST runs every live step of an act", async () => {
+  const host = async (action: Action) => {
+    const r = await runAs("HOST", action);
+    if (!r.ok) throw new Error(`${action.type} failed: ${r.code}`);
+    return r;
+  };
+  await host({ type: "putOnStage", name: "Riya Shrma" });
+  await host({ type: "renameAct", name: "Riya Sharma" });
+  await host({ type: "spinWheel" });
+  await host({ type: "setSelfScore", score: 7 });
+  await host({ type: "startPerformance" });
+  await host({ type: "startVoting" });
+  await host({ type: "pauseVoting" });
+  await host({ type: "resumeVoting" });
+  await host({ type: "stopVoting" });
+  await host({ type: "reopenVoting" });
+  await host({ type: "stopVoting" });
+  await host({ type: "reveal" });
+  expect((await host({ type: "complete" })).state).toMatchObject({ phase: "COMPLETED", contestant: "Riya Sharma", me: { role: "HOST" } });
+});
+
+test("a legacy role reads as HOST", async () => {
+  const id = await insertAdmin("Old operator", "OPERATOR" as Role, { pass: "operator pass" });
+  const r = await login(db, "Old operator", "operator pass", T0);
+  expect(r).toEqual({ ok: true, admin: { id, name: "Old operator", role: "HOST" } });
+  if (!r.ok) return;
+  const v = (await readAdminState(db, r.admin, T0)).version;
+  const on = await applyAction(db, r.admin, { type: "putOnStage", name: "Riya Sharma" }, v, T0);
+  expect(on).toMatchObject({ ok: true, state: { phase: "READY", me: { name: "Old operator", role: "HOST" } } });
+  expect(await applyAction(db, r.admin, { type: "upsertPrompt", text: "X", active: true }, on.state.version, T0)).toMatchObject({
+    ok: false,
+    code: "forbidden",
+  });
+  // The super admin's list shows the row as HOST too.
+  expect((await admin()).admins).toContainEqual({ id, name: "Old operator", role: "HOST", active: true });
 });
 
 test("excluding flagged votes changes the average, and is audited", async () => {
@@ -204,91 +422,51 @@ test("excluding flagged votes changes the average, and is audited", async () => 
 
 test("every successful action writes one audit row", async () => {
   const before = await count("dgl_audit");
-  await must({ type: "selectContestant", contestantId: riya });
-  await must({ type: "drawPrompt" });
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  await must({ type: "spinWheel" });
+  await must({ type: "renameAct", name: "Riya S." });
   await must({ type: "upsertPrompt", text: "Give a TED talk on tabs versus spaces", active: true });
-  expect(await count("dgl_audit")).toBe(before + 3);
+  expect(await count("dgl_audit")).toBe(before + 4);
   // Refusals write nothing.
   expect((await runAs("HOST", { type: "resetShow", confirm: "RESET" })).ok).toBe(false);
   expect((await run({ type: "startVoting" })).ok).toBe(false);
-  expect(await count("dgl_audit")).toBe(before + 3);
+  expect((await run({ type: "renameAct", name: "" })).ok).toBe(false);
+  expect(await count("dgl_audit")).toBe(before + 4);
 });
 
 test("stale version on a live action is rejected and writes nothing", async () => {
-  await must({ type: "selectContestant", contestantId: riya });
+  await must({ type: "putOnStage", name: "Riya Sharma" });
   const v = (await admin()).version;
-  expect((await applyAction(db, sa, { type: "setPrompt", text: "First" }, v, T0)).ok).toBe(true);
+  expect((await applyAction(db, sa, { type: "renameAct", name: "First" }, v, T0)).ok).toBe(true);
   const audits = await count("dgl_audit");
-  const r = await applyAction(db, sa, { type: "setPrompt", text: "Second" }, v, T0);
+  const r = await applyAction(db, sa, { type: "renameAct", name: "Second" }, v, T0);
   expect(r).toMatchObject({ ok: false, code: "stale" });
-  expect(r.state.prompt).toBe("First");
+  expect(r.state.contestant).toBe("First");
   expect(r.state.version).toBe(v + 1);
   expect(await count("dgl_audit")).toBe(audits);
+  // A spin rendered from the old version is stale too.
+  expect(await applyAction(db, sa, { type: "spinWheel" }, v, T0)).toMatchObject({ ok: false, code: "stale" });
+  expect((await admin()).prompt).toBeNull();
 });
 
 test("an action the phase does not allow is not_allowed", async () => {
-  await must({ type: "selectContestant", contestantId: riya });
+  await must({ type: "putOnStage", name: "Riya Sharma" });
   expect(await run({ type: "startVoting" })).toMatchObject({ ok: false, code: "not_allowed" });
-  expect((await admin()).phase).toBe("READY");
+  // Another act cannot replace one that is up next: fix the name instead.
+  expect(await run({ type: "putOnStage", name: "Aman Gupta" })).toMatchObject({ ok: false, code: "not_allowed" });
+  expect(await admin()).toMatchObject({ phase: "READY", contestant: "Riya Sharma" });
 });
 
 test("input validation", async () => {
-  await must({ type: "selectContestant", contestantId: riya });
+  await must({ type: "putOnStage", name: "Riya Sharma" });
   expect(await run({ type: "setSelfScore", score: 7.5 })).toMatchObject({ code: "invalid" });
   expect(await run({ type: "setSelfScore", score: 11 })).toMatchObject({ code: "invalid" });
-  expect(await run({ type: "setPrompt", text: "   " })).toMatchObject({ code: "invalid" });
-  expect(await run({ type: "setPrompt", text: "x".repeat(201) })).toMatchObject({ code: "invalid" });
-  expect(await run({ type: "selectContestant", contestantId: "not-a-uuid" })).toMatchObject({ code: "invalid" });
-  expect(await run({ type: "upsertContestant", name: "", sort: 1, active: true })).toMatchObject({ code: "invalid" });
+  expect(await run({ type: "renameAct", name: "   " })).toMatchObject({ code: "invalid" });
+  expect(await run({ type: "renameAct", name: "x".repeat(81) })).toMatchObject({ code: "invalid" });
   expect(await run({ type: "resetShow", confirm: "reset" as "RESET" })).toMatchObject({ code: "invalid" });
-  const r = await run({ type: "setPrompt", text: "  Trimmed  " });
-  expect(r.state.prompt).toBe("Trimmed");
-});
-
-test("drawPrompt picks an unused active prompt", async () => {
-  await insertPrompt("Inactive prompt", false);
-  // A finished performance already used the first prompt.
-  await db.query(
-    "INSERT INTO dgl_performances (contestant_id, prompt, status, created_at) VALUES ($1, $2, 'COMPLETED', now())",
-    [aman, "Explain Kubernetes to your grandmother"],
-  );
-  await must({ type: "selectContestant", contestantId: riya });
-  for (let i = 0; i < 5; i++) {
-    const r = await must({ type: "drawPrompt" });
-    expect(r.state.prompt).toBe("Sell us a deprecated API");
-    await must({ type: "setPrompt", text: "Placeholder" });
-  }
-  const r = await must({ type: "drawPrompt" });
-  expect(r.state.audit?.[0]).toMatchObject({ action: "drawPrompt", detail: { text: "Sell us a deprecated API" } });
-});
-
-test("drawPrompt falls back to a used prompt, and is invalid with no active prompts", async () => {
-  await db.query("UPDATE dgl_prompts SET active = false WHERE text <> 'Sell us a deprecated API'");
-  await must({ type: "selectContestant", contestantId: riya });
-  expect((await must({ type: "drawPrompt" })).state.prompt).toBe("Sell us a deprecated API");
-  // Now every active prompt is used by a performance; it still draws one.
-  expect((await must({ type: "drawPrompt" })).state.prompt).toBe("Sell us a deprecated API");
-
-  await db.query("UPDATE dgl_prompts SET active = false");
-  await must({ type: "setPrompt", text: "Manual" });
-  const audits = await count("dgl_audit");
-  const r = await run({ type: "drawPrompt" });
-  expect(r).toMatchObject({ ok: false, code: "invalid" });
-  expect(r.state.prompt).toBe("Manual");
-  expect(await count("dgl_audit")).toBe(audits);
-});
-
-test("reassignContestant keeps the votes", async () => {
-  await toVoting({ votes: [7, 7, 7, 7, 7] });
-  const before = p;
-  expect(await run({ type: "reassignContestant", contestantId: aman })).toMatchObject({ code: "not_allowed" });
-  await must({ type: "pauseVoting" });
-  const r = await must({ type: "reassignContestant", contestantId: aman });
-  expect(r.state.contestant).toBe("Aman Gupta");
-  expect(r.state.performanceId).toBe(before);
-  expect(r.state.votes).toBe(5);
-  expect(r.state.phase).toBe("VOTING_PAUSED");
-  expect(await count("dgl_votes")).toBe(5);
+  const r = await run({ type: "renameAct", name: "  Trimmed  " });
+  expect(r.state.contestant).toBe("Trimmed");
+  expect((await run({ type: "renameAct", name: ` ${"y".repeat(80)} ` })).state.contestant).toBe("y".repeat(80));
 });
 
 test("resetShow clears performances and votes and points the show at null", async () => {
@@ -302,74 +480,61 @@ test("resetShow clears performances and votes and points the show at null", asyn
     "SELECT current_performance_id FROM dgl_show WHERE id = 1",
   );
   expect(show.current_performance_id).toBeNull();
-  expect(await readPublicState(db, T0)).toMatchObject({ phase: "IDLE", contestant: null, votes: 0, average: null, reveal: null });
-  expect(r.state.contestants.every((c) => c.status === "upcoming")).toBe(true);
-  // A fresh show can start again.
-  await must({ type: "selectContestant", contestantId: aman });
-});
-
-test("contestant queue shows upcoming, current and done", async () => {
-  await toVotingClosed({ votes: [5, 5, 5, 5, 5], self: 5 });
-  let s = await admin();
-  expect(s.contestants.map((c) => [c.name, c.status])).toEqual([
-    ["Riya Sharma", "current"],
-    ["Aman Gupta", "upcoming"],
-  ]);
-  await must({ type: "reveal" });
-  await must({ type: "complete" });
-  s = await admin();
-  expect(s.phase).toBe("COMPLETED");
-  expect(s.contestant).toBe("Riya Sharma");
-  expect(s.contestants.map((c) => c.status)).toEqual(["done", "upcoming"]);
+  expect(await readPublicState(db, T0)).toMatchObject({
+    phase: "IDLE",
+    contestant: null,
+    prompt: null,
+    spunAtMs: null,
+    votes: 0,
+    average: null,
+    reveal: null,
+  });
+  // The prompt pool is kept, and a fresh show can start again.
+  expect(r.state.prompts).toHaveLength(2);
+  await must({ type: "putOnStage", name: "Aman Gupta" });
 });
 
 test("readAdminState gives admins and audit to SUPER_ADMIN only", async () => {
   await db.query(
     "INSERT INTO dgl_admins (name, role, passcode_hash) VALUES ('Host one', 'HOST', 'secret-hash')",
   );
-  await must({ type: "selectContestant", contestantId: riya });
+  await must({ type: "putOnStage", name: "Riya Sharma" });
   const s = await admin();
   expect(s.admins).toEqual([{ id: expect.any(String), name: "Host one", role: "HOST", active: true }]);
   expect(s.audit).toEqual([
-    { at: T0, adminName: "Super", action: "selectContestant", detail: { contestantId: riya } },
+    { at: T0, adminName: "Super", action: "putOnStage", detail: { name: "Riya Sharma" } },
   ]);
   expect(JSON.stringify(s)).not.toContain("secret-hash");
-  for (const role of ["HOST", "OPERATOR"] as const) {
-    const other = await admin(role);
-    expect("admins" in other).toBe(false);
-    expect("audit" in other).toBe(false);
-    expect(other.contestant).toBe("Riya Sharma");
-  }
+  const host = await admin("HOST");
+  expect("admins" in host).toBe(false);
+  expect("audit" in host).toBe(false);
+  expect("moderation" in host).toBe(false);
+  expect(host.contestant).toBe("Riya Sharma");
 });
 
 test("admin state names the signed-in admin and their role, nothing more", async () => {
   expect((await admin()).me).toEqual({ name: "Super", role: "SUPER_ADMIN" });
   expect((await admin("HOST")).me).toEqual({ name: "Super", role: "HOST" });
-  const r = await run({ type: "selectContestant", contestantId: riya });
+  const r = await run({ type: "putOnStage", name: "Riya Sharma" });
   expect(r.state.me).toEqual({ name: "Super", role: "SUPER_ADMIN" });
+  // There is no contestant list any more.
+  expect("contestants" in r.state).toBe(false);
 });
 
-test("upsertContestant and upsertPrompt add and edit", async () => {
-  const add = await must({ type: "upsertContestant", name: "  Kabir  ", sort: 3, active: true });
-  const kabir = add.state.contestants.find((c) => c.name === "Kabir");
-  expect(kabir).toMatchObject({ sort: 3, active: true, status: "upcoming" });
-  const edit = await must({ type: "upsertContestant", id: kabir!.id, name: "Kabir Rao", sort: 0, active: false });
-  expect(edit.state.contestants[0]).toMatchObject({ id: kabir!.id, name: "Kabir Rao", active: false });
-  expect(await run({ type: "upsertContestant", id: crypto.randomUUID(), name: "Ghost", sort: 1, active: true })).toMatchObject({ code: "invalid" });
-
-  const pr = await must({ type: "upsertPrompt", text: "New prompt", active: true });
+test("upsertPrompt adds and edits", async () => {
+  const pr = await must({ type: "upsertPrompt", text: "  New prompt  ", active: true });
   const id = pr.state.prompts.find((x) => x.text === "New prompt")!.id;
   const off = await must({ type: "upsertPrompt", id, text: "New prompt", active: false });
   expect(off.state.prompts.find((x) => x.id === id)).toEqual({ id, text: "New prompt", active: false });
-  // An inactive contestant cannot be selected.
-  expect(await run({ type: "selectContestant", contestantId: kabir!.id })).toMatchObject({ code: "invalid" });
+  expect(await run({ type: "upsertPrompt", id: crypto.randomUUID(), text: "Ghost", active: true })).toMatchObject({ code: "invalid" });
+  expect(await run({ type: "upsertPrompt", text: "x".repeat(201), active: true })).toMatchObject({ code: "invalid" });
 });
 
 test("public state carries no voter or admin data", async () => {
   await toVotingClosed({ votes: [5, 6, 7, 8, 9], self: 3 });
   const s = await readPublicState(db, T0);
   expect(Object.keys(s).sort()).toEqual(
-    ["average", "contestant", "endsAtMs", "performanceId", "phase", "prompt", "reveal", "votes"],
+    ["average", "contestant", "endsAtMs", "performanceId", "phase", "prompt", "reveal", "spunAtMs", "votes"],
   );
   expect(JSON.stringify(s)).not.toContain("voter-");
   expect(s.votes).toBe(5);
@@ -379,15 +544,15 @@ test("public state carries no voter or admin data", async () => {
 /* Setup actions leave the show version alone; the SQL version guard. */
 
 test("a setup action does not change the version, so the host's next tap is not stale", async () => {
-  await must({ type: "selectContestant", contestantId: riya });
+  await must({ type: "putOnStage", name: "Riya Sharma" });
   const v = (await admin()).version;
   const before = await count("dgl_audit");
   await must({ type: "upsertPrompt", text: "Give a TED talk on tabs versus spaces", active: true });
-  await must({ type: "upsertContestant", name: "Kabir", sort: 3, active: true });
+  await must({ type: "upsertPrompt", text: "Roast your own GitHub profile", active: true });
   expect((await admin()).version).toBe(v);
   expect(await count("dgl_audit")).toBe(before + 2);
   // A live action rendered before the edit still goes through.
-  expect((await applyAction(db, sa, { type: "drawPrompt" }, v, T0)).ok).toBe(true);
+  expect((await applyAction(db, sa, { type: "spinWheel" }, v, T0)).ok).toBe(true);
 });
 
 test("two stopVoting on the same version: the SQL guard lets one through", async () => {
@@ -404,6 +569,33 @@ test("two stopVoting on the same version: the SQL guard lets one through", async
   const [row] = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM dgl_audit WHERE action = 'stopVoting'");
   expect(row.n).toBe(1);
   expect((await admin()).version).toBe(v + 1);
+});
+
+test("two putOnStage on the same version: one act goes on stage", async () => {
+  const v = (await admin()).version;
+  const audits = await count("dgl_audit");
+  const results = await Promise.all([
+    applyAction(db, sa, { type: "putOnStage", name: "Riya Sharma" }, v, T0),
+    applyAction(db, sa, { type: "putOnStage", name: "Aman Gupta" }, v, T0),
+  ]);
+  expect(results.filter((r) => r.ok)).toHaveLength(1);
+  expect(results.filter((r) => !r.ok && r.code === "stale")).toHaveLength(1);
+  expect(await count("dgl_performances")).toBe(1);
+  expect(await count("dgl_audit")).toBe(audits + 1);
+  expect((await admin()).version).toBe(v + 1);
+});
+
+test("two spins on the same version: one goes through", async () => {
+  await must({ type: "putOnStage", name: "Riya Sharma" });
+  const v = (await admin()).version;
+  const results = await Promise.all([
+    applyAction(db, sa, { type: "spinWheel" }, v, T0 + 1000),
+    applyAction(db, sa, { type: "spinWheel" }, v, T0 + 2000),
+  ]);
+  expect(results.filter((r) => r.ok)).toHaveLength(1);
+  expect(results.filter((r) => !r.ok && r.code === "stale")).toHaveLength(1);
+  const [row] = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM dgl_audit WHERE action = 'spinWheel'");
+  expect(row.n).toBe(1);
 });
 
 /* upsertAdmin */
@@ -427,12 +619,12 @@ test("upsertAdmin creates an admin who can then sign in", async () => {
   expect(await login(db, "Neha", "wrong passcode", T0)).toMatchObject({ ok: false });
 });
 
-test("upsertAdmin refuses a duplicate name, a short passcode and bad fields", async () => {
+test("upsertAdmin refuses a duplicate name, a short passcode, a retired role and bad fields", async () => {
   await must({ type: "upsertAdmin", name: "Neha", role: "HOST", passcode: "123456", active: true });
   const admins = await count("dgl_admins");
   const audits = await count("dgl_audit");
   const bad: Action[] = [
-    { type: "upsertAdmin", name: "Neha", role: "OPERATOR", passcode: "abcdefgh", active: true },
+    { type: "upsertAdmin", name: "Neha", role: "SUPER_ADMIN", passcode: "abcdefgh", active: true },
     { type: "upsertAdmin", name: "Short", role: "HOST", passcode: "12345", active: true },
     { type: "upsertAdmin", name: "Nopass", role: "HOST", active: true },
     { type: "upsertAdmin", name: "Long", role: "HOST", passcode: "x".repeat(257), active: true },
@@ -440,6 +632,8 @@ test("upsertAdmin refuses a duplicate name, a short passcode and bad fields", as
     { type: "upsertAdmin", name: "x".repeat(65), role: "HOST", passcode: "123456", active: true },
     { type: "upsertAdmin", name: "Bad\u0000name", role: "HOST", passcode: "123456", active: true },
     { type: "upsertAdmin", name: "Bad role", role: "ROOT" as Role, passcode: "123456", active: true },
+    { type: "upsertAdmin", name: "Old operator", role: "OPERATOR" as Role, passcode: "123456", active: true },
+    { type: "upsertAdmin", name: "Old volunteer", role: "VOLUNTEER" as Role, passcode: "123456", active: true },
     { type: "upsertAdmin", name: "Bad active", role: "HOST", passcode: "123456", active: "yes" as unknown as boolean },
     { type: "upsertAdmin", id: "not-a-uuid", name: "Bad id", role: "HOST", active: true },
     { type: "upsertAdmin", id: crypto.randomUUID(), name: "Ghost", role: "HOST", active: true },
@@ -458,10 +652,10 @@ test("upsertAdmin renaming onto a taken name is invalid, not an error", async ()
 
 test("upsertAdmin updates role and active, and keeps the passcode when none is given", async () => {
   const id = await insertAdmin("Neha", "HOST", { pass: "first passcode" });
-  const r = await must({ type: "upsertAdmin", id, name: "Neha", role: "OPERATOR", active: false });
-  expect(r.state.admins).toContainEqual({ id, name: "Neha", role: "OPERATOR", active: false });
-  await must({ type: "upsertAdmin", id, name: "Neha", role: "OPERATOR", active: true });
-  expect(await login(db, "Neha", "first passcode", T0)).toMatchObject({ ok: true, admin: { role: "OPERATOR" } });
+  const r = await must({ type: "upsertAdmin", id, name: "Neha", role: "SUPER_ADMIN", active: false });
+  expect(r.state.admins).toContainEqual({ id, name: "Neha", role: "SUPER_ADMIN", active: false });
+  await must({ type: "upsertAdmin", id, name: "Neha", role: "SUPER_ADMIN", active: true });
+  expect(await login(db, "Neha", "first passcode", T0)).toMatchObject({ ok: true, admin: { role: "SUPER_ADMIN" } });
 });
 
 test("upsertAdmin passcode change takes effect for login", async () => {
@@ -482,7 +676,7 @@ test("you cannot deactivate yourself", async () => {
 test("you cannot demote yourself", async () => {
   await insertAdmin(sa.name, "SUPER_ADMIN", { id: sa.id });
   await insertAdmin("Other super", "SUPER_ADMIN");
-  const r = await run({ type: "upsertAdmin", id: sa.id, name: sa.name, role: "OPERATOR", active: true });
+  const r = await run({ type: "upsertAdmin", id: sa.id, name: sa.name, role: "HOST", active: true });
   expect(r).toMatchObject({ ok: false, code: "invalid" });
   expect((await adminRow(sa.id)).role).toBe("SUPER_ADMIN");
   // Changing your own passcode is fine.
@@ -529,22 +723,14 @@ test("upsertAdmin is audited without the passcode or its hash", async () => {
     action: "upsertAdmin",
     detail: { id, name: "Neha", role: "HOST", active: true, passcodeChanged: true },
   });
-  const edit = await must({ type: "upsertAdmin", id, name: "Neha", role: "OPERATOR", active: true });
-  expect(edit.state.audit?.[0].detail).toEqual({ id, name: "Neha", role: "OPERATOR", active: true, passcodeChanged: false });
+  const edit = await must({ type: "upsertAdmin", id, name: "Neha", role: "SUPER_ADMIN", active: true });
+  expect(edit.state.audit?.[0].detail).toEqual({ id, name: "Neha", role: "SUPER_ADMIN", active: true, passcodeChanged: false });
 
   const [{ hash }] = await db.query<{ hash: string }>("SELECT passcode_hash AS hash FROM dgl_admins WHERE id = $1", [id]);
   const rows = await db.query<{ detail: unknown }>("SELECT detail FROM dgl_audit");
   // The audit table, the action results (the API response bodies) and a fresh SUPER_ADMIN read.
   const everything = JSON.stringify(rows) + JSON.stringify(r) + JSON.stringify(edit) + JSON.stringify(await admin());
   for (const secret of ["correct horse battery", hash, "scrypt$"]) expect(everything).not.toContain(secret);
-});
-
-test("HOST and OPERATOR cannot manage admins", async () => {
-  for (const role of ["HOST", "OPERATOR"] as const) {
-    expect(await runAs(role, { type: "upsertAdmin", name: "Sneaky", role: "SUPER_ADMIN", passcode: "123456", active: true }))
-      .toMatchObject({ ok: false, code: "forbidden" });
-  }
-  expect(await count("dgl_admins")).toBe(0);
 });
 
 /* Moderation */
@@ -556,11 +742,10 @@ test("moderation lists performances with votes for SUPER_ADMIN only", async () =
   await addVotes([1, 1, 1], { flagged: true });
   await must({ type: "reveal" });
   await must({ type: "complete" });
-  await run({ type: "selectContestant", contestantId: aman }, T0 + 1000);
+  await must({ type: "putOnStage", name: "Aman Gupta" }, T0 + 1000);
   const second = p;
-  await run({ type: "setPrompt", text: "Any" }, T0 + 1000);
-  await run({ type: "startPerformance" }, T0 + 1000);
-  await run({ type: "startVoting" }, T0 + 1000);
+  await must({ type: "startPerformance" }, T0 + 1000);
+  await must({ type: "startVoting" }, T0 + 1000);
   await addVotes([9, 9]);
   await addVotes([2], { flagged: true });
 
@@ -569,7 +754,7 @@ test("moderation lists performances with votes for SUPER_ADMIN only", async () =
     { performanceId: second, contestant: "Aman Gupta", votes: 3, flagged: 1, excluded: 0 },
     { performanceId: first, contestant: "Riya Sharma", votes: 8, flagged: 3, excluded: 0 },
   ]);
-  for (const role of ["HOST", "OPERATOR"] as const) expect("moderation" in (await admin(role))).toBe(false);
+  expect("moderation" in (await admin("HOST"))).toBe(false);
 
   // Toggling updates the counts and the live average.
   const r = await must({ type: "setFlaggedExcluded", performanceId: second, excluded: true });
@@ -583,8 +768,8 @@ test("moderation lists performances with votes for SUPER_ADMIN only", async () =
 test("moderation keeps the 20 newest performances with votes", async () => {
   for (let i = 0; i < 22; i++) {
     const [row] = await db.query<{ id: string }>(
-      "INSERT INTO dgl_performances (contestant_id, status, created_at) VALUES ($1, 'COMPLETED', to_timestamp($2::float8 / 1000.0)) RETURNING id",
-      [riya, T0 + i * 1000],
+      "INSERT INTO dgl_performances (contestant_name, status, created_at) VALUES ('Riya Sharma', 'COMPLETED', to_timestamp($1::float8 / 1000.0)) RETURNING id",
+      [T0 + i * 1000],
     );
     p = row.id;
     await addVotes([5]);
@@ -594,44 +779,11 @@ test("moderation keeps the 20 newest performances with votes", async () => {
   expect(m[0].performanceId).toBe(p);
 });
 
-test("a VOLUNTEER's admin state carries only what the kiosk needs: no self score, raw average, flags, kiosk count or prompts", async () => {
+test("HOST and SUPER_ADMIN get the self score, raw average, flags, kiosk count and prompts", async () => {
   await toVoting({ votes: [9, 8, 7], self: 6 });
   await addVotes([4], { flagged: true });
   await addVotes([5], { source: "kiosk" });
-  const v = await admin("VOLUNTEER");
-  expect(v).toMatchObject({
-    phase: "VOTING",
-    performanceId: p,
-    contestant: "Riya Sharma",
-    prompt: "Roast your own GitHub profile",
-    me: { name: "Super", role: "VOLUNTEER" },
-    selfScore: null,
-    rawAverage: null,
-    flagged: 0,
-    excluded: 0,
-    kiosk: 0,
-    prompts: [],
-  });
-  expect(typeof v.version).toBe("number");
-  expect(v.serverNow).toBe(T0);
-  expect(v.contestants.map((k) => k.name)).toEqual(["Riya Sharma", "Aman Gupta"]);
-  for (const k of ["admins", "audit", "moderation"]) expect(k in v).toBe(false);
-});
-
-test("the self score entered for an act is absent from a VOLUNTEER's serialised state before the reveal", async () => {
-  await toVotingClosed({ votes: [5, 5, 5, 5, 5], self: 7 });
-  const json = JSON.stringify(await admin("VOLUNTEER"));
-  expect(json).not.toMatch(/"selfScore":7/);
-  expect(JSON.parse(json)).toMatchObject({ selfScore: null, reveal: null });
-  // The same state for the host still has it, so the volunteer's is stripped, not missing.
-  expect((await admin("HOST")).selfScore).toBe(7);
-});
-
-test("HOST, OPERATOR and SUPER_ADMIN still get the self score, raw average, flags, kiosk count and prompts", async () => {
-  await toVoting({ votes: [9, 8, 7], self: 6 });
-  await addVotes([4], { flagged: true });
-  await addVotes([5], { source: "kiosk" });
-  for (const role of ["HOST", "OPERATOR", "SUPER_ADMIN"] as const) {
+  for (const role of ["HOST", "SUPER_ADMIN"] as const) {
     const s = await admin(role);
     expect(s.selfScore).toBe(6);
     expect(s.rawAverage).toBeCloseTo(6.6);
@@ -643,11 +795,15 @@ test("HOST, OPERATOR and SUPER_ADMIN still get the self score, raw average, flag
 
 test("an action type that is not an admin action is invalid for every role and writes nothing", async () => {
   const before = await count("dgl_audit");
-  for (const role of ["SUPER_ADMIN", "OPERATOR", "HOST", "VOLUNTEER"] as const) {
-    for (const type of ["kioskVote", "nope"]) {
-      expect(await runAs(role, { type } as unknown as Action)).toMatchObject({ ok: false, code: "invalid" });
+  // kioskVote has its own route; the rest are gone with the contestant lineup and the typed prompt.
+  const types = ["kioskVote", "nope", "selectContestant", "reassignContestant", "setPrompt", "drawPrompt", "upsertContestant"];
+  const fields = { contestantId: crypto.randomUUID(), text: "x", name: "x", sort: 1, active: true };
+  for (const role of ["SUPER_ADMIN", "HOST"] as const) {
+    for (const type of types) {
+      expect(await runAs(role, { type, ...fields } as unknown as Action), `${role} ${type}`).toMatchObject({ ok: false, code: "invalid" });
     }
   }
   expect(await count("dgl_audit")).toBe(before);
+  expect(await count("dgl_performances")).toBe(0);
   expect((await admin()).version).toBe(0);
 });

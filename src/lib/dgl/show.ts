@@ -1,13 +1,12 @@
 import { DGL } from "@/data/dgl";
-import { cleanAdminName, hashPasscode, validNewPasscode } from "./auth";
+import { cleanAdminName, cleanName, hashPasscode, normalizeRole, validNewPasscode } from "./auth";
 import { ensureSchema, type Db } from "./db";
-import { LIVE_ACTIONS, SETUP_ACTIONS, allowed, can, effectivePhase, nextStatus } from "./machine";
+import { LIVE_ACTIONS, SETUP_ACTIONS, allowed, can, effectivePhase, isRole, nextStatus } from "./machine";
 import { compareScores, publicAverage } from "./score";
 import type {
   Action,
   ActionResult,
   AdminState,
-  ContestantStatus,
   LiveAction,
   PublicState,
   Role,
@@ -21,21 +20,22 @@ type Admin = { id: string; name: string; role: Role };
 /*
  * Reads. Timestamps cross the boundary as epoch ms (float8), counts as int,
  * averages as float8. Averages and the vote count only use votes that are
- * NOT excluded.
+ * NOT excluded. An act's name is its own (contestant_name, typed by the
+ * host); dgl_contestants is no longer read.
  */
 
 const CURRENT = `
 FROM dgl_show s
-LEFT JOIN dgl_performances p ON p.id = s.current_performance_id
-LEFT JOIN dgl_contestants c ON c.id = p.contestant_id`;
+LEFT JOIN dgl_performances p ON p.id = s.current_performance_id`;
 
 /*
  * The public read. The self score is only selected behind the REVEAL
  * condition, and no voter or IP column is ever selected.
  */
 const PUBLIC_SQL = `
-SELECT p.id AS performance_id, p.status, c.name AS contestant, p.prompt,
+SELECT p.id AS performance_id, p.status, p.contestant_name AS contestant, p.prompt,
   round(extract(epoch FROM p.ends_at) * 1000)::float8 AS ends_at_ms,
+  round(extract(epoch FROM p.spun_at) * 1000)::float8 AS spun_at_ms,
   CASE WHEN p.status = 'REVEAL' THEN p.self_score::int END AS revealed_self,
   t.votes, t.average
 ${CURRENT}
@@ -45,20 +45,19 @@ LEFT JOIN LATERAL (
 ) t ON true
 WHERE s.id = 1`;
 
-/** $1: whether to include admins, the audit log and moderation (SUPER_ADMIN). */
+/**
+ * $1: whether to include admins, the audit log and moderation (SUPER_ADMIN).
+ * Admin roles come back as stored (readAdminState normalises them). In the
+ * moderation list an act from before names were typed has none: '' rather
+ * than null.
+ */
 const ADMIN_SQL = `
-SELECT s.version, p.id AS performance_id, p.status, c.name AS contestant, p.prompt,
+SELECT s.version, p.id AS performance_id, p.status, p.contestant_name AS contestant, p.prompt,
   round(extract(epoch FROM p.ends_at) * 1000)::float8 AS ends_at_ms,
+  round(extract(epoch FROM p.spun_at) * 1000)::float8 AS spun_at_ms,
   p.self_score::int AS self_score,
   CASE WHEN p.status = 'REVEAL' THEN p.self_score::int END AS revealed_self,
   t.votes, t.average, t.flagged, t.excluded, t.kiosk,
-  (SELECT coalesce(json_agg(json_build_object(
-      'id', k.id, 'name', k.name, 'sort', k.sort, 'active', k.active,
-      'status', CASE
-        WHEN k.id = p.contestant_id AND p.status <> 'COMPLETED' THEN 'current'
-        WHEN EXISTS (SELECT 1 FROM dgl_performances d WHERE d.contestant_id = k.id AND d.status = 'COMPLETED') THEN 'done'
-        ELSE 'upcoming' END
-    ) ORDER BY k.sort, k.name), '[]'::json) FROM dgl_contestants k) AS contestants,
   (SELECT coalesce(json_agg(json_build_object('id', r.id, 'text', r.text, 'active', r.active)
     ORDER BY r.text), '[]'::json) FROM dgl_prompts r) AS prompts,
   CASE WHEN $1::boolean THEN
@@ -78,14 +77,13 @@ SELECT s.version, p.id AS performance_id, p.status, c.name AS contestant, p.prom
         'flagged', m.flagged, 'excluded', m.excluded
       ) ORDER BY m.created_at DESC, m.id DESC), '[]'::json)
      FROM (
-       SELECT d.id, d.created_at, k.name,
+       SELECT d.id, d.created_at, coalesce(d.contestant_name, '') AS name,
          (count(*) FILTER (WHERE NOT v.excluded))::int AS votes,
          (count(*) FILTER (WHERE v.flagged))::int AS flagged,
          (count(*) FILTER (WHERE v.excluded))::int AS excluded
        FROM dgl_performances d
-       JOIN dgl_contestants k ON k.id = d.contestant_id
        JOIN dgl_votes v ON v.performance_id = d.id
-       GROUP BY d.id, d.created_at, k.name
+       GROUP BY d.id, d.created_at, d.contestant_name
        ORDER BY d.created_at DESC, d.id DESC
        LIMIT 20) m)
   END AS moderation
@@ -106,6 +104,7 @@ type PublicRow = {
   contestant: string | null;
   prompt: string | null;
   ends_at_ms: number | null;
+  spun_at_ms: number | null;
   revealed_self: number | null;
   votes: number;
   average: number | null;
@@ -117,9 +116,9 @@ type AdminRow = PublicRow & {
   flagged: number;
   excluded: number;
   kiosk: number;
-  contestants: AdminState["contestants"];
   prompts: AdminState["prompts"];
-  admins: NonNullable<AdminState["admins"]> | null;
+  /** `role` as stored: read through normalizeRole. */
+  admins: { id: string; name: string; role: string; active: boolean }[] | null;
   audit: NonNullable<AdminState["audit"]> | null;
   moderation: NonNullable<AdminState["moderation"]> | null;
 };
@@ -135,6 +134,7 @@ function toPublic(r: PublicRow, now: number): PublicState {
     performanceId: r.performance_id,
     contestant: r.contestant,
     prompt: r.prompt,
+    spunAtMs: num(r.spun_at_ms),
     endsAtMs: num(r.ends_at_ms),
     votes,
     average,
@@ -167,24 +167,12 @@ export async function readAdminState(
     flagged: Number(r.flagged ?? 0),
     excluded: Number(r.excluded ?? 0),
     kiosk: Number(r.kiosk ?? 0),
-    contestants: r.contestants.map((k) => ({ ...k, status: k.status as ContestantStatus })),
     prompts: r.prompts,
   };
   if (full) {
-    state.admins = r.admins ?? [];
+    state.admins = (r.admins ?? []).map((a) => ({ ...a, role: normalizeRole(a.role) }));
     state.audit = r.audit ?? [];
     state.moderation = r.moderation ?? [];
-  }
-  if (admin.role === "VOLUNTEER") {
-    // The kiosk needs the phase, the act and `me`. The own score before the
-    // reveal, the raw average, the flag and kiosk counts and the prompt list
-    // are show control data a volunteer device has no use for.
-    state.selfScore = null;
-    state.rawAverage = null;
-    state.flagged = 0;
-    state.excluded = 0;
-    state.kiosk = 0;
-    state.prompts = [];
   }
   return state;
 }
@@ -199,10 +187,6 @@ const isUuid = (x: unknown): x is string => typeof x === "string" && UUID.test(x
 const isBool = (x: unknown): x is boolean => typeof x === "boolean";
 const isScore = (x: unknown): x is number =>
   typeof x === "number" && Number.isInteger(x) && x >= 1 && x <= 10;
-const ROLES: readonly Role[] = ["SUPER_ADMIN", "OPERATOR", "HOST", "VOLUNTEER"];
-const isRole = (x: unknown): x is Role => ROLES.includes(x as Role);
-const isSort = (x: unknown): x is number =>
-  typeof x === "number" && Number.isInteger(x) && x >= -2_147_483_648 && x <= 2_147_483_647;
 function text200(x: unknown): string | null {
   if (typeof x !== "string") return null;
   const t = x.trim();
@@ -211,21 +195,14 @@ function text200(x: unknown): string | null {
 
 function normalize(a: Action): Action | null {
   switch (a.type) {
-    case "selectContestant":
-    case "reassignContestant":
-      return isUuid(a.contestantId) ? { type: a.type, contestantId: a.contestantId } : null;
-    case "setPrompt": {
-      const text = text200(a.text);
-      return text ? { type: a.type, text } : null;
+    case "putOnStage":
+    case "renameAct": {
+      // An act's name: trimmed, 1 to DGL.limits.nameMax characters, no control characters.
+      const name = cleanName(a.name, DGL.limits.nameMax);
+      return name ? { type: a.type, name } : null;
     }
     case "setSelfScore":
       return isScore(a.score) ? { type: a.type, score: a.score } : null;
-    case "upsertContestant": {
-      const name = text200(a.name);
-      if (!name || !isSort(a.sort) || !isBool(a.active)) return null;
-      if (a.id != null && !isUuid(a.id)) return null;
-      return { type: a.type, ...(a.id != null && { id: a.id }), name, sort: a.sort, active: a.active };
-    }
     case "upsertPrompt": {
       const text = text200(a.text);
       if (!text || !isBool(a.active)) return null;
@@ -254,7 +231,7 @@ function normalize(a: Action): Action | null {
         : null;
     case "resetShow":
       return a.confirm === "RESET" ? { type: a.type, confirm: "RESET" } : null;
-    case "drawPrompt":
+    case "spinWheel":
     case "startPerformance":
     case "startVoting":
     case "pauseVoting":
@@ -303,9 +280,8 @@ class Params {
  * Every write is one statement (data-modifying CTEs), so it is atomic over
  * Neon's HTTP driver, which has no transactions. A versioned action (live
  * actions and resetShow) bumps dgl_show.version guarded by WHERE version =
- * $v; setup actions (contestants, prompts, admins, moderation) leave the
- * version alone, so an edit in setup mid-show never makes the host's next
- * tap stale. Each statement applies the change and inserts the audit row,
+ * $v; setup actions (prompts, admins, moderation) leave the version alone,
+ * so an edit in setup mid-show never makes the host's next tap stale. Each statement applies the change and inserts the audit row,
  * keyed off the same CTE, and returns n = the number of rows the guard let
  * through (0 or 1).
  *
@@ -337,28 +313,31 @@ function writeStatement(a: Action, admin: Admin, version: number, now: number, h
 
   let text: string;
   switch (a.type) {
-    case "selectContestant":
+    case "putOnStage":
       // The new id is made in the same UPDATE that bumps the version, so the
-      // show row is written once; the FK is checked at end of statement.
+      // show row is written once; the FK is checked at end of statement. The
+      // act carries the typed name; it has no contestant row (contestant_id null).
       text = `WITH ${checked(", current_performance_id = gen_random_uuid()")},
-        ins AS (INSERT INTO dgl_performances (id, contestant_id, status, created_at)
-          SELECT bump.pid, ${q.add(a.contestantId, "uuid")}, ${q.add(nextStatus(a.type), "text")}, ${at} FROM bump),
+        ins AS (INSERT INTO dgl_performances (id, contestant_name, status, created_at)
+          SELECT bump.pid, ${q.add(a.name, "text")}, ${q.add(nextStatus(a.type), "text")}, ${at} FROM bump),
         ${audit("bump", "bump.pid")}
         ${nBump}`;
       break;
-    case "drawPrompt":
-      // Unused active prompts sort first, then random; LIMIT 1.
+    case "spinWheel":
+      // Active prompts that no performance has used sort first, then random;
+      // LIMIT 1. The current act's own draw counts as used, so "Spin again"
+      // moves on to another prompt while an unused one is left. The spin time
+      // is stored with it: the screens hide the prompt until the wheel stops.
       text = `WITH pick AS (
           SELECT r.text FROM dgl_prompts r WHERE r.active
           ORDER BY EXISTS (SELECT 1 FROM dgl_performances x WHERE x.prompt = r.text), random()
           LIMIT 1),
         ${checked("", " AND EXISTS (SELECT 1 FROM pick)")},
-        chg AS (UPDATE dgl_performances p SET prompt = pick.text FROM bump, pick WHERE p.id = bump.pid),
+        chg AS (UPDATE dgl_performances p SET prompt = pick.text, spun_at = ${at} FROM bump, pick WHERE p.id = bump.pid),
         ${audit("bump, pick", "bump.pid", "jsonb_build_object('text', pick.text)")}
         ${nBump}`;
       break;
-    case "reassignContestant":
-    case "setPrompt":
+    case "renameAct":
     case "setSelfScore":
     case "startPerformance":
     case "startVoting":
@@ -369,8 +348,7 @@ function writeStatement(a: Action, admin: Admin, version: number, now: number, h
     case "reveal":
     case "complete": {
       const set = {
-        reassignContestant: () => `contestant_id = ${q.add((a as { contestantId: string }).contestantId, "uuid")}`,
-        setPrompt: () => `prompt = ${q.add((a as { text: string }).text, "text")}`,
+        renameAct: () => `contestant_name = ${q.add((a as { name: string }).name, "text")}`,
         setSelfScore: () => `self_score = ${q.add((a as { score: number }).score, "smallint")}`,
         startPerformance: () => `${status(a.type)}, ends_at = ${ts(now + DGL.performanceMs)}`,
         startVoting: () => `${status(a.type)}, voting_opened_at = ${at}`,
@@ -392,20 +370,12 @@ function writeStatement(a: Action, admin: Admin, version: number, now: number, h
         ${audit("bump", "NULL::uuid", `${detail()} || jsonb_build_object('performances', (SELECT count(*) FROM del))`)}
         ${nBump}`;
       break;
-    case "upsertContestant":
     case "upsertPrompt": {
-      const up =
-        a.type === "upsertContestant"
-          ? a.id
-            ? `UPDATE dgl_contestants SET name = ${q.add(a.name, "text")}, sort = ${q.add(a.sort, "int")},
-                active = ${q.add(a.active, "boolean")} WHERE id = ${q.add(a.id, "uuid")} RETURNING id`
-            : `INSERT INTO dgl_contestants (name, sort, active)
-                VALUES (${q.add(a.name, "text")}, ${q.add(a.sort, "int")}, ${q.add(a.active, "boolean")}) RETURNING id`
-          : a.id
-            ? `UPDATE dgl_prompts SET text = ${q.add(a.text, "text")}, active = ${q.add(a.active, "boolean")}
-                WHERE id = ${q.add(a.id, "uuid")} RETURNING id`
-            : `INSERT INTO dgl_prompts (text, active)
-                VALUES (${q.add(a.text, "text")}, ${q.add(a.active, "boolean")}) RETURNING id`;
+      const up = a.id
+        ? `UPDATE dgl_prompts SET text = ${q.add(a.text, "text")}, active = ${q.add(a.active, "boolean")}
+            WHERE id = ${q.add(a.id, "uuid")} RETURNING id`
+        : `INSERT INTO dgl_prompts (text, active)
+            VALUES (${q.add(a.text, "text")}, ${q.add(a.active, "boolean")}) RETURNING id`;
       text = `WITH up AS (${up}),
         ${audit("up", "NULL::uuid", `${detail()} || jsonb_build_object('id', up.id)`)}
         SELECT count(*)::int AS n FROM up`;
@@ -495,14 +465,10 @@ export async function applyAction(
   if (versioned(a) && before.version !== version) return refuse("stale", before);
   if (isLive(a)) {
     if (!allowed(before.phase, a.type)) return refuse("not_allowed", before);
-    if (a.type === "selectContestant" || a.type === "reassignContestant") {
-      const target = before.contestants.find((k) => k.id === a.contestantId);
-      if (!target?.active) return refuse("invalid", before);
-    }
-    if (a.type === "drawPrompt" && !before.prompts.some((r) => r.active)) {
-      return refuse("invalid", before);
-    }
-    if (a.type === "startPerformance" && !before.prompt) return refuse("needs_prompt", before);
+    // Nothing to draw from. The statement's own guard (EXISTS pick) covers a
+    // prompt switched off between this read and the write.
+    if (a.type === "spinWheel" && !before.prompts.some((r) => r.active)) return refuse("invalid", before);
+    // The prompt is optional: startPerformance needs nothing more.
     if (a.type === "reveal" && before.selfScore === null) return refuse("needs_self_score", before);
   }
 

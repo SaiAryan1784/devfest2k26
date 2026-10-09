@@ -21,7 +21,8 @@ import {
 import { castKioskVote } from "@/lib/dgl/votes";
 
 /**
- * A vote typed in by a signed-in volunteer or organiser on the venue kiosk.
+ * A vote typed in on the venue kiosk by anyone signed in (a host or a super
+ * admin; a volunteer uses a host account).
  * Each press is one anonymous voter (`kiosk-<attemptId>`), so a kiosk can take
  * many votes while a resend of the same press cannot count twice; the
  * per-admin gap and the audit row are the brakes.

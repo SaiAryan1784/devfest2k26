@@ -23,6 +23,7 @@ const st = (over: Partial<PublicState> = {}): PublicState => ({
   performanceId: ID,
   contestant: "Riya Sharma",
   prompt: "Explain Kubernetes to your grandmother",
+  spunAtMs: null,
   endsAtMs: null,
   votes: 0,
   average: null,
@@ -38,7 +39,8 @@ const vote = (state: LocalVote["state"], over: Partial<LocalVote> = {}): LocalVo
   ...over,
 });
 
-const act = { contestant: "Riya Sharma", prompt: "Explain Kubernetes to your grandmother" };
+const act = { contestant: "Riya Sharma", prompt: "Explain Kubernetes to your grandmother", spinning: false };
+const SPUN = 1_000;
 
 describe("viewFor", () => {
   test("no state yet (server render, first poll pending) is idle", () => {
@@ -111,6 +113,25 @@ describe("viewFor", () => {
     const reveal = { self: 8, audience: 8, result: { kind: "match" as const } };
     expect(viewFor(st({ phase: "REVEAL", reveal }), null)).toEqual({ kind: "reveal", act, ...reveal });
     expect(viewFor(st({ phase: "REVEAL", reveal: null }), null).kind).toBe("closed");
+  });
+
+  test("Act.spinning hides the prompt", () => {
+    const spun = st({ phase: "READY", spunAtMs: SPUN });
+    expect(viewFor(spun, null, false, true)).toEqual({ kind: "ready", act: { contestant: "Riya Sharma", prompt: null, spinning: true } });
+    // Once the wheel has landed the prompt shows.
+    expect(viewFor(spun, null, false, false)).toEqual({ kind: "ready", act });
+    // The flag defaults to not spinning.
+    expect(viewFor(spun, null)).toEqual({ kind: "ready", act });
+  });
+
+  test("the prompt stays hidden until the spin ends, even if the act starts first", () => {
+    const v = viewFor(st({ phase: "PERFORMING", endsAtMs: 90_000, spunAtMs: SPUN }), null, false, true);
+    expect(v).toEqual({ kind: "performing", act: { contestant: "Riya Sharma", prompt: null, spinning: true }, endsAtMs: 90_000 });
+  });
+
+  test("the spinning act's live text never carries the prompt", () => {
+    const text = liveText(viewFor(st({ phase: "READY", spunAtMs: SPUN }), null, false, true));
+    expect(text).not.toContain("Kubernetes");
   });
 
   test("a vote for another performance is ignored", () => {

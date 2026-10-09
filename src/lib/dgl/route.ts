@@ -3,6 +3,7 @@ import { DGL } from "@/data/dgl";
 import { signSession } from "./auth";
 import { neonDb, type Db } from "./db";
 import { clientIp, createLimiter, ipHash } from "./http";
+import type { ActionResult } from "./types";
 import type { VoteResult } from "./votes";
 
 /** Shared plumbing for the /api/dgl routes. */
@@ -130,6 +131,19 @@ export const kioskLimiter = createLimiter(1, DGL.limits.kioskGapMs);
  * the database is still the real guard.
  */
 export const loginLimiter = createLimiter(DGL.limits.loginPerIpPerMin, 60_000);
+
+/**
+ * The HTTP status for each refusal of POST /api/dgl/admin/action. Typed by
+ * the refusal codes, so a code added to ActionResult without a status (or a
+ * status left for a code that is gone) does not compile.
+ */
+export const ACTION_STATUS: Record<Extract<ActionResult, { ok: false }>["code"], number> = {
+  forbidden: 403,
+  invalid: 400,
+  stale: 409,
+  not_allowed: 409,
+  needs_self_score: 409,
+};
 
 /** A vote result as the HTTP response the clients expect. */
 export function voteResponse(r: VoteResult): NextResponse {

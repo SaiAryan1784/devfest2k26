@@ -10,7 +10,8 @@ import type { PublicState } from "./types";
  * (which already holds compareScores' result; nothing here recomputes it).
  */
 
-export type StageAct = { contestant: string | null; prompt: string | null };
+/** As the phone's Act: while the wheel spins, `prompt` is null and the screen says the wheel is spinning. */
+export type StageAct = { contestant: string | null; prompt: string | null; spinning: boolean };
 
 export type StageView =
   | { kind: "idle" }
@@ -22,13 +23,14 @@ export type StageView =
   | { kind: "closed"; id: string; act: StageAct; votes: number }
   | { kind: "reveal"; id: string; act: StageAct; self: number; audience: number | null; result: Comparison };
 
-export function stageView(state: PublicState | null): StageView {
+/** `spinning` comes from useSpinning(state.spunAtMs, offset); it hides the prompt in any phase until the spin ends. */
+export function stageView(state: PublicState | null, spinning = false): StageView {
   // Before the first poll (and on the server) there is nothing to show but the waiting screen.
   if (!state) return { kind: "idle" };
   const { phase, performanceId: id } = state;
   if (phase === "COMPLETED") return { kind: "completed" };
   if (phase === "IDLE" || !id) return { kind: "idle" };
-  const act: StageAct = { contestant: state.contestant, prompt: state.prompt };
+  const act: StageAct = { contestant: state.contestant, prompt: spinning ? null : state.prompt, spinning };
 
   switch (phase) {
     case "READY":
