@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
+import { BannerPreload } from "@/components/dgl/StageBanner";
 import { StageView } from "@/components/dgl/StageView";
 import { StaticLockup } from "@/components/dgl/StaticLockup";
 import { DGL, DGL_TRACKS } from "@/data/dgl";
@@ -37,6 +38,7 @@ export default async function StagePage({ params }: { params: Promise<{ track: s
 
   return (
     <main id="main" className="min-h-[100dvh]">
+      <BannerPreload />
       <StageView track={track} qrSvg={qrSvg} voteUrl={voteUrl.replace(/^https?:\/\//, "")} lockup={<StaticLockup className="w-[112px] lg:w-[148px]" />} />
     </main>
   );

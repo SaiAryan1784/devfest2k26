@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { PauseCircle } from "@phosphor-icons/react";
 import { DGL, DGL_TRACKS, type Track } from "@/data/dgl";
@@ -30,6 +30,30 @@ type Props = {
 };
 
 const GUTTER = "px-6 sm:px-10 lg:px-[3vw]";
+/** How long the landed wheel stays up after the spin ends, before the screen moves on to the centred "up next". */
+const WHEEL_HOLD_MS = 1200;
+
+/**
+ * True for WHEEL_HOLD_MS after a spin ends, so the landed wheel is seen
+ * (and the prompt beside it) before the screen changes. Derived during render
+ * from the spin flag turning off, so there is no frame of the next screen in
+ * between; a new spin cancels it. Never under reduced motion: no wheel moves,
+ * the prompt just appears. `useSpinning` is untouched (the phones read it).
+ */
+function useWheelHold(spinning: boolean, reduce: boolean): boolean {
+  const [was, setWas] = useState(spinning);
+  const [holding, setHolding] = useState(false);
+  if (was !== spinning) {
+    setWas(spinning);
+    setHolding(was && !spinning && !reduce);
+  }
+  useEffect(() => {
+    if (!holding) return;
+    const timer = setTimeout(() => setHolding(false), WHEEL_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [holding]);
+  return holding;
+}
 
 /**
  * The projector screen for DevFest Got Latent. Polls the show and renders
@@ -51,8 +75,9 @@ export function StageView({ track, qrSvg, voteUrl, lockup }: Props) {
   const { state, offset, connection } = useDglState(track);
   const spinning = useSpinning(state?.spunAtMs ?? null, offset);
   const view = stageView(state, spinning);
-  const root = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
+  const holding = useWheelHold(spinning, !!reduce);
+  const root = useRef<HTMLDivElement>(null);
   const fade = reduce ? { duration: 0 } : { duration: 0.35 };
   const header = <Header track={track} connection={connection} lockup={lockup} />;
 
@@ -74,7 +99,7 @@ export function StageView({ track, qrSvg, voteUrl, lockup }: Props) {
           <m.div key="strip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="flex min-h-[100dvh] flex-col">
             <StageBanner />
             <div className="relative z-10">{header}</div>
-            <Body view={view} prompt={state?.prompt ?? null} spunAtMs={state?.spunAtMs ?? null} offset={offset} qrSvg={qrSvg} voteUrl={voteUrl} fade={fade} />
+            <Body view={view} holding={holding} prompt={state?.prompt ?? null} spunAtMs={state?.spunAtMs ?? null} offset={offset} qrSvg={qrSvg} voteUrl={voteUrl} fade={fade} />
           </m.div>
         )}
       </AnimatePresence>
@@ -84,7 +109,7 @@ export function StageView({ track, qrSvg, voteUrl, lockup }: Props) {
 
 function Header({ track, connection, lockup }: { track: Track; connection: React.ComponentProps<typeof ConnectionPill>["connection"]; lockup: React.ReactNode }) {
   return (
-    <header className={cn("flex items-center justify-between gap-6 py-4 lg:py-5", GUTTER)}>
+    <header className={cn("flex items-center justify-between gap-6 py-4 lg:py-5 short:py-2", GUTTER)}>
       <div className="flex items-center gap-5">
         {lockup}
         <p className="hidden text-[24px] font-medium text-muted sm:block">{DGL.name}</p>
@@ -97,18 +122,19 @@ function Header({ track, connection, lockup }: { track: Track; connection: React
   );
 }
 
-type BodyProps = { view: View; prompt: string | null; spunAtMs: number | null; offset: number; qrSvg: string; voteUrl: string; fade: { duration: number } };
+type BodyProps = { view: View; holding: boolean; prompt: string | null; spunAtMs: number | null; offset: number; qrSvg: string; voteUrl: string; fade: { duration: number } };
 
 /** Everything under the banner and header. Up next and the winner are centred; the rest are two columns. */
-function Body({ view, prompt, spunAtMs, offset, qrSvg, voteUrl, fade }: BodyProps) {
-  const centred = view.kind === "winner" || (view.kind === "ready" && !view.act.spinning);
-  const wheel = view.kind === "ready" && view.act.spinning;
+function Body({ view, holding, prompt, spunAtMs, offset, qrSvg, voteUrl, fade }: BodyProps) {
+  // The wheel stays up through the hold after it lands, with the prompt beside it.
+  const wheel = view.kind === "ready" && (view.act.spinning || holding);
+  const centred = view.kind === "winner" || (view.kind === "ready" && !wheel);
   // A re-spin (a new spunAtMs) is a new wheel; every other change of screen keeps the screen's own key.
   const rightKey = wheel ? `wheel:${spunAtMs}` : screenKey(view);
   const leftKey = view.kind === "idle" || view.kind === "completed" || view.kind === "winner" ? view.kind : `act:${view.id}`;
 
   return (
-    <div className={cn("flex flex-1 flex-col justify-center py-6 lg:py-8", GUTTER)}>
+    <div className={cn("flex flex-1 flex-col justify-center py-6 lg:py-8 short:py-2", GUTTER)}>
       <AnimatePresence initial={false} mode="wait">
         {centred ? (
           <m.div key={`centre:${screenKey(view)}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="flex flex-col items-center">
@@ -229,7 +255,7 @@ function Right({ view, offset, qrSvg, voteUrl }: RightProps) {
 
   return (
     <div className="flex flex-col items-start gap-4 lg:items-center lg:gap-5">
-      <Qr svg={qrSvg} className="size-[min(40vh,80vw)]" />
+      <Qr svg={qrSvg} className="size-[min(36vh,80vw)]" />
       {view.paused ? (
         <p className="flex items-center gap-3 text-[clamp(1.75rem,3vw,3.5rem)] font-semibold text-yellow-hi">
           <PauseCircle aria-hidden="true" weight="regular" className="size-[1em] shrink-0" />

@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
+/* A short screen: a 1280 x 720 projector, a landscape phone. Used by the DGL stage to tighten its chrome. */
+@custom-variant short (@media (max-height: 760px));
 
 @theme {
   --color-canvas: #050505;

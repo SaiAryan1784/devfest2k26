@@ -17,8 +17,7 @@ const EVERY_MS = 700;
  * effect, with a dynamic import: it never reaches the bundle of any screen
  * that is not the winner's, and never runs on the server.
  *
- * Skipped under reduced motion and on phones and tablets (no fine pointer or
- * under 1024 px wide), where the winner is on the audience's own screen
+ * Skipped under reduced motion and on phones and tablets (under 1024 px wide), where the winner is on the audience's own screen
  * instead. Cleaned up on unmount: the timer stops and `confetti.reset()`
  * clears whatever is still falling. The import may resolve after the unmount;
  * `stopped` stops it from starting then.
@@ -26,7 +25,7 @@ const EVERY_MS = 700;
 export function Confetti() {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (!window.matchMedia("(pointer: fine) and (min-width: 1024px)").matches) return;
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
 
     let stopped = false;
     let timer: ReturnType<typeof setInterval> | undefined;

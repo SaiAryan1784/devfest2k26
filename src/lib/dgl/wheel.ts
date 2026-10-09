@@ -44,3 +44,15 @@ export function wheelTarget(prompt: string | null, segments: number): { segment:
   }
   return { segment: h % segments, turns: WHEEL_TURNS };
 }
+
+/**
+ * The wheel's final rotation in degrees: `turns` full turns plus the angle
+ * that brings the middle of `segment` under the pointer at the top. Segments
+ * run clockwise from the top (a conic-gradient's own start), so the middle of
+ * segment i sits at (i + 0.5) * step degrees and the wheel must turn the
+ * rest of the way round to put it at 0.
+ */
+export function wheelAngle(segment: number, turns: number, segments: number): number {
+  const step = 360 / segments;
+  return turns * 360 + (360 - (segment * step + step / 2));
+}

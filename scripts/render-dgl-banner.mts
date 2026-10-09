@@ -26,14 +26,14 @@ const H = 300;
 
 /** The title (and a little curtain around it) in poster pixels, 1502 x 1047. */
 const CROP = { left: 0, top: 190, width: 1502, height: 600 };
-/** Where the title sits in the strip: scaled to this height, centred. */
-const TITLE_H = H;
+/** Where the title sits in the strip: scaled to this height, centred. Under the full 300 so the short-screen cap (which crops the strip a little top and bottom) never touches a letter. */
+const TITLE_H = 252;
 /** The curtain band the background is stretched from, in poster pixels. */
 const CURTAIN = { left: 0, top: 70, width: 1502, height: 140 };
 /** Feather widths in strip pixels: they eat curtain padding only, never a letter. */
-const FEATHER_X = 52;
-const FEATHER_TOP = 24;
-const FEATHER_BOTTOM = 14;
+const FEATHER_X = 40;
+const FEATHER_TOP = 18;
+const FEATHER_BOTTOM = 10;
 /** The laptop's lid pokes into the crop at the bottom right: from this poster x on, the crop ends at LAPTOP_Y. */
 const LAPTOP_X = 1170;
 const LAPTOP_Y = 724;
@@ -68,5 +68,5 @@ const title = await sharp(POSTER)
   .toBuffer();
 
 await mkdir(DIR, { recursive: true });
-await sharp(background).composite([{ input: title, left, top: 0 }]).webp({ quality: 85 }).toFile(OUT);
+await sharp(background).composite([{ input: title, left, top: Math.round((H - TITLE_H) / 2) }]).webp({ quality: 85 }).toFile(OUT);
 console.log("banner".padEnd(24) + path.relative(ROOT, OUT));
