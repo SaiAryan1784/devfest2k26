@@ -16,7 +16,7 @@ export function PhoneHeader({ track, connection }: { track: Track; connection: C
     <header className="flex flex-col gap-2 [@media(max-height:700px)]:gap-1">
       <h1 className="display text-[22px] font-semibold leading-tight text-yellow-hi [@media(max-height:700px)]:text-[20px]">{DGL.name}</h1>
       <div className="flex items-center justify-between gap-3">
-        <span className="glass-pill inline-flex h-8 items-center px-3 text-[15px] font-medium text-text">{label}</span>
+        <span className="glass-pill inline-flex h-8 rounded-pill items-center px-3 text-[15px] font-medium text-text">{label}</span>
         <ConnectionPill connection={connection} />
       </div>
     </header>

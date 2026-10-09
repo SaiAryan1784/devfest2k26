@@ -115,7 +115,7 @@ function Header({ track, connection, lockup }: { track: Track; connection: React
         <p className="hidden text-[24px] font-medium text-muted sm:block">{DGL.name}</p>
       </div>
       <div className="flex items-center gap-4">
-        <span className="glass-pill px-4 py-1.5 text-[clamp(1.25rem,1.6vw,1.75rem)] font-medium text-text">{DGL_TRACKS.find((t) => t.id === track)?.label}</span>
+        <span className="glass-pill rounded-pill px-4 py-1.5 text-[clamp(1.25rem,1.6vw,1.75rem)] font-medium text-text">{DGL_TRACKS.find((t) => t.id === track)?.label}</span>
         <ConnectionPill connection={connection} />
       </div>
     </header>

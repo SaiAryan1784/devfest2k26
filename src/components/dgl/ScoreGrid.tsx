@@ -77,7 +77,7 @@ export function ScoreGrid({ value, onChange, disabled = false, labelledBy }: Pro
             transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 30 }}
             className={cn(
               // rounded-[20px]! (the card radius) because the global :focus-visible rule sets a 6 px radius and is unlayered.
-              "h-16 min-w-11 cursor-pointer rounded-[20px]! font-mono text-[22px] font-medium tabular-nums transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50",
+              "h-16 min-w-11 scroll-mb-20 cursor-pointer rounded-[20px]! font-mono text-[22px] font-medium tabular-nums transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50",
               picked ? "bg-yellow text-[#0a0a0c]" : "glass-pill text-text hover:bg-white/10",
             )}
           >
