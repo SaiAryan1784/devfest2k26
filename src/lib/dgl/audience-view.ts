@@ -188,3 +188,15 @@ export function tallyAverage(tally: Tally, closed: boolean): string | null {
   if (tally.average === null) return closed ? c.noVotes : c.waitingForAudience;
   return `${c.audienceAverage} ${c.outOfTen(tally.average)}`;
 }
+
+/**
+ * The "Audience so far" card: the whole-number average (null with no counted
+ * votes) and, in that case, the line that stands in for it. Null while the
+ * average is not meant to show (see DGL.showLiveAverage). Same rule as
+ * tallyAverage, shaped for a big number instead of a sentence.
+ */
+export function audienceSoFar(tally: Tally, closed: boolean): { average: number | null; empty: string | null } | null {
+  if (!tally.showAverage) return null;
+  if (tally.average === null) return { average: null, empty: closed ? c.noVotes : c.waitingForAudience };
+  return { average: tally.average, empty: null };
+}

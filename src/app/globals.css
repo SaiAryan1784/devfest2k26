@@ -168,6 +168,19 @@ body {
   animation: pipe-run 3s linear infinite;
 }
 
+/*
+ * The DGL phone's "Spinning the wheel..." icon. A slow turn that says "working"
+ * and is NOT switched off under prefers-reduced-motion on purpose: it is a
+ * status indicator (the only sign the screen is alive during the 4.5 s spin),
+ * it is small, slow and has no parallax or travel.
+ */
+@keyframes dgl-turn {
+  to { transform: rotate(360deg); }
+}
+.dgl-turn {
+  animation: dgl-turn 2.4s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .pipe-run {
