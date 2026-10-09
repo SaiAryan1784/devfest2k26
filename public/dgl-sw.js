@@ -11,7 +11,7 @@
 // This file is served from Next's public folder at /dgl-sw.js, registered with scope "/dgl".
 "use strict";
 
-const CACHE = "dgl-v1";
+const CACHE = "dgl-v2";
 const TIMEOUT_MS = 4000;
 const TIMED_OUT = {};
 

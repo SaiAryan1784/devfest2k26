@@ -3,10 +3,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { CheckCircle, HourglassMedium, PauseCircle, WarningCircle, XCircle } from "@phosphor-icons/react";
-import { DGL } from "@/data/dgl";
-import { liveText, revealLines, viewFor, type Act, type AudienceView as View, type Tally, type VoteShown } from "@/lib/dgl/audience-view";
-import { formatAverage } from "@/lib/dgl/score";
+import { DGL, type Track } from "@/data/dgl";
+import { liveText, revealLines, tallyAverage, viewFor, type Act, type AudienceView as View, type Tally, type VoteShown } from "@/lib/dgl/audience-view";
 import { useDglState } from "@/lib/dgl/use-dgl-state";
+import { useSpinning } from "@/lib/dgl/use-spin";
 import { useVote } from "@/lib/dgl/use-vote";
 import { cn } from "@/lib/utils";
 import { ActClock } from "./ActClock";
@@ -45,10 +45,11 @@ const LINE_ICON = {
  * vote, connection "connecting"), so the first client render is the server's IDLE
  * screen; nothing here reads window, navigator or storage while rendering.
  */
-export function AudienceView() {
-  const { state, offset, connection } = useDglState();
-  const { local, submit, cookiesBlocked } = useVote(state);
-  const view = viewFor(state, local, cookiesBlocked);
+export function AudienceView({ track }: { track: Track }) {
+  const { state, offset, connection } = useDglState(track);
+  const { local, submit, cookiesBlocked } = useVote(state, track);
+  const spinning = useSpinning(state?.spunAtMs ?? null, offset);
+  const view = viewFor(state, local, cookiesBlocked, spinning);
   const reduce = useReducedMotion();
   const fade = reduce ? { duration: 0 } : { duration: 0.2 };
 
@@ -112,6 +113,14 @@ function Screen({ view, offset, picked, onPick, onLockIn, focusLockedRef, fade }
       return <Message title={c.idleTitle} body={c.idleBody} />;
     case "completed":
       return <Message title={c.completed} body={c.idleBody} />;
+    case "winner":
+      return (
+        <div className="glass flex flex-col gap-3 rounded-[20px] p-6">
+          <p className="text-[17px] font-medium text-yellow-hi">{view.names.length > 1 ? c.winnersTitle : c.winnerTitle}</p>
+          <h2 className="display break-words text-[36px] font-semibold leading-[1.1]">{view.names.join(" and ")}</h2>
+          <p className="font-mono text-[20px] tabular-nums text-muted">{c.winnerScore(view.audience)}</p>
+        </div>
+      );
     case "ready":
       return <ActBlock act={view.act} status={c.upNext} />;
     case "performing":
@@ -229,6 +238,7 @@ function ActBlock({ act, status, compact = false }: { act: Act; status?: string;
           {act.contestant}
         </h2>
       )}
+      {act.spinning && <p className="mt-1 text-[17px] leading-snug text-yellow-hi">{c.spinning}</p>}
       {act.prompt && (
         <p
           className={cn(
@@ -244,11 +254,7 @@ function ActBlock({ act, status, compact = false }: { act: Act; status?: string;
 }
 
 function TallyLine({ tally, closed = false }: { tally: Tally; closed?: boolean }) {
-  let average: string | null = null;
-  if (tally.showAverage) {
-    if (tally.average !== null) average = `${c.audienceAverage} ${c.outOfTen(formatAverage(tally.average))}`;
-    else average = closed ? c.notEnoughVotes : c.waitingForAudience;
-  }
+  const average = tallyAverage(tally, closed);
   return (
     <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[14px] tabular-nums text-muted">
       <span>{c.voteCount(tally.votes)}</span>

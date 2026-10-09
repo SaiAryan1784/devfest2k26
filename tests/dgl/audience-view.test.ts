@@ -1,16 +1,31 @@
 import { describe, expect, test } from "vitest";
 import { DGL } from "@/data/dgl";
-import { formatClock, gridKey, isFinalCountdown, liveText, revealLines, viewFor, voteLine, type AudienceView } from "@/lib/dgl/audience-view";
+import {
+  clockLabel,
+  formatClock,
+  gridKey,
+  isFinalCountdown,
+  liveText,
+  revealLines,
+  tallyAverage,
+  viewFor,
+  voteLine,
+  type AudienceView,
+  type Tally,
+} from "@/lib/dgl/audience-view";
 import type { PublicState } from "@/lib/dgl/types";
 import type { LocalVote } from "@/lib/dgl/vote-queue";
 
 const ID = "11111111-1111-4111-8111-111111111111";
 
 const st = (over: Partial<PublicState> = {}): PublicState => ({
+  track: "build",
+  winner: null,
   phase: "VOTING",
   performanceId: ID,
   contestant: "Riya Sharma",
   prompt: "Explain Kubernetes to your grandmother",
+  spunAtMs: null,
   endsAtMs: null,
   votes: 0,
   average: null,
@@ -26,7 +41,8 @@ const vote = (state: LocalVote["state"], over: Partial<LocalVote> = {}): LocalVo
   ...over,
 });
 
-const act = { contestant: "Riya Sharma", prompt: "Explain Kubernetes to your grandmother" };
+const act = { contestant: "Riya Sharma", prompt: "Explain Kubernetes to your grandmother", spinning: false };
+const SPUN = 1_000;
 
 describe("viewFor", () => {
   test("no state yet (server render, first poll pending) is idle", () => {
@@ -45,11 +61,11 @@ describe("viewFor", () => {
   });
 
   test("VOTING with no vote offers the grid, count only before a vote (after-vote rule)", () => {
-    const v = viewFor(st({ votes: 12, average: 7.4 }), null);
+    const v = viewFor(st({ votes: 12, average: 7 }), null);
     expect(v).toEqual({
       kind: "voting-grid",
       act,
-      tally: { votes: 12, average: 7.4, showAverage: DGL.showLiveAverage === "always" },
+      tally: { votes: 12, average: 7, showAverage: DGL.showLiveAverage === "always" },
       notCounted: false,
     });
   });
@@ -67,7 +83,7 @@ describe("viewFor", () => {
       tally: { votes: 3, average: null, showAverage: true },
       vote: { score: 7, state: "queued", line: "voteQueued" },
     });
-    const rec = viewFor(st({ votes: 9, average: 7.1 }), vote("recorded"));
+    const rec = viewFor(st({ votes: 9, average: 7 }), vote("recorded"));
     expect(rec.kind === "voted" && rec.vote).toEqual({ score: 7, state: "recorded", line: "voteRecorded" });
   });
 
@@ -85,10 +101,10 @@ describe("viewFor", () => {
   });
 
   test("VOTING_CLOSED shows the count, the average and the vote, rejected says not counted", () => {
-    expect(viewFor(st({ phase: "VOTING_CLOSED", votes: 40, average: 8.2 }), vote("rejected", { reason: "closed" }))).toEqual({
+    expect(viewFor(st({ phase: "VOTING_CLOSED", votes: 40, average: 8 }), vote("rejected", { reason: "closed" }))).toEqual({
       kind: "closed",
       act,
-      tally: { votes: 40, average: 8.2, showAverage: true },
+      tally: { votes: 40, average: 8, showAverage: true },
       vote: { score: 7, state: "rejected", line: "voteNotCounted" },
     });
     const none = viewFor(st({ phase: "VOTING_CLOSED" }), null);
@@ -96,9 +112,28 @@ describe("viewFor", () => {
   });
 
   test("REVEAL carries the server's comparison; a missing reveal falls back to closed", () => {
-    const reveal = { self: 8, audience: 8.0, result: { kind: "match" as const } };
+    const reveal = { self: 8, audience: 8, result: { kind: "match" as const } };
     expect(viewFor(st({ phase: "REVEAL", reveal }), null)).toEqual({ kind: "reveal", act, ...reveal });
     expect(viewFor(st({ phase: "REVEAL", reveal: null }), null).kind).toBe("closed");
+  });
+
+  test("Act.spinning hides the prompt", () => {
+    const spun = st({ phase: "READY", spunAtMs: SPUN });
+    expect(viewFor(spun, null, false, true)).toEqual({ kind: "ready", act: { contestant: "Riya Sharma", prompt: null, spinning: true } });
+    // Once the wheel has landed the prompt shows.
+    expect(viewFor(spun, null, false, false)).toEqual({ kind: "ready", act });
+    // The flag defaults to not spinning.
+    expect(viewFor(spun, null)).toEqual({ kind: "ready", act });
+  });
+
+  test("the prompt stays hidden until the spin ends, even if the act starts first", () => {
+    const v = viewFor(st({ phase: "PERFORMING", endsAtMs: 90_000, spunAtMs: SPUN }), null, false, true);
+    expect(v).toEqual({ kind: "performing", act: { contestant: "Riya Sharma", prompt: null, spinning: true }, endsAtMs: 90_000 });
+  });
+
+  test("the spinning act's live text never carries the prompt", () => {
+    const text = liveText(viewFor(st({ phase: "READY", spunAtMs: SPUN }), null, false, true));
+    expect(text).not.toContain("Kubernetes");
   });
 
   test("a vote for another performance is ignored", () => {
@@ -174,13 +209,30 @@ describe("gridKey (5 x 2 grid of 1 to 10)", () => {
 });
 
 describe("clock", () => {
-  test("M:SS, rounding a part second up so 0:00 means time is up", () => {
-    expect(formatClock(90_000)).toBe("1:30");
-    expect(formatClock(9_001)).toBe("0:10");
-    expect(formatClock(61_000)).toBe("1:01");
-    expect(formatClock(1)).toBe("0:01");
-    expect(formatClock(0)).toBe("0:00");
-    expect(formatClock(-5)).toBe("0:00");
+  test("formatClock counts whole seconds up", () => {
+    expect(formatClock(90_000)).toBe("90");
+    expect(formatClock(89_001)).toBe("90");
+    expect(formatClock(89_000)).toBe("89");
+    expect(formatClock(9_400)).toBe("10");
+    expect(formatClock(400)).toBe("1");
+    expect(formatClock(1)).toBe("1");
+    expect(formatClock(0)).toBe("0");
+    expect(formatClock(-5)).toBe("0");
+  });
+  test("formatClock never rolls into minutes", () => {
+    expect(formatClock(61_000)).toBe("61");
+    expect(formatClock(60_000)).toBe("60");
+    expect(formatClock(59_001)).toBe("60");
+    for (const ms of [90_000, 61_000, 60_000, 9_001, 1, 0]) expect(formatClock(ms)).not.toContain(":");
+  });
+  test("clockLabel is the whole seconds and the unit, as 90 sec", () => {
+    expect(DGL.copy.secondsUnit).toBe("sec");
+    expect(clockLabel(90_000)).toBe("90 sec");
+    expect(clockLabel(89_001)).toBe("90 sec");
+    expect(clockLabel(9_400)).toBe("10 sec");
+    expect(clockLabel(1)).toBe("1 sec");
+    expect(clockLabel(0)).toBe("0 sec");
+    expect(clockLabel(-5)).toBe("0 sec");
   });
   test("final countdown at DGL.finalCountdownS or less", () => {
     const edge = DGL.finalCountdownS * 1000;
@@ -202,18 +254,59 @@ describe("liveText", () => {
   test("never contains the ticking time", () => {
     const t = liveText(viewFor(st({ phase: "PERFORMING", endsAtMs: 90_000 }), null));
     expect(t).not.toMatch(/\d:\d\d/);
+    expect(t).not.toMatch(/\d+ sec/);
   });
 });
 
 describe("revealLines", () => {
   const rv = (self: number, audience: number | null, result: Extract<AudienceView, { kind: "reveal" }>["result"]) =>
     ({ kind: "reveal", act, self, audience, result }) as const;
-  test("match, difference and too few votes", () => {
-    expect(revealLines(rv(8, 8, { kind: "match" }))).toEqual({ audience: "8.0 / 10", verdict: DGL.copy.perfectMatch });
-    expect(revealLines(rv(9, 8.4, { kind: "diff", diff: 0.6 }))).toEqual({ audience: "8.4 / 10", verdict: "Difference 0.6" });
-    expect(revealLines(rv(9, null, { kind: "insufficient" }))).toEqual({ audience: null, verdict: DGL.copy.notEnoughVotes });
+  test("revealLines whole numbers", () => {
+    expect(revealLines(rv(7, 9, { kind: "diff", diff: 2 }))).toEqual({ audience: "9 / 10", verdict: "Difference 2" });
+    expect(revealLines(rv(9, 3, { kind: "diff", diff: 6 }))).toEqual({ audience: "3 / 10", verdict: "Difference 6" });
+    expect(revealLines(rv(8, 8, { kind: "match" }))).toEqual({ audience: "8 / 10", verdict: DGL.copy.perfectMatch });
+  });
+  test("revealLines with no votes says No votes", () => {
+    expect(DGL.copy.noVotes).toBe("No votes");
+    expect(revealLines(rv(9, null, { kind: "insufficient" }))).toEqual({ audience: null, verdict: DGL.copy.noVotes });
+  });
+  test("the copy takes whole numbers, and the new lines carry no dashes", () => {
+    expect(DGL.copy.outOfTen(8)).toBe("8 / 10");
+    expect(DGL.copy.difference(2)).toBe("Difference 2");
+    expect(DGL.copy.stageIdleBody).toBe("The QR code to vote appears when the act begins.");
+    for (const line of [DGL.copy.outOfTen(8), DGL.copy.difference(2), DGL.copy.noVotes, DGL.copy.secondsUnit, DGL.copy.stageIdleBody]) {
+      expect(line).not.toMatch(/[\u2013\u2014]/);
+    }
   });
   test("the live region reads the whole reveal", () => {
-    expect(liveText(rv(9, 8.4, { kind: "diff", diff: 0.6 }))).toBe("Own score 9. Audience 8.4 / 10. Difference 0.6");
+    expect(liveText(rv(9, 8, { kind: "diff", diff: 1 }))).toBe("Own score 9. Audience 8 / 10. Difference 1");
+    expect(liveText(rv(8, 8, { kind: "match" }))).toBe("Own score 8. Audience 8 / 10. Perfect match");
+    expect(liveText(rv(9, null, { kind: "insufficient" }))).toBe("Own score 9. No votes");
+  });
+});
+
+describe("tallyAverage", () => {
+  const tally = (over: Partial<Tally> = {}): Tally => ({ votes: 0, average: null, showAverage: true, ...over });
+  test("the tally line shows Waiting for audience... for zero votes while voting, and No votes once closed", () => {
+    expect(tallyAverage(tally(), false)).toBe("Waiting for audience...");
+    expect(tallyAverage(tally(), true)).toBe("No votes");
+    expect(tallyAverage(tally(), false)).toBe(DGL.copy.waitingForAudience);
+    expect(tallyAverage(tally(), true)).toBe(DGL.copy.noVotes);
+  });
+  test("one vote is already an average, as a whole number out of ten", () => {
+    expect(tallyAverage(tally({ votes: 1, average: 9 }), false)).toBe("Audience average 9 / 10");
+    expect(tallyAverage(tally({ votes: 40, average: 8 }), true)).toBe("Audience average 8 / 10");
+  });
+  test("nothing at all until the average is meant to show", () => {
+    expect(tallyAverage(tally({ showAverage: false }), false)).toBeNull();
+    expect(tallyAverage(tally({ votes: 5, average: 7, showAverage: false }), true)).toBeNull();
+  });
+  test("through viewFor: a locked vote not yet counted waits, a closed show with none says No votes", () => {
+    const voted = viewFor(st({ votes: 0, average: null }), vote("queued"));
+    expect(voted.kind === "voted" && tallyAverage(voted.tally, false)).toBe(DGL.copy.waitingForAudience);
+    const closed = viewFor(st({ phase: "VOTING_CLOSED", votes: 0, average: null }), null);
+    expect(closed.kind === "closed" && tallyAverage(closed.tally, true)).toBe(DGL.copy.noVotes);
+    const one = viewFor(st({ phase: "VOTING_CLOSED", votes: 1, average: 7 }), null);
+    expect(one.kind === "closed" && tallyAverage(one.tally, true)).toBe("Audience average 7 / 10");
   });
 });

@@ -8,12 +8,13 @@ import { createInterface } from "node:readline";
 import { Writable } from "node:stream";
 import { hashPasscode } from "../src/lib/dgl/auth";
 import { ensureSchema, neonDb } from "../src/lib/dgl/db";
-import type { Role } from "../src/lib/dgl/types";
+import { ROLES, isRole } from "../src/lib/dgl/machine";
+import { TRACK_IDS, isTrack } from "../src/lib/dgl/tracks";
+import type { Role, Track } from "../src/lib/dgl/types";
 
-const ROLES: Role[] = ["SUPER_ADMIN", "OPERATOR", "HOST", "VOLUNTEER"];
-const USAGE = `Usage: npm run dgl:admin -- --name "<name>" --role <${ROLES.join("|")}>`;
+const USAGE = `Usage: npm run dgl:admin -- --name "<name>" --role <${ROLES.join("|")}> [--track <${TRACK_IDS.join("|")}|all>]`;
 
-export function parseArgs(argv: string[]): { name: string; role: Role } | { error: string } {
+export function parseArgs(argv: string[]): { name: string; role: Role; track: Track | null } | { error: string } {
   const get = (flag: string) => {
     const i = argv.indexOf(flag);
     return i >= 0 ? argv[i + 1] : undefined;
@@ -23,8 +24,12 @@ export function parseArgs(argv: string[]): { name: string; role: Role } | { erro
   if (!name) return { error: "Missing --name." };
   if (name.length > 64 || /[\u0000-\u001f\u007f]/.test(name)) return { error: "Invalid --name (max 64 characters, no control characters)." };
   if (!role) return { error: "Missing --role." };
-  if (!ROLES.includes(role as Role)) return { error: `Unknown role "${role}".` };
-  return { name, role: role as Role };
+  // The two roles only: OPERATOR and VOLUNTEER are retired (stored ones read as HOST).
+  if (!isRole(role)) return { error: `Unknown role "${role}".` };
+  // Default all tracks (stored as null).
+  const track = get("--track") ?? "all";
+  if (track !== "all" && !isTrack(track)) return { error: `Unknown track "${track}".` };
+  return { name, role, track: track === "all" ? null : track };
 }
 
 /** Reads one line from the terminal without echoing it. */
@@ -90,14 +95,14 @@ async function main() {
   try {
     await ensureSchema(db);
     await db.query(
-      `INSERT INTO dgl_admins (name, role, passcode_hash) VALUES ($1::text, $2::text, $3::text)
-       ON CONFLICT (name) DO UPDATE SET role = EXCLUDED.role, passcode_hash = EXCLUDED.passcode_hash, active = true`,
-      [args.name, args.role, hash],
+      `INSERT INTO dgl_admins (name, role, track, passcode_hash) VALUES ($1::text, $2::text, $4::text, $3::text)
+       ON CONFLICT (name) DO UPDATE SET role = EXCLUDED.role, track = EXCLUDED.track, passcode_hash = EXCLUDED.passcode_hash, active = true`,
+      [args.name, args.role, hash, args.track],
     );
   } catch {
     return dbFailed();
   }
-  console.log(`Saved admin "${args.name}" as ${args.role}.`);
+  console.log(`Saved admin "${args.name}" as ${args.role} (${args.track ?? "all tracks"}).`);
 }
 
 // Only run when executed directly, so parseArgs stays importable.

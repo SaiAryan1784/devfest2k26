@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { animate, m, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { DGL } from "@/data/dgl";
 import { revealLines } from "@/lib/dgl/audience-view";
-import { formatAverage } from "@/lib/dgl/score";
 import type { StageView } from "@/lib/dgl/stage-view";
 import { cn } from "@/lib/utils";
 
@@ -33,9 +32,10 @@ type Props = Extract<StageView, { kind: "reveal" }>;
  * performance: the ref remembers which performanceId has played, so a poll
  * that re-renders, or the reduced-motion preference settling after mount,
  * lands on the final number instead of replaying. Its intermediate text is
- * display only; at rest it is exactly formatAverage(audience). Under reduced
- * motion every transition (and every delay) is zero, with the same targets,
- * so the final screen is identical and appears at once.
+ * display only (each frame rounded to a whole number); at rest it is exactly
+ * String(audience), the server's whole number. Under reduced motion every
+ * transition (and every delay) is zero, with the same targets, so the final
+ * screen is identical and appears at once.
  */
 export function Reveal(props: Props) {
   const { id, self, audience } = props;
@@ -44,7 +44,7 @@ export function Reveal(props: Props) {
   const match = props.result.kind === "match";
 
   const count = useMotionValue(0);
-  const countText = useTransform(count, (v) => formatAverage(v));
+  const countText = useTransform(count, (v) => String(Math.round(v)));
   const played = useRef<string | null>(null);
 
   useEffect(() => {

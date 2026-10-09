@@ -1,4 +1,5 @@
-import { config, fail, json, unavailable } from "@/lib/dgl/route";
+import type { NextRequest } from "next/server";
+import { badRequest, config, fail, json, parseTrack, unavailable } from "@/lib/dgl/route";
 import { ensureSchema } from "@/lib/dgl/db";
 import { readPublicState } from "@/lib/dgl/show";
 
@@ -12,13 +13,15 @@ const CACHE = {
   "CDN-Cache-Control": "max-age=1, stale-while-revalidate=2",
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const now = Date.now();
+  const track = parseTrack(req.nextUrl.searchParams.get("track"));
+  if (!track) return badRequest();
   const cfg = config();
   if (!cfg) return unavailable();
   try {
     await ensureSchema(cfg.db);
-    return json(await readPublicState(cfg.db, now), 200, CACHE);
+    return json(await readPublicState(cfg.db, track, now), 200, CACHE);
   } catch (err) {
     return fail(err);
   }

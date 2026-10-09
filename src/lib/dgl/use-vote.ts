@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchMe, timeoutSignal } from "./client-http";
-import type { PublicState } from "./types";
+import type { PublicState, Track } from "./types";
 import {
   COOKIE_RETRY_MS,
   KEY_PREFIX,
@@ -50,7 +50,7 @@ function store(): Storage | null {
  * to fetch, storage and the page lifecycle. Votes are kept in a ref (the
  * source of truth for async work) and mirrored to state for rendering.
  */
-export function useVote(state: PublicState | null): {
+export function useVote(state: PublicState | null, track: Track): {
   local: LocalVote | null;
   submit: (score: number) => void;
   cookiesBlocked: boolean;
@@ -186,7 +186,7 @@ export function useVote(state: PublicState | null): {
         setVotes(mem.current);
       }
     }
-    void fetchMe().then((me) => {
+    void fetchMe(track).then((me) => {
       if (!live || !me?.vote) return;
       // The server wins: whatever it holds is recorded, with its score.
       const prev = mem.current[me.vote.performanceId];
@@ -200,7 +200,7 @@ export function useVote(state: PublicState | null): {
     return () => {
       live = false;
     };
-  }, [performanceId, commit, flush]);
+  }, [performanceId, commit, flush, track]);
 
   // Voting opens (or reopens after a pause): everything queued goes now.
   useEffect(() => {

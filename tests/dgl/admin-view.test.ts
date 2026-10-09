@@ -1,30 +1,27 @@
 import { describe, expect, test } from "vitest";
+import * as adminView from "@/lib/dgl/admin-view";
 import {
   confirmStep,
   formatRawAverage,
   outcomeOf,
   primaryAction,
-  queueAction,
-  reassignTargets,
   secondaryActions,
   settleKey,
   SETTLE_MS,
+  spinControl,
   tapAllowed,
   type SecondaryKey,
 } from "@/lib/dgl/admin-view";
 import type { ActionResult, AdminState, Phase, Role } from "@/lib/dgl/types";
 
-const RIYA = "11111111-1111-4111-8111-111111111111";
-const AMAN = "22222222-2222-4222-8222-222222222222";
-const KABIR = "33333333-3333-4333-8333-333333333333";
-const NEHA = "55555555-5555-4555-8555-555555555555";
 const T = 1_000_000;
 
 const st = (over: Partial<AdminState> = {}): AdminState => ({
   phase: "READY",
   performanceId: "44444444-4444-4444-8444-444444444444",
   contestant: "Riya Sharma",
-  prompt: "Explain Kubernetes to your grandmother",
+  prompt: null,
+  spunAtMs: null,
   endsAtMs: null,
   votes: 0,
   average: null,
@@ -36,14 +33,13 @@ const st = (over: Partial<AdminState> = {}): AdminState => ({
   flagged: 0,
   excluded: 0,
   kiosk: 0,
-  contestants: [
-    { id: RIYA, name: "Riya Sharma", sort: 1, active: true, status: "current" },
-    { id: AMAN, name: "Aman Gupta", sort: 2, active: true, status: "upcoming" },
-    { id: KABIR, name: "Kabir Rao", sort: 3, active: false, status: "upcoming" },
-    { id: NEHA, name: "Neha Iyer", sort: 0, active: true, status: "done" },
-  ],
   prompts: [{ id: "p1", text: "Sell us a deprecated API", active: true }],
-  me: { name: "Sai", role: "HOST" },
+  me: { name: "Sai", role: "HOST", track: null },
+  track: "build",
+  winner: null,
+  acts: [],
+  leaders: null,
+  winnerShown: false,
   ...over,
 });
 
@@ -62,12 +58,13 @@ function inPhase(phase: Phase, over: Partial<AdminState> = {}): AdminState {
   return st({ phase, ...base, ...none, ...over });
 }
 
-const LIVE_ROLES: Role[] = ["HOST", "OPERATOR", "SUPER_ADMIN"];
+const PHASES: Phase[] = ["IDLE", "READY", "PERFORMING", "PERFORMED", "VOTING", "VOTING_PAUSED", "VOTING_CLOSED", "REVEAL", "COMPLETED"];
+const ROLES: Role[] = ["HOST", "SUPER_ADMIN"];
 
 describe("primaryAction: the one big button", () => {
   const table: [Phase, string, string | null][] = [
-    ["IDLE", "selectContestant", null],
-    ["COMPLETED", "selectContestant", null],
+    ["IDLE", "putOnStage", null],
+    ["COMPLETED", "putOnStage", null],
     ["READY", "startPerformance", "startPerformance"],
     ["PERFORMING", "startVoting", "startVoting"],
     ["PERFORMED", "startVoting", "startVoting"],
@@ -77,7 +74,7 @@ describe("primaryAction: the one big button", () => {
     ["REVEAL", "complete", "complete"],
   ];
 
-  for (const role of LIVE_ROLES) {
+  for (const role of ROLES) {
     for (const [phase, label, action] of table) {
       test(`${role} in ${phase}: ${label}`, () => {
         const p = primaryAction(inPhase(phase), role);
@@ -96,15 +93,17 @@ describe("primaryAction: the one big button", () => {
     }
   });
 
-  test("the IDLE and COMPLETED hint has no action: it only points at the queue", () => {
-    expect(primaryAction(inPhase("IDLE"), "HOST")!.action).toBeNull();
-    expect(primaryAction(inPhase("COMPLETED"), "OPERATOR")!.action).toBeNull();
-  });
-
-  test("a volunteer sees nothing actionable in any phase", () => {
-    for (const [phase] of table) {
-      expect(primaryAction(inPhase(phase), "VOLUNTEER")).toBeNull();
-      expect(secondaryActions(inPhase(phase), "VOLUNTEER")).toEqual([]);
+  test("IDLE and COMPLETED need a name: the button is the name form's, with no action of its own", () => {
+    for (const phase of ["IDLE", "COMPLETED"] as const) {
+      for (const role of ROLES) {
+        expect(primaryAction(inPhase(phase), role)).toEqual({
+          labelKey: "putOnStage",
+          action: null,
+          disabled: false,
+          disabledReason: null,
+          needsConfirm: false,
+        });
+      }
     }
   });
 
@@ -113,20 +112,21 @@ describe("primaryAction: the one big button", () => {
     expect(primaryAction(inPhase("READY"), null)).toBeNull();
   });
 
-  test("start performance without a prompt is disabled: add a prompt first", () => {
-    const p = primaryAction(inPhase("READY", { prompt: null }), "HOST")!;
-    expect(p).toMatchObject({ labelKey: "startPerformance", disabled: true, disabledReason: "needsPrompt" });
+  test("READY starts the performance with no prompt and no reason", () => {
+    for (const over of [{ prompt: null }, { prompt: null, prompts: [] }, { prompt: "Sell us a deprecated API", spunAtMs: T - 10_000 }]) {
+      expect(primaryAction(inPhase("READY", over), "HOST")).toEqual({
+        labelKey: "startPerformance",
+        action: { type: "startPerformance" },
+        disabled: false,
+        disabledReason: null,
+        needsConfirm: false,
+      });
+    }
   });
 
   test("reveal without the contestant's own score is disabled: enter their own score first", () => {
-    const p = primaryAction(inPhase("VOTING_CLOSED", { selfScore: null }), "OPERATOR")!;
+    const p = primaryAction(inPhase("VOTING_CLOSED", { selfScore: null }), "SUPER_ADMIN")!;
     expect(p).toMatchObject({ labelKey: "reveal", disabled: true, disabledReason: "needsSelfScore" });
-  });
-
-  test("the hint is disabled when there is nobody to select", () => {
-    const contestants = st().contestants.map((k) => ({ ...k, active: false }));
-    const p = primaryAction(inPhase("COMPLETED", { contestants }), "HOST")!;
-    expect(p).toMatchObject({ labelKey: "selectContestant", disabled: true, disabledReason: "noContestants" });
   });
 
   test("a PERFORMING state read after its end time is treated as PERFORMED (same button)", () => {
@@ -139,64 +139,47 @@ describe("secondaryActions", () => {
   const keys = (phase: Phase, role: Role = "HOST", over: Partial<AdminState> = {}): SecondaryKey[] =>
     secondaryActions(inPhase(phase, over), role).map((a) => a.key);
 
+  test("READY: spin the wheel, fix the name, own score", () => {
+    expect(keys("READY")).toEqual(["spinWheel", "renameAct", "setSelfScore"]);
+  });
+
+  test("PERFORMING and PERFORMED: fix the name and own score", () => {
+    expect(keys("PERFORMING")).toEqual(["renameAct", "setSelfScore"]);
+    expect(keys("PERFORMED")).toEqual(["renameAct", "setSelfScore"]);
+  });
+
   test("VOTING: pause is the only secondary control (stop is the big button), plus own score", () => {
     expect(keys("VOTING")).toEqual(["pauseVoting", "setSelfScore"]);
     expect(primaryAction(inPhase("VOTING"), "HOST")!.action).toEqual({ type: "stopVoting" });
   });
 
-  test("reassign is hidden while voting runs and shows once it is paused", () => {
-    expect(keys("VOTING")).not.toContain("reassignContestant");
-    expect(keys("VOTING_PAUSED")).toEqual(["stopVoting", "reassignContestant", "setSelfScore"]);
+  test("fixing the name is hidden while voting runs and shows once it is paused", () => {
+    expect(keys("VOTING")).not.toContain("renameAct");
+    expect(keys("VOTING_PAUSED")).toEqual(["stopVoting", "renameAct", "setSelfScore"]);
   });
 
   test("reopen shows only in VOTING_CLOSED", () => {
-    const phases: Phase[] = ["IDLE", "READY", "PERFORMING", "PERFORMED", "VOTING", "VOTING_PAUSED", "VOTING_CLOSED", "REVEAL", "COMPLETED"];
-    for (const phase of phases) {
+    for (const phase of PHASES) {
       expect(keys(phase).includes("reopenVoting")).toBe(phase === "VOTING_CLOSED");
     }
     expect(keys("VOTING_CLOSED")).toEqual(["reopenVoting", "setSelfScore"]);
   });
 
-  test("READY: draw prompt, enter prompt, reassign, own score", () => {
-    expect(keys("READY")).toEqual(["drawPrompt", "setPrompt", "reassignContestant", "setSelfScore"]);
-  });
-
-  test("PERFORMING and PERFORMED: reassign and own score", () => {
-    expect(keys("PERFORMING")).toEqual(["reassignContestant", "setSelfScore"]);
-    expect(keys("PERFORMED")).toEqual(["reassignContestant", "setSelfScore"]);
-  });
-
-  test("IDLE, REVEAL and COMPLETED have no secondary controls", () => {
+  test("IDLE and REVEAL have no secondary controls; COMPLETED offers the winner", () => {
     expect(keys("IDLE")).toEqual([]);
     expect(keys("REVEAL")).toEqual([]);
-    expect(keys("COMPLETED")).toEqual([]);
+    expect(keys("COMPLETED")).toEqual(["showWinner"]);
+    expect(secondaryActions(inPhase("COMPLETED", { winnerShown: true, leaders: { names: ["A"], audience: 8 } }), "HOST").map((x) => x.key)).toEqual(["hideWinner"]);
+    expect(secondaryActions(inPhase("COMPLETED"), "HOST")[0].disabledReason).toBe("noWinner");
   });
 
-  test("stop, reopen and reassign need a second tap; the rest do not", () => {
-    const all = [
-      ...secondaryActions(inPhase("VOTING"), "HOST"),
-      ...secondaryActions(inPhase("VOTING_PAUSED"), "HOST"),
-      ...secondaryActions(inPhase("VOTING_CLOSED"), "HOST"),
-      ...secondaryActions(inPhase("READY"), "HOST"),
-    ];
-    for (const a of all) {
-      expect(a.needsConfirm).toBe(a.key === "stopVoting" || a.key === "reopenVoting" || a.key === "reassignContestant");
-    }
+  test("stop and reopen need a second tap; the rest do not", () => {
+    const all = PHASES.flatMap((phase) => secondaryActions(inPhase(phase), "HOST"));
+    for (const a of all) expect(a.needsConfirm, a.key).toBe(a.key === "stopVoting" || a.key === "reopenVoting");
   });
 
-  test("operator and super admin see the same live controls as a host", () => {
-    for (const role of LIVE_ROLES) expect(keys("VOTING_PAUSED", role)).toEqual(keys("VOTING_PAUSED", "HOST"));
-  });
-
-  test("draw prompt says why it is off when no prompt is active", () => {
-    const s = inPhase("READY", { prompts: [{ id: "p1", text: "x", active: false }] });
-    expect(secondaryActions(s, "HOST").find((a) => a.key === "drawPrompt")).toMatchObject({ disabledReason: "noPrompts" });
-  });
-
-  test("reassign says why it is off when nobody else can take the slot", () => {
-    const contestants = st().contestants.filter((k) => k.status !== "upcoming");
-    const s = inPhase("READY", { contestants });
-    expect(secondaryActions(s, "HOST").find((a) => a.key === "reassignContestant")).toMatchObject({ disabledReason: "noOtherContestants" });
+  test("a super admin sees the same live controls as a host", () => {
+    for (const phase of PHASES) expect(keys(phase, "SUPER_ADMIN")).toEqual(keys(phase, "HOST"));
   });
 
   test("no state gives nothing", () => {
@@ -204,32 +187,44 @@ describe("secondaryActions", () => {
   });
 });
 
-describe("the queue", () => {
-  test("Select on upcoming and done contestants when selecting is allowed", () => {
-    const s = inPhase("COMPLETED", {
-      contestants: st().contestants.map((k) => (k.status === "current" ? { ...k, status: "done" as const } : k)),
-    });
-    expect(queueAction(s, "HOST", AMAN)).toBe("select");
-    expect(queueAction(s, "HOST", NEHA)).toBe("select");
-    expect(queueAction(s, "HOST", RIYA)).toBe("select");
+describe("spinControl: the wheel button", () => {
+  test("READY offers Spin the wheel before any spin and Spin again after one", () => {
+    expect(spinControl(inPhase("READY"), "HOST")).toEqual({ labelKey: "spinWheel", disabledReason: null });
+    const spun = inPhase("READY", { prompt: "Sell us a deprecated API", spunAtMs: T - 1000 });
+    expect(spinControl(spun, "HOST")).toEqual({ labelKey: "spinAgain", disabledReason: null });
+    expect(spinControl(spun, "SUPER_ADMIN")).toEqual({ labelKey: "spinAgain", disabledReason: null });
   });
 
-  test("never on the current contestant, an inactive one, or without permission", () => {
-    const s = inPhase("READY");
-    expect(queueAction(s, "HOST", RIYA)).toBeNull();
-    expect(queueAction(s, "HOST", KABIR)).toBeNull();
-    expect(queueAction(s, "VOLUNTEER", AMAN)).toBeNull();
-    expect(queueAction(s, "HOST", "no-such-id")).toBeNull();
+  test("it is off with a reason when no prompt is active", () => {
+    expect(spinControl(inPhase("READY", { prompts: [] }), "HOST")).toEqual({ labelKey: "spinWheel", disabledReason: "noPrompts" });
+    const off = inPhase("READY", { prompts: [{ id: "p1", text: "x", active: false }], spunAtMs: T - 1000 });
+    expect(spinControl(off, "HOST")).toEqual({ labelKey: "spinAgain", disabledReason: "noPrompts" });
+    expect(secondaryActions(off, "HOST").find((a) => a.key === "spinWheel")).toMatchObject({ disabledReason: "noPrompts" });
   });
 
-  test("not while an act is under way", () => {
-    for (const phase of ["PERFORMING", "VOTING", "VOTING_PAUSED", "VOTING_CLOSED", "REVEAL"] as Phase[]) {
-      expect(queueAction(inPhase(phase), "OPERATOR", AMAN)).toBeNull();
+  test("not offered outside READY", () => {
+    for (const phase of PHASES.filter((x) => x !== "READY")) expect(spinControl(inPhase(phase), "HOST"), phase).toBeNull();
+    expect(spinControl(null, "HOST")).toBeNull();
+    expect(spinControl(inPhase("READY"), null)).toBeNull();
+  });
+});
+
+describe("no queue and no prompt controls anywhere", () => {
+  test("no phase offers a removed control, to any role", () => {
+    const gone = ["selectContestant", "reassignContestant", "setPrompt", "drawPrompt"];
+    for (const role of ROLES) {
+      for (const phase of PHASES) {
+        const s = inPhase(phase);
+        expect(gone).not.toContain(primaryAction(s, role)?.labelKey);
+        expect(gone).not.toContain(primaryAction(s, role)?.action?.type);
+        for (const a of secondaryActions(s, role)) expect(gone).not.toContain(a.key);
+      }
     }
   });
 
-  test("reassign targets are the active upcoming contestants only", () => {
-    expect(reassignTargets(inPhase("VOTING_PAUSED")).map((k) => k.id)).toEqual([AMAN]);
+  test("the queue and reassign helpers are gone", () => {
+    expect(Object.keys(adminView)).not.toContain("queueAction");
+    expect(Object.keys(adminView)).not.toContain("reassignTargets");
   });
 });
 
@@ -273,7 +268,7 @@ describe("outcomeOf", () => {
   const s = st();
   test("ok is quiet, refusals name their reason", () => {
     expect(outcomeOf({ ok: true, state: s })).toBeNull();
-    const codes: Extract<ActionResult, { ok: false }>["code"][] = ["stale", "not_allowed", "needs_prompt", "needs_self_score", "forbidden", "invalid"];
+    const codes: Extract<ActionResult, { ok: false }>["code"][] = ["stale", "not_allowed", "needs_self_score", "forbidden", "invalid"];
     for (const code of codes) expect(outcomeOf({ ok: false, code, state: s })).toBe(code);
   });
 
@@ -311,11 +306,16 @@ describe("tapAllowed: the settle guard after the big button changes", () => {
 describe("settleKey: what counts as the big button changing", () => {
   const ready = inPhase("READY");
 
-  test("a new phase, act or button changes it", () => {
+  test("a new phase, act, role or button changes it", () => {
     expect(settleKey(inPhase("PERFORMING"))).not.toBe(settleKey(ready));
     expect(settleKey(inPhase("READY", { performanceId: "66666666-6666-4666-8666-666666666666" }))).not.toBe(settleKey(ready));
     expect(settleKey(inPhase("REVEAL"))).not.toBe(settleKey(inPhase("COMPLETED")));
-    expect(settleKey(inPhase("READY", { me: { name: "Sai", role: "VOLUNTEER" } }))).not.toBe(settleKey(ready));
+    expect(settleKey(inPhase("READY", { me: { name: "Sai", role: "SUPER_ADMIN", track: null } }))).not.toBe(settleKey(ready));
+  });
+
+  test("putting an act on stage is a real step, from IDLE and from COMPLETED", () => {
+    expect(settleKey(inPhase("READY"))).not.toBe(settleKey(inPhase("IDLE")));
+    expect(settleKey(inPhase("READY", { performanceId: "66666666-6666-4666-8666-666666666666" }))).not.toBe(settleKey(inPhase("COMPLETED")));
   });
 
   test("time running out (PERFORMING to PERFORMED, same act, same button) does not", () => {
@@ -329,7 +329,8 @@ describe("settleKey: what counts as the big button changing", () => {
     expect(settleKey(inPhase("VOTING"))).not.toBe(settleKey(inPhase("PERFORMED")));
   });
 
-  test("votes, version, prompt and own score do not (the button keeps its label)", () => {
-    expect(settleKey(inPhase("READY", { votes: 40, version: 99, prompt: null, selfScore: 6 }))).toBe(settleKey(ready));
+  test("votes, version, a spin, a new name and own score do not (the button keeps its label)", () => {
+    const spun = inPhase("READY", { votes: 40, version: 99, prompt: "Sell us a deprecated API", spunAtMs: T, contestant: "Riya S.", selfScore: 6 });
+    expect(settleKey(spun)).toBe(settleKey(ready));
   });
 });

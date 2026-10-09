@@ -25,9 +25,14 @@ export function pickOffset(samples: { offset: number; rtt: number }[]): number {
   return best ? best.offset : 0;
 }
 
-/** Poll often while a performance is live (voting, performing, paused), slowly otherwise. */
+/**
+ * Poll often while an act is up (ready, performing, voting, paused), slowly
+ * otherwise. READY counts as live: the wheel spins there, and its result
+ * should reach the screens while the spin is still running.
+ */
 export function pollDelay(phase: Phase | null, poll: { votingMs: number; idleMs: number }): number {
-  const live = phase === "VOTING" || phase === "PERFORMING" || phase === "PERFORMED" || phase === "VOTING_PAUSED";
+  const live =
+    phase === "READY" || phase === "VOTING" || phase === "PERFORMING" || phase === "PERFORMED" || phase === "VOTING_PAUSED";
   return live ? poll.votingMs : poll.idleMs;
 }
 

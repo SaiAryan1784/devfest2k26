@@ -1,7 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { ensureSchema, neonDb, type Db } from "@/lib/dgl/db";
-import { SCHEMA, SCHEMA_OBJECTS } from "@/lib/dgl/schema";
+import { SCHEMA, SCHEMA_OBJECTS, SCHEMA_PROBE } from "@/lib/dgl/schema";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -40,7 +40,9 @@ describe("ensureSchema", () => {
     };
     return { db, seen };
   }
-  const isDdl = (s: string) => /^\s*(CREATE|INSERT)\b/i.test(s);
+  /** Every schema statement: the CREATEs, the dgl_show seed row, the ALTERs and the role UPDATE. */
+  const isDdl = (s: string) => /^\s*(CREATE|INSERT|ALTER|UPDATE)\b/i.test(s);
+  const probe = async (pg: PGlite) => (await pg.query<{ ok: boolean | null }>(SCHEMA_PROBE)).rows[0].ok;
 
   test("a fresh database runs the DDL once, and a second call on the same Db does nothing", async () => {
     const pg = new PGlite();
@@ -82,7 +84,47 @@ describe("ensureSchema", () => {
     const created = SCHEMA.flatMap((s) => [...s.matchAll(/CREATE (?:TABLE|INDEX) IF NOT EXISTS (\w+)/g)].map((m) => m[1]));
     expect([...SCHEMA_OBJECTS].sort()).toEqual([...created].sort());
     expect(created).toContain("dgl_votes_ip_idx");
-    expect(created).toHaveLength(8);
+    expect(created).toHaveLength(10);
+  });
+
+  test("every schema statement is counted as DDL by these tests", () => {
+    expect(SCHEMA.every(isDdl)).toBe(true);
+  });
+
+  test("the probe reads only the catalog, so it runs on an empty database", async () => {
+    // Never FROM a DGL table: a table that does not exist yet would make the probe itself fail.
+    expect(SCHEMA_PROBE).not.toMatch(/\b(FROM|JOIN)\s+dgl_/i);
+    const pg = new PGlite();
+    expect(await probe(pg)).toBe(false);
+    await pg.close();
+  });
+
+  test("the probe sees each new column and the nullable contestant_id, and a database missing one is repaired", async () => {
+    const breakers = [
+      "ALTER TABLE dgl_performances DROP COLUMN contestant_name",
+      "ALTER TABLE dgl_performances DROP COLUMN spun_at",
+      "ALTER TABLE dgl_performances DROP COLUMN track",
+      "ALTER TABLE dgl_admins DROP COLUMN track",
+      // No row has a null contestant_id yet, so the old constraint can come back.
+      "ALTER TABLE dgl_performances ALTER COLUMN contestant_id SET NOT NULL",
+    ];
+    for (const breaker of breakers) {
+      const pg = new PGlite();
+      await ensureSchema(counting(pg).db);
+      expect(await probe(pg)).toBe(true);
+      await pg.query(breaker);
+      expect(await probe(pg), breaker).toBe(false);
+      const { db, seen } = counting(pg);
+      await ensureSchema(db);
+      expect(seen.filter(isDdl).length, breaker).toBe(SCHEMA.length);
+      expect(await probe(pg), breaker).toBe(true);
+      await pg.close();
+    }
+  }, 30_000);
+
+  test("the role update runs last, after every object it could depend on", () => {
+    expect(SCHEMA.at(-1)).toMatch(/^UPDATE dgl_admins SET role = 'HOST' WHERE role IN \('OPERATOR', 'VOLUNTEER'\)$/);
+    expect(SCHEMA.filter((x) => /^\s*UPDATE\b/i.test(x))).toHaveLength(1);
   });
 
   test("a failed attempt is forgotten so the next call retries", async () => {

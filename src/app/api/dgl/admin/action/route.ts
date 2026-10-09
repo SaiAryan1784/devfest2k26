@@ -3,6 +3,7 @@ import { currentAdmin } from "@/lib/dgl/auth";
 import { ensureSchema } from "@/lib/dgl/db";
 import { sameOrigin } from "@/lib/dgl/http";
 import {
+  ACTION_STATUS,
   ADMIN_COOKIE,
   badRequest,
   config,
@@ -10,21 +11,14 @@ import {
   forbidden,
   isObject,
   json,
+  parseTrack,
   readJson,
   unauthorized,
   unavailable,
 } from "@/lib/dgl/route";
 import { applyAction } from "@/lib/dgl/show";
+import { canAccessTrack } from "@/lib/dgl/tracks";
 import type { Action } from "@/lib/dgl/types";
-
-const STATUS = {
-  forbidden: 403,
-  invalid: 400,
-  stale: 409,
-  not_allowed: 409,
-  needs_prompt: 409,
-  needs_self_score: 409,
-} as const;
 
 export async function POST(req: NextRequest) {
   const now = Date.now();
@@ -33,6 +27,7 @@ export async function POST(req: NextRequest) {
   if (
     !isObject(body) ||
     !isObject(body.action) ||
+    !parseTrack(body.track) ||
     typeof body.action.type !== "string" ||
     typeof body.version !== "number" ||
     !Number.isInteger(body.version)
@@ -45,8 +40,10 @@ export async function POST(req: NextRequest) {
     await ensureSchema(cfg.db);
     const admin = await currentAdmin(cfg.db, req.cookies.get(ADMIN_COOKIE)?.value, now);
     if (!admin) return unauthorized();
-    const result = await applyAction(cfg.db, admin, body.action as unknown as Action, body.version, now);
-    return json(result, result.ok ? 200 : STATUS[result.code]);
+    const track = parseTrack(body.track)!;
+    if (!canAccessTrack(admin.track, track)) return forbidden();
+    const result = await applyAction(cfg.db, admin, track, body.action as unknown as Action, body.version, now);
+    return json(result, result.ok ? 200 : ACTION_STATUS[result.code]);
   } catch (err) {
     return fail(err);
   }

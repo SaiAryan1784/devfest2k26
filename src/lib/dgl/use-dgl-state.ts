@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { DGL } from "@/data/dgl";
 import { pickOffset, pollDelay } from "./clock";
-import { fetchMe, timeoutSignal } from "./client-http";
+import { fetchMe, stateUrl, timeoutSignal } from "./client-http";
 import { connectionFor, type Connection } from "./connection";
-import type { PublicState } from "./types";
+import type { PublicState, Track } from "./types";
 
 const OFFSET_REFRESH_MS = 60_000;
 const SAMPLES = 5;
@@ -24,7 +24,7 @@ const serverOnline = () => true;
 function asPublicState(x: unknown): PublicState | null {
   if (typeof x !== "object" || x === null) return null;
   const s = x as Partial<PublicState>;
-  return typeof s.phase === "string" && typeof s.votes === "number" ? (x as PublicState) : null;
+  return typeof s.phase === "string" && typeof s.votes === "number" && typeof s.track === "string" ? (x as PublicState) : null;
 }
 
 /**
@@ -37,7 +37,7 @@ function asPublicState(x: unknown): PublicState | null {
  * the tab is hidden, and fires straight away on becoming visible or online.
  * Discrete values only, so plain state; nothing here is continuous.
  */
-export function useDglState(): { state: PublicState | null; offset: number; connection: Connection } {
+export function useDglState(track: Track): { state: PublicState | null; offset: number; connection: Connection } {
   const [state, setState] = useState<PublicState | null>(null);
   const [offset, setOffset] = useState(0);
   const [failing, setFailing] = useState(false);
@@ -64,7 +64,7 @@ export function useDglState(): { state: PublicState | null; offset: number; conn
       busy = true;
       lastPollAt.current = Date.now();
       try {
-        const res = await fetch("/api/dgl/state", { cache: "no-store", signal: timeoutSignal() });
+        const res = await fetch(stateUrl(track), { cache: "no-store", signal: timeoutSignal() });
         if (!res.ok) throw new Error(`state ${res.status}`);
         const next = asPublicState(await res.json());
         if (!next) throw new Error("state shape");
@@ -103,7 +103,7 @@ export function useDglState(): { state: PublicState | null; offset: number; conn
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("online", onOnline);
     };
-  }, [delay]);
+  }, [delay, track]);
 
   // The clock: /api/dgl/me on mount and every 60 s, keeping the lowest round trip of the last few.
   useEffect(() => {
@@ -116,7 +116,7 @@ export function useDglState(): { state: PublicState | null; offset: number; conn
       clearTimeout(timer);
       if (!document.hidden) {
         lastAt = Date.now();
-        const me = await fetchMe();
+        const me = await fetchMe(track);
         if (!alive) return;
         if (me) {
           samples.push({ offset: me.offset, rtt: me.rtt });
@@ -139,7 +139,7 @@ export function useDglState(): { state: PublicState | null; offset: number; conn
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, []);
+  }, [track]);
 
   // The first good poll always sets `state` (lastJson starts empty), so a state means a poll answered.
   const connection: Connection = connectionFor(online, failing, state !== null);

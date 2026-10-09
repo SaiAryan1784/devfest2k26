@@ -34,9 +34,10 @@ test("pickOffset trusts the shortest round trip and is 0 with no samples", () =>
   ).toBe(20);
 });
 
-test("pollDelay is fast while a performance is live and slow otherwise", () => {
+test("pollDelay is fast while an act is up (ready, performing, voting, paused) and slow otherwise", () => {
   const poll = { votingMs: 1_500, idleMs: 3_000 };
-  for (const p of ["VOTING", "PERFORMING", "PERFORMED", "VOTING_PAUSED"] as const) expect(pollDelay(p, poll)).toBe(1_500);
-  for (const p of ["IDLE", "READY", "VOTING_CLOSED", "REVEAL", "COMPLETED"] as const) expect(pollDelay(p, poll)).toBe(3_000);
+  // READY is live: the wheel can spin there, and its result should reach the screens promptly.
+  for (const p of ["READY", "VOTING", "PERFORMING", "PERFORMED", "VOTING_PAUSED"] as const) expect(pollDelay(p, poll), p).toBe(1_500);
+  for (const p of ["IDLE", "VOTING_CLOSED", "REVEAL", "COMPLETED"] as const) expect(pollDelay(p, poll), p).toBe(3_000);
   expect(pollDelay(null, poll)).toBe(3_000);
 });

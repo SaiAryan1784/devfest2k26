@@ -32,28 +32,29 @@ describe("kioskScreen", () => {
     expect(signedIn(null, "VOTING")).toBe("checking");
   });
 
-  test("HOST cannot record kiosk votes, in any phase", () => {
-    for (const phase of ["IDLE", "VOTING", "VOTING_PAUSED", "VOTING_CLOSED"] as const) {
-      expect(signedIn("HOST", phase)).toBe("wrong-role");
-    }
-  });
-
-  test.each(["VOLUNTEER", "OPERATOR", "SUPER_ADMIN"] as const)("%s gets the kiosk", (role) => {
+  test.each(["HOST", "SUPER_ADMIN"] as const)("%s gets the kiosk", (role) => {
     expect(signedIn(role, "VOTING")).toBe("voting");
   });
 
-  test("the grid only exists in VOTING", () => {
+  test("no role sees the wrong-role screen (only a refused vote leads there)", () => {
+    const phases = ["IDLE", "READY", "PERFORMING", "PERFORMED", "VOTING", "VOTING_PAUSED", "VOTING_CLOSED", "REVEAL", "COMPLETED"] as const;
+    for (const role of ["HOST", "SUPER_ADMIN"] as const) {
+      for (const phase of phases) expect(signedIn(role, phase), `${role} ${phase}`).not.toBe("wrong-role");
+    }
+  });
+
+  test.each(["HOST", "SUPER_ADMIN"] as const)("the grid only exists in VOTING (%s)", (role) => {
     const grid = (["IDLE", "READY", "PERFORMING", "PERFORMED", "VOTING", "VOTING_PAUSED", "VOTING_CLOSED", "REVEAL", "COMPLETED"] as const).filter(
-      (p) => signedIn("VOLUNTEER", p) === "voting",
+      (p) => signedIn(role, p) === "voting",
     );
     expect(grid).toEqual(["VOTING"]);
   });
 
   test("other phases map to a short line", () => {
-    expect(signedIn("VOLUNTEER", null)).toBe("not-open");
-    for (const p of ["IDLE", "READY", "PERFORMING", "PERFORMED"] as const) expect(signedIn("VOLUNTEER", p)).toBe("not-open");
-    expect(signedIn("VOLUNTEER", "VOTING_PAUSED")).toBe("paused");
-    for (const p of ["VOTING_CLOSED", "REVEAL", "COMPLETED"] as const) expect(signedIn("VOLUNTEER", p)).toBe("closed");
+    expect(signedIn("HOST", null)).toBe("not-open");
+    for (const p of ["IDLE", "READY", "PERFORMING", "PERFORMED"] as const) expect(signedIn("HOST", p)).toBe("not-open");
+    expect(signedIn("HOST", "VOTING_PAUSED")).toBe("paused");
+    for (const p of ["VOTING_CLOSED", "REVEAL", "COMPLETED"] as const) expect(signedIn("HOST", p)).toBe("closed");
   });
 });
 

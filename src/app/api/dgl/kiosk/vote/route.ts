@@ -18,10 +18,12 @@ import {
   unavailable,
   voteResponse,
 } from "@/lib/dgl/route";
+import { canAccessTrack } from "@/lib/dgl/tracks";
 import { castKioskVote } from "@/lib/dgl/votes";
 
 /**
- * A vote typed in by a signed-in volunteer or organiser on the venue kiosk.
+ * A vote typed in on the venue kiosk by anyone signed in (a host or a super
+ * admin; a volunteer uses a host account).
  * Each press is one anonymous voter (`kiosk-<attemptId>`), so a kiosk can take
  * many votes while a resend of the same press cannot count twice; the
  * per-admin gap and the audit row are the brakes.
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
     await ensureSchema(cfg.db);
     const admin = await currentAdmin(cfg.db, req.cookies.get(ADMIN_COOKIE)?.value, now);
     if (!admin) return unauthorized();
-    if (!can(admin.role, "kioskVote")) return forbidden();
+    if (!can(admin.role, "kioskVote") || !canAccessTrack(admin.track, body.track)) return forbidden();
     if (!kioskLimiter.hit(admin.id, now)) return json({ status: "rate_limited" }, 429);
 
     // One statement stores the vote and its audit row together (see castKioskVote).
@@ -48,6 +50,7 @@ export async function POST(req: NextRequest) {
       score: body.score,
       ipHash: hashedIp(req, cfg.secret),
       source: "kiosk",
+      track: body.track,
       now,
       adminId: admin.id,
       adminName: admin.name,

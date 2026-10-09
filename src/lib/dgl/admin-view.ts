@@ -1,4 +1,5 @@
 import { allowed, can, effectivePhase } from "./machine";
+import { formatRaw } from "./score";
 import type { ActionResult, AdminState, LiveAction, Phase, Role, StoredStatus } from "./types";
 
 /**
@@ -19,7 +20,7 @@ export function phaseAt(s: AdminState, now: number = s.serverNow): Phase {
 }
 
 export type PrimaryKey =
-  | "selectContestant"
+  | "putOnStage"
   | "startPerformance"
   | "startVoting"
   | "stopVoting"
@@ -27,12 +28,15 @@ export type PrimaryKey =
   | "reveal"
   | "complete";
 
-export type DisabledReason = "needsPrompt" | "needsSelfScore" | "noContestants" | "noPrompts" | "noOtherContestants";
+export type DisabledReason = "needsSelfScore" | "noPrompts" | "noWinner";
 
 export type Primary = {
   /** Key into DGL.copy.admin.primary. */
   labelKey: PrimaryKey;
-  /** Null for the IDLE / COMPLETED hint, which only moves focus to the queue. */
+  /**
+   * Null for "Put on stage" (IDLE, COMPLETED): it needs a name, so the button
+   * is the console's name form's, which builds putOnStage from what was typed.
+   */
   action: LiveAction | null;
   disabled: boolean;
   /** Key into DGL.copy.admin.reason, shown as text under the disabled button. */
@@ -57,29 +61,19 @@ const NEXT: Partial<Record<Phase, Simple>> = {
   REVEAL: "complete",
 };
 
-const selectable = (s: AdminState) => s.contestants.filter((k) => k.active && k.status !== "current");
-
 export function primaryAction(s: AdminState | null, role: Role | null, now?: number): Primary | null {
   if (!s || !role) return null;
   const phase = phaseAt(s, now);
 
   if (phase === "IDLE" || phase === "COMPLETED") {
-    if (!allowed(phase, "selectContestant") || !can(role, "selectContestant")) return null;
-    const none = selectable(s).length === 0;
-    return {
-      labelKey: "selectContestant",
-      action: null,
-      disabled: none,
-      disabledReason: none ? "noContestants" : null,
-      needsConfirm: false,
-    };
+    if (!allowed(phase, "putOnStage") || !can(role, "putOnStage")) return null;
+    return { labelKey: "putOnStage", action: null, disabled: false, disabledReason: null, needsConfirm: false };
   }
 
   const type = NEXT[phase];
   if (!type || !allowed(phase, type) || !can(role, type)) return null;
-  let disabledReason: DisabledReason | null = null;
-  if (type === "startPerformance" && !s.prompt) disabledReason = "needsPrompt";
-  if (type === "reveal" && s.selfScore === null) disabledReason = "needsSelfScore";
+  // The prompt is optional: only the reveal waits for something (the own score).
+  const disabledReason: DisabledReason | null = type === "reveal" && s.selfScore === null ? "needsSelfScore" : null;
   return {
     labelKey: type,
     action: { type },
@@ -94,10 +88,11 @@ export type SecondaryKey =
   | "resumeVoting"
   | "stopVoting"
   | "reopenVoting"
-  | "drawPrompt"
-  | "setPrompt"
-  | "reassignContestant"
-  | "setSelfScore";
+  | "spinWheel"
+  | "renameAct"
+  | "setSelfScore"
+  | "showWinner"
+  | "hideWinner";
 
 export type Secondary = { key: SecondaryKey; needsConfirm: boolean; disabledReason: DisabledReason | null };
 
@@ -106,42 +101,55 @@ const SECONDARY: readonly SecondaryKey[] = [
   "resumeVoting",
   "stopVoting",
   "reopenVoting",
-  "drawPrompt",
-  "setPrompt",
-  "reassignContestant",
+  "spinWheel",
+  "renameAct",
   "setSelfScore",
+  "showWinner",
+  "hideWinner",
 ];
-const CONFIRM = new Set<SecondaryKey>(["stopVoting", "reopenVoting", "reassignContestant"]);
-
-/** Active upcoming contestants: who can take the current slot on a reassign. */
-export function reassignTargets(s: AdminState): AdminState["contestants"] {
-  return s.contestants.filter((k) => k.active && k.status === "upcoming");
-}
+const CONFIRM = new Set<SecondaryKey>(["stopVoting", "reopenVoting"]);
 
 /**
  * The smaller controls, in display order: each one allowed in this phase and
  * permitted for the role, minus whatever the big button already does.
- * `setPrompt` is the typed prompt field and `setSelfScore` the own-score grid;
- * the rest are buttons.
+ * `spinWheel` is the wheel button (see spinControl), `renameAct` the "Fix the
+ * name" control and `setSelfScore` the own-score grid; the rest are buttons.
+ * Nothing here needs a second tap except stopping and reopening voting.
  */
 export function secondaryActions(s: AdminState | null, role: Role | null, now?: number): Secondary[] {
   if (!s || !role) return [];
   const phase = phaseAt(s, now);
   const primary = primaryAction(s, role, now)?.action?.type;
-  return SECONDARY.filter((k) => k !== primary && allowed(phase, k) && can(role, k)).map((key) => {
-    let disabledReason: DisabledReason | null = null;
-    if (key === "drawPrompt" && !s.prompts.some((r) => r.active)) disabledReason = "noPrompts";
-    if (key === "reassignContestant" && reassignTargets(s).length === 0) disabledReason = "noOtherContestants";
-    return { key, needsConfirm: CONFIRM.has(key), disabledReason };
-  });
+  return SECONDARY.filter(
+    (k) =>
+      k !== primary &&
+      allowed(phase, k) &&
+      can(role, k) &&
+      // One winner button at a time: show it, then hide it.
+      !(k === "showWinner" && s.winnerShown) &&
+      !(k === "hideWinner" && !s.winnerShown),
+  ).map((key) => ({
+    key,
+    needsConfirm: CONFIRM.has(key),
+    // The wheel draws from the active prompts only; the winner needs a revealed act with votes.
+    disabledReason:
+      key === "spinWheel" && !s.prompts.some((r) => r.active) ? "noPrompts" : key === "showWinner" && !s.leaders ? "noWinner" : null,
+  }));
 }
 
-/** The queue row's button for one contestant: "select" or nothing. */
-export function queueAction(s: AdminState | null, role: Role | null, contestantId: string, now?: number): "select" | null {
-  if (!s || !role) return null;
-  const k = s.contestants.find((x) => x.id === contestantId);
-  if (!k || !k.active || k.status === "current") return null;
-  return allowed(phaseAt(s, now), "selectContestant") && can(role, "selectContestant") ? "select" : null;
+/**
+ * The wheel button, when it is offered (READY): "Spin the wheel", or "Spin
+ * again" once this act has been spun; off, with the reason, when no prompt is
+ * active. `labelKey` is a key into DGL.copy.admin. Null when not offered.
+ */
+export function spinControl(
+  s: AdminState | null,
+  role: Role | null,
+  now?: number,
+): { labelKey: "spinWheel" | "spinAgain"; disabledReason: DisabledReason | null } | null {
+  const item = secondaryActions(s, role, now).find((a) => a.key === "spinWheel");
+  if (!s || !item) return null;
+  return { labelKey: s.spunAtMs === null ? "spinWheel" : "spinAgain", disabledReason: item.disabledReason };
 }
 
 export type Pending = { key: string; at: number };
@@ -162,13 +170,13 @@ export function confirmStep(
 }
 
 /**
- * The admin-only raw average, two decimals (same rounding rule as
- * formatAverage: Math.round on the scaled value). Null with no votes, so the
- * console says "No votes yet" instead of a number.
+ * The admin-only raw average, the exact figure to two decimals through
+ * formatRaw (the public sees a whole number instead). Null with no votes, so
+ * the console says "No votes yet" instead of a number.
  */
 export function formatRawAverage(avg: number | null, votes: number): string | null {
   if (avg === null || votes === 0) return null;
-  return (Math.round(avg * 100) / 100).toFixed(2);
+  return formatRaw(avg);
 }
 
 export type Outcome = Extract<ActionResult, { ok: false }>["code"] | "network";
@@ -183,7 +191,8 @@ export function outcomeOf(r: ActionResult | null): Outcome | null {
  * How long guarded controls ignore taps after the big button changed (a new
  * phase, act or label). A double tap whose second tap lands after the round
  * trip would otherwise run the NEXT phase's action: "Start performance" then
- * "Start voting", "Reveal" then "Next contestant".
+ * "Start voting", "Reveal" then "Next contestant", "Put on stage" then "Start
+ * performance".
  */
 export const SETTLE_MS = 800;
 
@@ -199,8 +208,10 @@ export function tapAllowed(changedAt: number | null, now: number, settleMs: numb
 
 /**
  * What the big button depends on: phase (PERFORMED counted as PERFORMING),
- * act and the button itself (for the signed-in role). When this changes between two adopted states, the console
- * settles. Counts, the version, the prompt and the own score leave it alone.
+ * act and the button itself (for the signed-in role). When this changes
+ * between two adopted states, the console settles. Counts, the version, a
+ * spin (the prompt and its time), a fixed name and the own score leave it
+ * alone: none of them is a step of the show.
  */
 export function settleKey(s: AdminState): string {
   const p = primaryAction(s, s.me.role);

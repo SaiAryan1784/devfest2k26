@@ -4,6 +4,14 @@
  * Every number, limit and user-visible string for DGL lives here. Components
  * and routes never inline them.
  */
+/** The three simultaneous rooms. Each has its own show, stage, QR code and votes. */
+export const DGL_TRACKS = [
+  { id: "build", label: "Build" },
+  { id: "grow", label: "Grow" },
+  { id: "think", label: "Think" },
+] as const;
+export type Track = (typeof DGL_TRACKS)[number]["id"];
+
 export const DGL = {
   name: "DevFest Got Latent",
   /** Performance length, server time. */
@@ -12,8 +20,6 @@ export const DGL = {
   finalCountdownS: 10,
   /** The last N seconds turn the stage timer red. */
   criticalCountdownS: 3,
-  /** The audience average stays hidden below this many votes. */
-  minVotes: 5,
   /**
    * When the phone shows the average. "after-vote" hides it until the voter
    * has voted (or voting closed) so early votes do not anchor later ones;
@@ -21,6 +27,12 @@ export const DGL = {
    */
   showLiveAverage: "after-vote" as "after-vote" | "always",
   poll: { votingMs: 1500, idleMs: 3000, adminMs: 1000 },
+  /**
+   * The prompt wheel. A spin (READY only) stores the prompt and the server
+   * time of the spin; every screen hides the prompt until spinMs later, in
+   * server time, so the wheel and the reveal land together everywhere.
+   */
+  wheel: { spinMs: 4500, segments: 12 },
   stage: {
     /** The projector hides the mouse pointer after this long without movement. */
     cursorIdleMs: 3000,
@@ -46,6 +58,8 @@ export const DGL = {
     /** Sign in attempts per IP per minute, per server instance (best effort, see loginLimiter). */
     loginPerIpPerMin: 10,
     kioskGapMs: 2000,
+    /** An act's name (put on stage, fix the name): 1 to 80 characters once trimmed, no control characters. */
+    nameMax: 80,
   },
   copy: {
     voteQueued: "Vote queued, waiting for connection",
@@ -64,6 +78,8 @@ export const DGL = {
     upNext: "Up next",
     onStageNow: "On stage now",
     timeLeft: "Time left",
+    /** After the whole-second clock: "90 sec", never "1:30". */
+    secondsUnit: "sec",
     performed: "Time. Voting opens in a moment.",
     votingTitle: "Score the act",
     lockIn: (n: number) => `Lock in ${n}`,
@@ -72,21 +88,32 @@ export const DGL = {
     yourScore: "Your score",
     voteCount: (n: number) => (n === 1 ? "1 vote" : `${n} votes`),
     audienceAverage: "Audience average",
-    outOfTen: (avg: string) => `${avg} / 10`,
+    outOfTen: (n: number) => `${n} / 10`,
     pausedBody: "Hang on, the host will reopen it.",
     votingClosed: "Voting closed",
     ownScore: "Own score",
     audience: "Audience",
-    difference: (d: string) => `Difference ${d}`,
-    notEnoughVotes: "Not enough votes for an audience score",
+    difference: (d: number) => `Difference ${d}`,
+    /** The reveal's line, and the tally line once voting closed, when nobody voted. */
+    noVotes: "No votes",
     completed: "Next act coming up",
     connection: { connecting: "Connecting", live: "Live", reconnecting: "Reconnecting", offline: "Offline" },
 
-    // Stage display (/dgl/stage)
+    // Room picker, winner
+    pickRoomTitle: "Pick your room",
+    pickRoomBody: "Choose the track you are watching.",
+    pickStageTitle: "Pick the stage",
+    pickStageBody: "Choose the track this screen is for.",
+    spinning: "Spinning the wheel...",
+    winnerTitle: "Winner",
+    winnersTitle: "Winners",
+    winnerScore: (n: number) => `Audience ${n} / 10`,
+
+    // Stage display (/dgl/<track>/stage)
     stageTitle: "DevFest Got Latent stage",
-    stageIdleBody: "Scan the code to score each act from your phone.",
+    stageIdleBody: "The QR code to vote appears when the act begins.",
     scanToVote: "Scan to vote",
-    /** Alt text for the DevFest Got Latent artwork shown on the stage while the QR is up. */
+    /** Alt text for the DevFest Got Latent artwork shown on the stage (waiting, up next, voting, between acts). */
     posterAlt: "DevFest Got Latent: a gold title on a stage with blue curtains",
     voteNow: "Vote now",
     stageTime: "Time",
@@ -143,9 +170,10 @@ export const DGL = {
       sessionEnded: "Your session ended. Sign in again.",
       signOut: "Sign out",
       signOutFailed: "Could not sign out. Try again.",
-      roles: { SUPER_ADMIN: "Super admin", OPERATOR: "Operator", HOST: "Host", VOLUNTEER: "Volunteer" },
+      roles: { SUPER_ADMIN: "Super admin", HOST: "Host" },
+      trackLabel: "Track",
       phases: {
-        IDLE: "No act selected",
+        IDLE: "No act on stage",
         READY: "Ready",
         PERFORMING: "Performing",
         PERFORMED: "Time up",
@@ -156,7 +184,7 @@ export const DGL = {
         COMPLETED: "Act complete",
       },
       stats: {
-        contestant: "Contestant",
+        contestant: "On stage",
         phase: "Phase",
         timeLeft: "Time left",
         votes: "Votes",
@@ -168,13 +196,13 @@ export const DGL = {
         nobody: "Nobody yet",
       },
       primary: {
-        selectContestant: "Select a contestant",
+        putOnStage: "Put on stage",
         startPerformance: "Start performance",
         startVoting: "Start voting",
         stopVoting: "Stop voting",
         resumeVoting: "Resume voting",
         reveal: "Reveal",
-        complete: "Next contestant",
+        complete: "Finish act",
       },
       secondaryTitle: "More controls",
       secondary: {
@@ -182,38 +210,41 @@ export const DGL = {
         resumeVoting: "Resume voting",
         stopVoting: "Stop voting",
         reopenVoting: "Reopen voting",
-        drawPrompt: "Draw prompt",
-        setPrompt: "Set prompt",
-        reassignContestant: "Reassign",
+        spinWheel: "Spin the wheel",
+        renameAct: "Fix the name",
         setSelfScore: "Save own score",
+        showWinner: "Show winner",
+        hideWinner: "Hide winner",
       },
+      spinAgain: "Spin again",
       tapAgain: "Tap again to confirm",
       /** Under the big button for a moment after it changes, while taps are ignored. */
       updating: "Updating",
       confirmAnnounce: (label: string) => `${label}: tap again within 3 seconds to confirm.`,
       reason: {
-        needsPrompt: "Add a prompt first",
         needsSelfScore: "Enter their own score first",
-        noContestants: "No active contestants. Add them in setup.",
-        noPrompts: "No active prompts to draw from",
-        noOtherContestants: "No other contestant is waiting",
+        noPrompts: "No active prompts to spin. Add some in setup.",
+        noWinner: "No act has votes yet",
       },
       outcome: {
         stale: "Someone else just changed the show. Updated.",
         notAllowed: (phase: string) => `That cannot be done now. The show is at: ${phase}.`,
-        needs_prompt: "Add a prompt first",
+        no_winner: "No act has votes yet",
         needs_self_score: "Enter their own score first",
         forbidden: "Your role cannot do that.",
         invalid: "That was not accepted. Check it and try again.",
         network: "No answer from the server. Check the phase before trying again.",
       },
-      prompt: {
-        title: "Prompt",
-        none: "No prompt yet",
-        inputLabel: "Type a prompt",
-        hint: "From the spinwheel, up to 200 characters.",
-        empty: "Type a prompt first.",
-        maxLength: 200,
+      stage: {
+        nameLabel: "Who is on stage?",
+        nameHint: "Type the name, then put them on stage.",
+        namePlaceholder: "Name",
+        nameMissing: "Type a name first.",
+        nameMax: 80,
+        renameLabel: "New name",
+        renameSave: "Save name",
+        promptNone: "No prompt. Spin the wheel for one.",
+        promptTitle: "Prompt",
       },
       ownScore: {
         title: "Own score",
@@ -223,21 +254,14 @@ export const DGL = {
         save: (n: number) => `Save ${n}`,
         pick: "Pick a score",
       },
-      reassign: {
-        label: "Reassign this act to",
-        button: "Reassign",
+      acts: {
+        title: "Acts so far",
+        empty: "No acts yet.",
+        leading: "Leading",
+        noVotes: "No votes",
+        votes: (n: number) => (n === 1 ? "1 vote" : `${n} votes`),
+        shown: "The winner is on screen.",
       },
-      queue: {
-        title: "Contestants",
-        current: "On now",
-        upcoming: "Up next",
-        done: "Done",
-        inactive: "Inactive",
-        select: "Select",
-        empty: "No contestants yet. Add them in setup.",
-        none: "None",
-      },
-      volunteer: "Volunteers run the kiosk. Show controls are for hosts and operators.",
       /** The two-item switch at the top of the console (Setup for super admins and operators only). */
       views: { label: "Console view", live: "Live", setup: "Setup" },
       setup: {
@@ -251,26 +275,9 @@ export const DGL = {
         inactive: "Inactive",
         activate: "Activate",
         deactivate: "Deactivate",
-        contestants: {
-          title: "Contestants",
-          body: "The running order is the sort number, lowest first. Inactive contestants stay in the list but cannot be selected.",
-          empty: "No contestants yet.",
-          name: "Name",
-          sort: "Sort",
-          sortHint: "A whole number. Lower goes first.",
-          add: "Add contestant",
-          renameLabel: (name: string) => `New name for ${name}`,
-          moveUp: (name: string) => `Move ${name} up`,
-          moveDown: (name: string) => `Move ${name} down`,
-          nameMissing: "Enter a name.",
-          sortInvalid: "Enter a whole number.",
-          maxLength: 200,
-          moved: "Order updated.",
-          added: (name: string) => `Added ${name}.`,
-        },
         prompts: {
           title: "Prompts",
-          body: "Draw prompt picks from the active prompts, unused ones first.",
+          body: "The wheel picks from the active prompts, unused ones first.",
           empty: "No prompts yet.",
           text: "Prompt",
           add: "Add prompt",
@@ -291,6 +298,8 @@ export const DGL = {
           you: "You",
           name: "Name",
           role: "Role",
+          track: "Track",
+          allTracks: "All tracks",
           passcode: "Passcode",
           newPasscode: "New passcode",
           newPasscodeHint: "Leave empty to keep the current passcode. At least 6 characters.",
@@ -327,7 +336,7 @@ export const DGL = {
         },
         reset: {
           title: "Reset show",
-          body: "Clears rehearsal data: every performance and every vote. Contestants, prompts and admins are kept.",
+          body: "Clears this track's rehearsal data: every act and every vote in the track. Prompts and admins are kept.",
           warning: "This cannot be undone. Do not use it once the real show has started.",
           label: "Type RESET to confirm",
           button: "Reset show",

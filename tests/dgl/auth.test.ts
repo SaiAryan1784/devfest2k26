@@ -4,6 +4,7 @@ import {
   currentAdmin,
   hashPasscode,
   login,
+  normalizeRole,
   readSession,
   signSession,
   verifyPasscode,
@@ -57,7 +58,10 @@ describe("sessions", () => {
 
   test("rejects a bad signature and a wrong secret", () => {
     const t = signSession(ID, exp, SECRET);
-    expect(readSession(t.slice(0, -2) + "00", SECRET, T0)).toBeNull();
+    // The last hex character changed: always a different signature ("00" over the last two was the real one 1 time in 256).
+    const forged = t.slice(0, -1) + (t.endsWith("0") ? "1" : "0");
+    expect(forged).not.toBe(t);
+    expect(readSession(forged, SECRET, T0)).toBeNull();
     expect(readSession(t, "other-secret", T0)).toBeNull();
     expect(readSession(`${ID}.${exp}.`, SECRET, T0)).toBeNull();
   });
@@ -90,7 +94,7 @@ describe("login and currentAdmin", () => {
     db = await createTestDb();
     const [r] = await db.query<{ id: string }>(
       "INSERT INTO dgl_admins (name, role, passcode_hash) VALUES ($1, $2, $3) RETURNING id",
-      ["Sai", "OPERATOR", await hashPasscode("right")],
+      ["Sai", "HOST", await hashPasscode("right")],
     );
     id = r.id;
   });
@@ -104,7 +108,7 @@ describe("login and currentAdmin", () => {
 
   test("a correct passcode logs in and audits it", async () => {
     const r = await login(db, "Sai", "right", T0);
-    expect(r).toEqual({ ok: true, admin: { id, name: "Sai", role: "OPERATOR" } });
+    expect(r).toEqual({ ok: true, admin: { id, name: "Sai", role: "HOST", track: null } });
     const rows = await audit();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ admin_id: id, admin_name: "Sai", action: "login" });
@@ -196,7 +200,7 @@ describe("login and currentAdmin", () => {
 
   test("the name is trimmed, so ' Sai ' matches admin Sai", async () => {
     const r = await login(db, "  Sai ", "right", T0);
-    expect(r).toEqual({ ok: true, admin: { id, name: "Sai", role: "OPERATOR" } });
+    expect(r).toEqual({ ok: true, admin: { id, name: "Sai", role: "HOST", track: null } });
     expect((await audit())[0].admin_name).toBe("Sai");
   });
 
@@ -222,10 +226,10 @@ describe("login and currentAdmin", () => {
 
   test("currentAdmin reads the live row", async () => {
     const t = signSession(id, T0 + 60 * MIN, SECRET);
-    expect(await currentAdmin(db, t, T0)).toEqual({ id, name: "Sai", role: "OPERATOR" });
+    expect(await currentAdmin(db, t, T0)).toEqual({ id, name: "Sai", role: "HOST", track: null });
 
-    await db.query("UPDATE dgl_admins SET role = 'HOST' WHERE id = $1", [id]);
-    expect((await currentAdmin(db, t, T0))?.role).toBe("HOST");
+    await db.query("UPDATE dgl_admins SET role = 'SUPER_ADMIN' WHERE id = $1", [id]);
+    expect((await currentAdmin(db, t, T0))?.role).toBe("SUPER_ADMIN");
 
     await db.query("UPDATE dgl_admins SET active = false WHERE id = $1", [id]);
     expect(await currentAdmin(db, t, T0)).toBeNull();
@@ -239,11 +243,44 @@ describe("login and currentAdmin", () => {
     expect(await currentAdmin(db, signSession(id, T0 + MIN, SECRET), T0 + MIN)).toBeNull();
   });
 
+  test("login reads SUPER_ADMIN as itself and every other stored role as HOST", async () => {
+    const roles: [string, string][] = [
+      ["SUPER_ADMIN", "SUPER_ADMIN"],
+      ["HOST", "HOST"],
+      ["OPERATOR", "HOST"],
+      ["VOLUNTEER", "HOST"],
+      ["ROOT", "HOST"],
+      ["super_admin", "HOST"],
+    ];
+    for (const [stored, read] of roles) {
+      const name = `Role ${stored}`;
+      await db.query("INSERT INTO dgl_admins (name, role, passcode_hash) VALUES ($1, $2, $3)", [name, stored, await hashPasscode("pass")]);
+      expect(await login(db, name, "pass", T0), stored).toMatchObject({ ok: true, admin: { name, role: read } });
+    }
+  });
+
+  test("currentAdmin reads a retired role as HOST", async () => {
+    const t = signSession(id, T0 + 60 * MIN, SECRET);
+    for (const stored of ["OPERATOR", "VOLUNTEER"]) {
+      await db.query("UPDATE dgl_admins SET role = $2 WHERE id = $1", [id, stored]);
+      expect(await currentAdmin(db, t, T0), stored).toEqual({ id, name: "Sai", role: "HOST", track: null });
+    }
+  });
+
   test("currentAdmin is null when DGL_SECRET is unset or differs", async () => {
     const t = signSession(id, T0 + MIN, SECRET);
     vi.stubEnv("DGL_SECRET", "");
     expect(await currentAdmin(db, t, T0)).toBeNull();
     vi.stubEnv("DGL_SECRET", "other-secret");
     expect(await currentAdmin(db, t, T0)).toBeNull();
+  });
+});
+
+describe("normalizeRole", () => {
+  test("SUPER_ADMIN stays, anything else is HOST", () => {
+    expect(normalizeRole("SUPER_ADMIN")).toBe("SUPER_ADMIN");
+    for (const raw of ["HOST", "OPERATOR", "VOLUNTEER", "", "super_admin", " SUPER_ADMIN", "ROOT"]) {
+      expect(normalizeRole(raw), raw).toBe("HOST");
+    }
   });
 });

@@ -22,26 +22,20 @@ export function effectivePhase(
   return status;
 }
 
+/*
+ * What each phase allows. An act goes on stage only when nothing is running
+ * (IDLE, or COMPLETED between acts); a typo in its name can be fixed until
+ * voting opens, and again while voting is paused; the wheel spins only before
+ * the act starts.
+ */
 const TRANSITIONS: Record<Phase, readonly LiveType[]> = {
-  IDLE: ["selectContestant"],
-  COMPLETED: ["selectContestant"],
-  READY: [
-    "selectContestant",
-    "reassignContestant",
-    "setPrompt",
-    "drawPrompt",
-    "setSelfScore",
-    "startPerformance",
-  ],
-  PERFORMING: ["reassignContestant", "setSelfScore", "startVoting"],
-  PERFORMED: ["reassignContestant", "setSelfScore", "startVoting"],
+  IDLE: ["putOnStage"],
+  COMPLETED: ["putOnStage", "showWinner", "hideWinner"],
+  READY: ["renameAct", "spinWheel", "setSelfScore", "startPerformance"],
+  PERFORMING: ["renameAct", "setSelfScore", "startVoting"],
+  PERFORMED: ["renameAct", "setSelfScore", "startVoting"],
   VOTING: ["pauseVoting", "stopVoting", "setSelfScore"],
-  VOTING_PAUSED: [
-    "resumeVoting",
-    "stopVoting",
-    "reassignContestant",
-    "setSelfScore",
-  ],
+  VOTING_PAUSED: ["resumeVoting", "stopVoting", "renameAct", "setSelfScore"],
   VOTING_CLOSED: ["reopenVoting", "setSelfScore", "reveal"],
   REVEAL: ["complete"],
 };
@@ -51,10 +45,9 @@ export function allowed(phase: Phase, action: LiveType): boolean {
 }
 
 export const LIVE_ACTIONS: readonly LiveType[] = [
-  "selectContestant",
-  "reassignContestant",
-  "setPrompt",
-  "drawPrompt",
+  "putOnStage",
+  "renameAct",
+  "spinWheel",
   "startPerformance",
   "startVoting",
   "pauseVoting",
@@ -64,15 +57,21 @@ export const LIVE_ACTIONS: readonly LiveType[] = [
   "setSelfScore",
   "reveal",
   "complete",
+  "showWinner",
+  "hideWinner",
 ];
 
 export const SETUP_ACTIONS: readonly SetupAction["type"][] = [
-  "upsertContestant",
   "upsertPrompt",
   "upsertAdmin",
   "setFlaggedExcluded",
   "resetShow",
 ];
+
+/** The admin roles, in the order a role picker lists them. */
+export const ROLES: readonly Role[] = ["SUPER_ADMIN", "HOST"];
+
+export const isRole = (x: unknown): x is Role => ROLES.includes(x as Role);
 
 type Permission = Action["type"] | "kioskVote";
 
@@ -86,22 +85,16 @@ export const PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     ...SETUP_ACTIONS,
     "kioskVote",
   ]),
-  OPERATOR: new Set<Permission>([
-    ...LIVE_ACTIONS,
-    "upsertContestant",
-    "upsertPrompt",
-    "kioskVote",
-  ]),
-  HOST: new Set<Permission>(LIVE_ACTIONS),
-  VOLUNTEER: new Set<Permission>(["kioskVote"]),
+  HOST: new Set<Permission>([...LIVE_ACTIONS, "kioskVote"]),
 };
 
+/** A role read from the database goes through normalizeRole first; anything that slipped past it may do nothing. */
 export function can(role: Role, action: Permission): boolean {
-  return PERMISSIONS[role].has(action);
+  return PERMISSIONS[role]?.has(action) ?? false;
 }
 
 const NEXT_STATUS: Record<LiveType, StoredStatus | null> = {
-  selectContestant: "READY",
+  putOnStage: "READY",
   startPerformance: "PERFORMING",
   startVoting: "VOTING",
   pauseVoting: "VOTING_PAUSED",
@@ -110,10 +103,11 @@ const NEXT_STATUS: Record<LiveType, StoredStatus | null> = {
   reopenVoting: "VOTING",
   reveal: "REVEAL",
   complete: "COMPLETED",
-  reassignContestant: null,
-  setPrompt: null,
-  drawPrompt: null,
+  renameAct: null,
+  spinWheel: null,
   setSelfScore: null,
+  showWinner: null,
+  hideWinner: null,
 };
 
 /** The status an action moves the show to; null when it does not move it. */

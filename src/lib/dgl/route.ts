@@ -3,6 +3,8 @@ import { DGL } from "@/data/dgl";
 import { signSession } from "./auth";
 import { neonDb, type Db } from "./db";
 import { clientIp, createLimiter, ipHash } from "./http";
+import { isTrack } from "./tracks";
+import type { ActionResult, Track } from "./types";
 import type { VoteResult } from "./votes";
 
 /** Shared plumbing for the /api/dgl routes. */
@@ -57,6 +59,9 @@ export async function readJson(req: Request): Promise<unknown> {
 export const isObject = (x: unknown): x is Record<string, unknown> =>
   typeof x === "object" && x !== null && !Array.isArray(x);
 
+/** A track slug, or null for a missing or unknown value. */
+export const parseTrack = (x: unknown): Track | null => (isTrack(x) ? x : null);
+
 export const isScore = (x: unknown): x is number =>
   typeof x === "number" && Number.isInteger(x) && x >= 1 && x <= 10;
 
@@ -75,12 +80,14 @@ export function parseVoteBody(body: unknown): { performanceId: string; score: nu
  * unique key and comes back as a duplicate instead of counting twice. Lower
  * cased, so the same UUID in either case is one attempt.
  */
-export function parseKioskBody(body: unknown): { performanceId: string; score: number; attemptId: string } | null {
+export function parseKioskBody(body: unknown): { performanceId: string; score: number; attemptId: string; track: Track } | null {
   const vote = parseVoteBody(body);
   if (!vote) return null;
-  const { attemptId } = body as { attemptId?: unknown };
+  const { attemptId, track } = body as { attemptId?: unknown; track?: unknown };
   if (typeof attemptId !== "string" || !UUID.test(attemptId)) return null;
-  return { ...vote, attemptId: attemptId.toLowerCase() };
+  const t = parseTrack(track);
+  if (!t) return null;
+  return { ...vote, attemptId: attemptId.toLowerCase(), track: t };
 }
 
 const secure = () => process.env.NODE_ENV === "production";
@@ -130,6 +137,20 @@ export const kioskLimiter = createLimiter(1, DGL.limits.kioskGapMs);
  * the database is still the real guard.
  */
 export const loginLimiter = createLimiter(DGL.limits.loginPerIpPerMin, 60_000);
+
+/**
+ * The HTTP status for each refusal of POST /api/dgl/admin/action. Typed by
+ * the refusal codes, so a code added to ActionResult without a status (or a
+ * status left for a code that is gone) does not compile.
+ */
+export const ACTION_STATUS: Record<Extract<ActionResult, { ok: false }>["code"], number> = {
+  forbidden: 403,
+  invalid: 400,
+  stale: 409,
+  not_allowed: 409,
+  needs_self_score: 409,
+  no_winner: 409,
+};
 
 /** A vote result as the HTTP response the clients expect. */
 export function voteResponse(r: VoteResult): NextResponse {

@@ -10,11 +10,14 @@ import type { PublicState } from "./types";
  * (which already holds compareScores' result; nothing here recomputes it).
  */
 
-export type StageAct = { contestant: string | null; prompt: string | null };
+/** As the phone's Act: while the wheel spins, `prompt` is null and the screen says the wheel is spinning. */
+export type StageAct = { contestant: string | null; prompt: string | null; spinning: boolean };
 
 export type StageView =
   | { kind: "idle" }
   | { kind: "completed" }
+  /** Between acts, with the host's winner screen on. */
+  | { kind: "winner"; names: string[]; audience: number }
   | { kind: "ready"; id: string; act: StageAct }
   /** PERFORMING (running) and PERFORMED (time up) share one screen so the timer never remounts at 0. */
   | { kind: "clock"; id: string; act: StageAct; endsAtMs: number | null; running: boolean }
@@ -22,13 +25,14 @@ export type StageView =
   | { kind: "closed"; id: string; act: StageAct; votes: number }
   | { kind: "reveal"; id: string; act: StageAct; self: number; audience: number | null; result: Comparison };
 
-export function stageView(state: PublicState | null): StageView {
+/** `spinning` comes from useSpinning(state.spunAtMs, offset); it hides the prompt in any phase until the spin ends. */
+export function stageView(state: PublicState | null, spinning = false): StageView {
   // Before the first poll (and on the server) there is nothing to show but the waiting screen.
   if (!state) return { kind: "idle" };
   const { phase, performanceId: id } = state;
-  if (phase === "COMPLETED") return { kind: "completed" };
+  if (phase === "COMPLETED") return state.winner ? { kind: "winner", ...state.winner } : { kind: "completed" };
   if (phase === "IDLE" || !id) return { kind: "idle" };
-  const act: StageAct = { contestant: state.contestant, prompt: state.prompt };
+  const act: StageAct = { contestant: state.contestant, prompt: spinning ? null : state.prompt, spinning };
 
   switch (phase) {
     case "READY":
@@ -47,8 +51,22 @@ export function stageView(state: PublicState | null): StageView {
   }
 }
 
-/** The QR is up whenever someone could usefully join: waiting, up next, voting, between acts. */
+/**
+ * The QR code and the URL line under it are up only while the act is running
+ * or voting is open: PERFORMING and PERFORMED (the `clock` screen) and VOTING
+ * and VOTING_PAUSED (the `voting` screen). Waiting, up next, voting closed,
+ * the reveal and between acts have neither.
+ */
 export function showsQr(v: StageView): boolean {
+  return v.kind === "clock" || v.kind === "voting";
+}
+
+/**
+ * The DevFest Got Latent artwork rides along on the waiting, up next, voting
+ * and between-acts screens. Kept apart from showsQr on purpose: the QR rule
+ * changed, where the artwork sits did not.
+ */
+export function showsPoster(v: StageView): boolean {
   return v.kind === "idle" || v.kind === "ready" || v.kind === "voting" || v.kind === "completed";
 }
 
@@ -58,5 +76,5 @@ export function showsQr(v: StageView): boolean {
  * the key; a new act always gets a new one.
  */
 export function screenKey(v: StageView): string {
-  return v.kind === "idle" || v.kind === "completed" ? v.kind : `${v.kind}:${v.id}`;
+  return v.kind === "idle" || v.kind === "completed" || v.kind === "winner" ? v.kind : `${v.kind}:${v.id}`;
 }

@@ -15,20 +15,22 @@ import {
   type KioskOutcome,
   type KioskSession,
 } from "@/lib/dgl/kiosk-view";
-import type { Role } from "@/lib/dgl/types";
+import { isTrack } from "@/lib/dgl/tracks";
+import type { Role, Track } from "@/lib/dgl/types";
 import { useDglState } from "@/lib/dgl/use-dgl-state";
 import { cn } from "@/lib/utils";
 import { BTN, GHOST, OFF, PRIMARY } from "./admin-styles";
 import { AdminLogin } from "./AdminLogin";
 import { ConnectionPill } from "./ConnectionPill";
 import { ScoreGrid } from "./ScoreGrid";
+import { TrackLabel, TrackSwitcher, rememberTrack, rememberedTrack } from "./TrackSwitcher";
 
 const c = DGL.copy;
 const k = c.kiosk;
 const SESSION_TIMEOUT_MS = 6000;
 const VOTE_TIMEOUT_MS = 8000;
 
-type Me = { name: string; role: Role };
+type Me = { name: string; role: Role; track: Track | null };
 
 /** sessionStorage can throw on access itself (blocked site data), so every use goes through here. */
 function sessionStore(): Storage | null {
@@ -39,14 +41,15 @@ function sessionStore(): Storage | null {
   }
 }
 
-const ROLES: readonly string[] = ["SUPER_ADMIN", "OPERATOR", "HOST", "VOLUNTEER"];
+const ROLES: readonly string[] = ["SUPER_ADMIN", "HOST"];
 
 function asMe(x: unknown): Me | null {
   if (typeof x !== "object" || x === null) return null;
   const me = (x as { me?: unknown }).me;
   if (typeof me !== "object" || me === null) return null;
-  const { name, role } = me as { name?: unknown; role?: unknown };
-  return typeof name === "string" && typeof role === "string" && ROLES.includes(role) ? { name, role: role as Role } : null;
+  const { name, role, track } = me as { name?: unknown; role?: unknown; track?: unknown };
+  if (track !== null && !isTrack(track)) return null;
+  return typeof name === "string" && typeof role === "string" && ROLES.includes(role) ? { name, role: role as Role, track } : null;
 }
 
 /**
@@ -70,10 +73,16 @@ export function KioskView() {
   const [signOutError, setSignOutError] = useState(false);
   // The server said 403 to a vote: this account cannot record, whatever the role we were told.
   const [denied, setDenied] = useState(false);
+  // The track an all-track account is recording for (a track account has its own).
+  const [picked, setPicked] = useState<Track>("build");
   const mounted = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
+    const saved = rememberedTrack();
+    // After mount only (storage is not on the server).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (saved) setPicked(saved);
     return () => {
       mounted.current = false;
     };
@@ -185,7 +194,8 @@ export function KioskView() {
     );
   }
   if (!me) return null;
-  return <Kiosk me={me} onSignOut={() => void signOut()} signOutError={signOutError} onSessionEnded={onSessionEnded} onDenied={() => setDenied(true)} />;
+  const track = me.track ?? picked;
+  return <Kiosk key={track} me={me} track={track} onTrack={(t) => { rememberTrack(t); setPicked(t); }} onSignOut={() => void signOut()} signOutError={signOutError} onSessionEnded={onSessionEnded} onDenied={() => setDenied(true)} />;
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -203,6 +213,8 @@ function SignOutButton({ onClick, className }: { onClick(): void; className?: st
 
 type KioskProps = {
   me: Me;
+  track: Track;
+  onTrack(t: Track): void;
   onSignOut(): void;
   signOutError: boolean;
   onSessionEnded(): void;
@@ -224,8 +236,8 @@ const TONE: Record<KioskOutcome["tone"], string> = {
  * that survives a failed or unanswered try (and a reload of this tab), so
  * pressing again is safe.
  */
-function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskProps) {
-  const { state, connection } = useDglState();
+function Kiosk({ me, track, onTrack, onSignOut, signOutError, onSessionEnded, onDenied }: KioskProps) {
+  const { state, connection } = useDglState(track);
   const phase = state?.phase ?? null;
   const performanceId = state?.performanceId ?? null;
   const screen = kioskScreen({ session: "signedIn", role: me.role, phase });
@@ -289,7 +301,7 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
       const res = await fetch("/api/dgl/kiosk/vote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ performanceId: forId, score: sent, attemptId }),
+        body: JSON.stringify({ performanceId: forId, score: sent, attemptId, track }),
         cache: "no-store",
         signal: timeoutSignal(VOTE_TIMEOUT_MS),
       });
@@ -346,6 +358,7 @@ function Kiosk({ me, onSignOut, signOutError, onSessionEnded, onDenied }: KioskP
           </p>
           <SignOutButton onClick={onSignOut} />
         </div>
+        {me.track === null ? <TrackSwitcher value={track} onChange={onTrack} /> : <TrackLabel track={track} />}
         {signOutError && (
           <p role="status" className="text-[15px] text-red-hi">
             {c.admin.signOutFailed}

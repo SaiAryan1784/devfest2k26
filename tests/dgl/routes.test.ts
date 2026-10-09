@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { DGL } from "@/data/dgl";
 import { hashPasscode, signSession } from "@/lib/dgl/auth";
 import type { Db } from "@/lib/dgl/db";
-import { ipLimiter } from "@/lib/dgl/route";
+import { ACTION_STATUS, ipLimiter } from "@/lib/dgl/route";
 import { applyAction, readAdminState } from "@/lib/dgl/show";
 import type { Action, Role } from "@/lib/dgl/types";
 import { createTestDb } from "./pg";
@@ -43,13 +43,13 @@ function req(path: string, method: "GET" | "POST", o: Init = {}) {
 }
 
 let db: Db;
-let riya: string;
 let seq = 0;
 
 const voter = () => `dgl_voter=${crypto.randomUUID()}`;
 const ip = () => `10.0.${seq >> 8}.${seq++ & 255}`;
 
-async function addAdmin(role: Role, name = `${role}-${seq++}`) {
+/** `role` is a string so a test can store a retired role (OPERATOR, VOLUNTEER) as an old database would have it. */
+async function addAdmin(role: Role | "OPERATOR" | "VOLUNTEER", name = `${role}-${seq++}`) {
   const [r] = await db.query<{ id: string }>(
     "INSERT INTO dgl_admins (name, role, passcode_hash) VALUES ($1, $2, $3) RETURNING id",
     [name, role, await hashPasscode("right")],
@@ -58,16 +58,15 @@ async function addAdmin(role: Role, name = `${role}-${seq++}`) {
 }
 
 async function run(action: Action) {
-  const admin = { id: (await addAdmin("SUPER_ADMIN")).id, name: "Seed", role: "SUPER_ADMIN" as const };
-  const { version } = await readAdminState(db, admin, Date.now());
-  const r = await applyAction(db, admin, action, version, Date.now());
+  const admin = { id: (await addAdmin("SUPER_ADMIN")).id, name: "Seed", role: "SUPER_ADMIN" as const, track: null };
+  const { version } = await readAdminState(db, admin, "build", Date.now());
+  const r = await applyAction(db, admin, "build", action, version, Date.now());
   if (!r.ok) throw new Error(`${action.type}: ${r.code}`);
   return r.state;
 }
 
 async function toVoting() {
-  const s = await run({ type: "selectContestant", contestantId: riya });
-  await run({ type: "setPrompt", text: "Roast your own GitHub profile" });
+  const s = await run({ type: "putOnStage", name: "Riya Sharma" });
   await run({ type: "startPerformance" });
   await run({ type: "startVoting" });
   return s.performanceId as string;
@@ -80,10 +79,6 @@ beforeEach(async () => {
   vi.stubEnv("DGL_SECRET", SECRET);
   db = await createTestDb();
   holder.db = db;
-  const [r] = await db.query<{ id: string }>(
-    "INSERT INTO dgl_contestants (name, sort) VALUES ('Riya Sharma', 1) RETURNING id",
-  );
-  riya = r.id;
   await db.query("INSERT INTO dgl_prompts (text) VALUES ('Sell us a deprecated API')");
 });
 
@@ -94,7 +89,7 @@ afterEach(() => {
 
 describe("state route", () => {
   test("sends CDN cache headers and no cookie", async () => {
-    const res = await stateGET();
+    const res = await stateGET(req("/api/dgl/state?track=build", "GET"));
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
     expect(res.headers.get("cdn-cache-control")).toBe("max-age=1, stale-while-revalidate=2");
@@ -102,10 +97,19 @@ describe("state route", () => {
     expect(await res.json()).toMatchObject({ phase: "IDLE", votes: 0, average: null, reveal: null });
   });
 
+  test("one vote is already the audience score, and it is a whole number", async () => {
+    const pid = await toVoting();
+    expect(await (await stateGET(req("/api/dgl/state?track=build", "GET"))).json()).toMatchObject({ phase: "VOTING", votes: 0, average: null });
+    expect((await vote(pid, 7)).status).toBe(200);
+    expect(await (await stateGET(req("/api/dgl/state?track=build", "GET"))).json()).toMatchObject({ phase: "VOTING", votes: 1, average: 7 });
+    expect((await vote(pid, 8)).status).toBe(200);
+    expect(await (await stateGET(req("/api/dgl/state?track=build", "GET"))).json()).toMatchObject({ votes: 2, average: 8 }); // 7.5 shows as 8
+  });
+
   test("503 when the database is not configured", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     holder.db = null;
-    const res = await stateGET();
+    const res = await stateGET(req("/api/dgl/state?track=build", "GET"));
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "unavailable" });
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -114,13 +118,13 @@ describe("state route", () => {
   test("503 when DGL_SECRET is unset or empty", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubEnv("DGL_SECRET", "");
-    expect((await stateGET()).status).toBe(503);
+    expect((await stateGET(req("/api/dgl/state?track=build", "GET"))).status).toBe(503);
   });
 
   test("503 when the database throws, and the error never leaks", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     holder.db = { query: async () => { throw new Error("secret-host.neon.tech down"); } };
-    const res = await stateGET();
+    const res = await stateGET(req("/api/dgl/state?track=build", "GET"));
     expect(res.status).toBe(503);
     expect(JSON.stringify(await res.json())).not.toContain("neon");
   });
@@ -278,7 +282,7 @@ describe("me route", () => {
     const pid = await toVoting();
     const cookie = voter();
     await vote(pid, 9, cookie);
-    const res = await meGET(req("/api/dgl/me", "GET", { cookie }));
+    const res = await meGET(req("/api/dgl/me?track=build", "GET", { cookie }));
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     const body = await res.json();
@@ -289,10 +293,10 @@ describe("me route", () => {
 
   test("null vote, and sets dgl_voter when missing", async () => {
     await toVoting();
-    const res = await meGET(req("/api/dgl/me", "GET"));
+    const res = await meGET(req("/api/dgl/me?track=build", "GET"));
     expect((await res.json()).vote).toBeNull();
     expect(res.cookies.get("dgl_voter")?.value).toMatch(UUID);
-    const other = await meGET(req("/api/dgl/me", "GET", { cookie: voter() }));
+    const other = await meGET(req("/api/dgl/me?track=build", "GET", { cookie: voter() }));
     expect((await other.json()).vote).toBeNull();
   });
 });
@@ -303,7 +307,7 @@ describe("login and logout routes", () => {
     loginPOST(req("/api/dgl/admin/login", "POST", { body, ip: ip(), ...extra }));
 
   test("sets an HttpOnly SameSite=Strict dgl_admin cookie that works for admin/state", async () => {
-    const a = await addAdmin("OPERATOR", "Sai");
+    const a = await addAdmin("HOST", "Sai");
     const res = await login({ name: "Sai", passcode: "right" });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
@@ -321,14 +325,14 @@ describe("login and logout routes", () => {
   });
 
   test("401 on a wrong passcode", async () => {
-    await addAdmin("OPERATOR", "Sai");
+    await addAdmin("HOST", "Sai");
     const res = await login({ name: "Sai", passcode: "wrong" });
     expect(res.status).toBe(401);
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
   test("423 when locked", async () => {
-    await addAdmin("OPERATOR", "Sai");
+    await addAdmin("HOST", "Sai");
     for (let i = 0; i < DGL.limits.loginFailures; i++) {
       expect((await login({ name: "Sai", passcode: "wrong" })).status).toBe(401);
     }
@@ -348,7 +352,7 @@ describe("login and logout routes", () => {
   });
 
   test("the attempt after loginPerIpPerMin from one IP within a minute is 429, and touches no database", async () => {
-    await addAdmin("OPERATOR", "Sai");
+    await addAdmin("HOST", "Sai");
     const from = ip();
     const max = DGL.limits.loginPerIpPerMin;
     expect(max).toBe(10);
@@ -371,7 +375,7 @@ describe("login and logout routes", () => {
   });
 
   test("a 429 for one IP does not affect another", async () => {
-    await addAdmin("OPERATOR", "Sai");
+    await addAdmin("HOST", "Sai");
     const x = ip();
     for (let i = 0; i < DGL.limits.loginPerIpPerMin; i++) await login({ name: `nobody-${i}`, passcode: "wrong" }, { ip: x });
     expect((await login({ name: "Sai", passcode: "right" }, { ip: x })).status).toBe(429);
@@ -379,7 +383,7 @@ describe("login and logout routes", () => {
   });
 
   test("malformed bodies and a bad Origin are refused before the limiter counts them", async () => {
-    await addAdmin("OPERATOR", "Sai");
+    await addAdmin("HOST", "Sai");
     const from = ip();
     for (let i = 0; i < DGL.limits.loginPerIpPerMin + 2; i++) {
       expect((await login({ name: 1 }, { ip: from })).status).toBe(400);
@@ -412,18 +416,24 @@ describe("admin state route", () => {
 
   test("401 on a forged token", async () => {
     const a = await addAdmin("HOST");
-    const forged = a.cookie.slice(0, -2) + "00";
+    // Change the last hex character of the signature: always a different signature (replacing two
+    // characters with "00" was the real signature 1 time in 256).
+    const forged = a.cookie.slice(0, -1) + (a.cookie.endsWith("0") ? "1" : "0");
+    expect(forged).not.toBe(a.cookie);
     expect((await adminStateGET(req("/api/dgl/admin/state", "GET", { cookie: forged }))).status).toBe(401);
   });
 });
 
 describe("action route", () => {
-  const act = (o: Init) => actionPOST(req("/api/dgl/admin/action", "POST", o));
+  const act = (o: Init) =>
+    actionPOST(req("/api/dgl/admin/action", "POST", { ...o, body: o.body && typeof o.body === "object" && !("track" in o.body) ? { track: "build", ...o.body } : o.body }));
+  const audits = () => db.query("SELECT 1 FROM dgl_audit");
+  const showVersion = async () => (await db.query<{ version: number }>("SELECT version FROM dgl_tracks WHERE track = 'build'"))[0].version;
 
   test("403 when Origin differs", async () => {
-    const a = await addAdmin("OPERATOR");
+    const a = await addAdmin("HOST");
     const res = await act({
-      body: { action: { type: "drawPrompt" }, version: 0 },
+      body: { action: { type: "spinWheel" }, version: 0 },
       cookie: a.cookie,
       origin: "http://evil.test",
     });
@@ -431,7 +441,7 @@ describe("action route", () => {
   });
 
   test("401 without session", async () => {
-    const res = await act({ body: { action: { type: "drawPrompt" }, version: 0 } });
+    const res = await act({ body: { action: { type: "spinWheel" }, version: 0 } });
     expect(res.status).toBe(401);
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
@@ -439,10 +449,10 @@ describe("action route", () => {
   test("400 on malformed bodies, before auth", async () => {
     for (const body of [
       {},
-      { action: { type: "drawPrompt" } },
-      { action: { type: "drawPrompt" }, version: "0" },
-      { action: { type: "drawPrompt" }, version: 1.5 },
-      { action: "drawPrompt", version: 0 },
+      { action: { type: "spinWheel" } },
+      { action: { type: "spinWheel" }, version: "0" },
+      { action: { type: "spinWheel" }, version: 1.5 },
+      { action: "spinWheel", version: 0 },
       { action: { type: 5 }, version: 0 },
       { action: null, version: 0 },
       [],
@@ -455,29 +465,70 @@ describe("action route", () => {
   });
 
   test("200 ok with the new state, then 409 stale on the old version", async () => {
-    const a = await addAdmin("OPERATOR");
+    const a = await addAdmin("HOST");
     const ok = await act({
-      body: { action: { type: "selectContestant", contestantId: riya }, version: 0 },
+      body: { action: { type: "putOnStage", name: "Riya Sharma" }, version: 0 },
       cookie: a.cookie,
     });
     expect(ok.status).toBe(200);
     const body = await ok.json();
     expect(body.ok).toBe(true);
-    expect(body.state).toMatchObject({ phase: "READY", version: 1 });
-    const stale = await act({ body: { action: { type: "drawPrompt" }, version: 0 }, cookie: a.cookie });
+    expect(body.state).toMatchObject({ phase: "READY", contestant: "Riya Sharma", version: 1 });
+    const stale = await act({ body: { action: { type: "spinWheel" }, version: 0 }, cookie: a.cookie });
     expect(stale.status).toBe(409);
     expect((await stale.json()).code).toBe("stale");
   });
 
-  test("409 not_allowed and needs_prompt", async () => {
-    const a = await addAdmin("OPERATOR");
+  test("409 not_allowed", async () => {
+    const a = await addAdmin("HOST");
     const na = await act({ body: { action: { type: "startVoting" }, version: 0 }, cookie: a.cookie });
     expect(na.status).toBe(409);
     expect((await na.json()).code).toBe("not_allowed");
-    await act({ body: { action: { type: "selectContestant", contestantId: riya }, version: 0 }, cookie: a.cookie });
-    const np = await act({ body: { action: { type: "startPerformance" }, version: 1 }, cookie: a.cookie });
-    expect(np.status).toBe(409);
-    expect((await np.json()).code).toBe("needs_prompt");
+  });
+
+  test("the status map has no needs_prompt", () => {
+    expect(ACTION_STATUS).toEqual({ forbidden: 403, invalid: 400, stale: 409, not_allowed: 409, needs_self_score: 409, no_winner: 409 });
+    expect("needs_prompt" in ACTION_STATUS).toBe(false);
+  });
+
+  test("accepts the new action types: put on stage, fix the name, spin the wheel, start with or without a prompt", async () => {
+    const a = await addAdmin("HOST");
+    const send = async (action: unknown, version: number) => {
+      const res = await act({ body: { action, version }, cookie: a.cookie });
+      expect(res.status, JSON.stringify(action)).toBe(200);
+      return (await res.json()).state;
+    };
+    expect(await send({ type: "putOnStage", name: "Riya Shrma" }, 0)).toMatchObject({ phase: "READY", contestant: "Riya Shrma" });
+    expect(await send({ type: "renameAct", name: "Riya Sharma" }, 1)).toMatchObject({ contestant: "Riya Sharma", version: 2 });
+    expect(await send({ type: "spinWheel" }, 2)).toMatchObject({ prompt: "Sell us a deprecated API", spunAtMs: expect.any(Number) });
+    expect(await send({ type: "startPerformance" }, 3)).toMatchObject({ phase: "PERFORMING" });
+  });
+
+  test("startPerformance needs no prompt", async () => {
+    const a = await addAdmin("HOST");
+    await act({ body: { action: { type: "putOnStage", name: "Riya Sharma" }, version: 0 }, cookie: a.cookie });
+    const res = await act({ body: { action: { type: "startPerformance" }, version: 1 }, cookie: a.cookie });
+    expect(res.status).toBe(200);
+    expect((await res.json()).state).toMatchObject({ phase: "PERFORMING", prompt: null });
+  });
+
+  test("rejects the removed action types with 400 and writes nothing", async () => {
+    const a = await addAdmin("SUPER_ADMIN");
+    const before = await audits();
+    for (const action of [
+      { type: "selectContestant", contestantId: crypto.randomUUID() },
+      { type: "reassignContestant", contestantId: crypto.randomUUID() },
+      { type: "setPrompt", text: "Roast your own GitHub profile" },
+      { type: "drawPrompt" },
+      { type: "upsertContestant", name: "Riya Sharma", sort: 1, active: true },
+    ]) {
+      const res = await act({ body: { action, version: 0 }, cookie: a.cookie });
+      expect(res.status, action.type).toBe(400);
+      expect((await res.json()).code).toBe("invalid");
+    }
+    expect(await audits()).toHaveLength(before.length);
+    expect(await db.query("SELECT 1 FROM dgl_performances")).toHaveLength(0);
+    expect(await showVersion()).toBe(0);
   });
 
   test("403 forbidden for a role without the permission", async () => {
@@ -492,50 +543,71 @@ describe("action route", () => {
 
   test("400 invalid for an action type that is not an admin action (kioskVote, an unknown one), and nothing is written", async () => {
     const a = await addAdmin("SUPER_ADMIN");
-    const audit = () => db.query("SELECT 1 FROM dgl_audit");
-    const before = await audit();
+    const before = await audits();
     for (const type of ["kioskVote", "nope", "toString", "__proto__"]) {
       const res = await act({ body: { action: { type }, version: 0 }, cookie: a.cookie });
       expect(res.status).toBe(400);
       expect((await res.json()).code).toBe("invalid");
     }
-    expect(await audit()).toHaveLength(before.length);
+    expect(await audits()).toHaveLength(before.length);
     expect(await db.query("SELECT 1 FROM dgl_votes")).toHaveLength(0);
-    const [show] = await db.query<{ version: number }>("SELECT version FROM dgl_show WHERE id = 1");
-    expect(show.version).toBe(0);
+    expect(await showVersion()).toBe(0);
   });
 
   test("400 invalid for a well-shaped action with bad fields", async () => {
-    const a = await addAdmin("OPERATOR");
-    const res = await act({
-      body: { action: { type: "selectContestant", contestantId: "nope" }, version: 0 },
-      cookie: a.cookie,
-    });
-    expect(res.status).toBe(400);
-    expect((await res.json()).code).toBe("invalid");
+    const a = await addAdmin("HOST");
+    for (const name of ["", "   ", "x".repeat(81), "Ri\u0000ya", 7]) {
+      const res = await act({ body: { action: { type: "putOnStage", name }, version: 0 }, cookie: a.cookie });
+      expect(res.status, JSON.stringify(name)).toBe(400);
+      expect((await res.json()).code).toBe("invalid");
+    }
+    expect(await db.query("SELECT 1 FROM dgl_performances")).toHaveLength(0);
+  });
+
+  test("a session from a retired role (OPERATOR, VOLUNTEER) works as HOST", async () => {
+    for (const role of ["OPERATOR", "VOLUNTEER"] as const) {
+      const a = await addAdmin(role);
+      const state = await adminStateGET(req("/api/dgl/admin/state", "GET", { cookie: a.cookie }));
+      expect(state.status).toBe(200);
+      const { me, version } = await state.json();
+      expect(me).toEqual({ name: a.name, role: "HOST", track: null });
+      const forbidden = await act({ body: { action: { type: "upsertPrompt", text: "x", active: true }, version }, cookie: a.cookie });
+      expect(forbidden.status).toBe(403);
+    }
+    const legacy = await addAdmin("OPERATOR");
+    const res = await act({ body: { action: { type: "putOnStage", name: "Riya Sharma" }, version: 0 }, cookie: legacy.cookie });
+    expect(res.status).toBe(200);
   });
 });
 
 describe("kiosk vote route", () => {
   const kiosk = (pid: string, score: unknown, o: Init & { attemptId?: unknown } = {}) => {
     const { attemptId = crypto.randomUUID(), ...init } = o;
-    return kioskPOST(req("/api/dgl/kiosk/vote", "POST", { body: { performanceId: pid, score, attemptId }, ip: ip(), ...init }));
+    return kioskPOST(req("/api/dgl/kiosk/vote", "POST", { body: { performanceId: pid, score, attemptId, track: "build" }, ip: ip(), ...init }));
   };
   const kioskRows = () => db.query<{ voter_id: string; score: number }>("SELECT voter_id, score FROM dgl_votes");
   const kioskAudit = () => db.query("SELECT 1 FROM dgl_audit WHERE action = 'kioskVote'");
 
-  test("403 for HOST, 401 without session", async () => {
+  test("401 without session, and nothing is written", async () => {
     const pid = await toVoting();
-    const host = await addAdmin("HOST");
-    expect((await kiosk(pid, 6, { cookie: host.cookie })).status).toBe(403);
     expect((await kiosk(pid, 6)).status).toBe(401);
     expect(await db.query("SELECT 1 FROM dgl_votes")).toHaveLength(0);
     expect(await db.query("SELECT 1 FROM dgl_audit WHERE action = 'kioskVote'")).toHaveLength(0);
   });
 
-  test("200 for VOLUNTEER, stores source kiosk and a kiosk- voter, audits without the score", async () => {
+  test("both roles may record kiosk votes", async () => {
     const pid = await toVoting();
-    const v = await addAdmin("VOLUNTEER", "Vee");
+    // Two accounts, so the per-admin gap does not apply between them.
+    for (const role of ["HOST", "SUPER_ADMIN"] as const) {
+      const a = await addAdmin(role);
+      expect((await kiosk(pid, 6, { cookie: a.cookie })).status, role).toBe(200);
+    }
+    expect(await kioskRows()).toHaveLength(2);
+  });
+
+  test("200 for HOST, stores source kiosk and a kiosk- voter, audits without the score", async () => {
+    const pid = await toVoting();
+    const v = await addAdmin("HOST", "Vee");
     const res = await kiosk(pid, 6, { cookie: v.cookie });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "recorded", score: 6 });
@@ -551,12 +623,12 @@ describe("kiosk vote route", () => {
     const audit = await db.query<{ admin_id: string; admin_name: string; performance_id: string; detail: unknown }>(
       "SELECT admin_id, admin_name, performance_id, detail FROM dgl_audit WHERE action = 'kioskVote'",
     );
-    expect(audit).toEqual([{ admin_id: v.id, admin_name: "Vee", performance_id: pid, detail: {} }]);
+    expect(audit).toEqual([{ admin_id: v.id, admin_name: "Vee", performance_id: pid, detail: { track: "build" } }]);
   });
 
   test("429 when the same admin votes again within kioskGapMs", async () => {
     const pid = await toVoting();
-    const v = await addAdmin("VOLUNTEER");
+    const v = await addAdmin("HOST");
     expect((await kiosk(pid, 6, { cookie: v.cookie })).status).toBe(200);
     const again = await kiosk(pid, 7, { cookie: v.cookie });
     expect(again.status).toBe(429);
@@ -567,7 +639,7 @@ describe("kiosk vote route", () => {
 
   test("3 kiosk votes (one per gap) make 3 kiosk rows, 3 audit rows and a kiosk count of 3", async () => {
     const pid = await toVoting();
-    const v = await addAdmin("VOLUNTEER");
+    const v = await addAdmin("HOST");
     const now = vi.spyOn(Date, "now");
     const t0 = Date.now();
     for (let i = 0; i < 3; i++) {
@@ -578,15 +650,15 @@ describe("kiosk vote route", () => {
     const rows = await db.query<{ source: string }>("SELECT source FROM dgl_votes");
     expect(rows.map((r) => r.source)).toEqual(["kiosk", "kiosk", "kiosk"]);
     expect(await db.query("SELECT 1 FROM dgl_audit WHERE action = 'kioskVote'")).toHaveLength(3);
-    const op = await addAdmin("OPERATOR");
-    const state = await adminStateGET(req("/api/dgl/admin/state", "GET", { cookie: op.cookie }));
+    const host = await addAdmin("HOST");
+    const state = await adminStateGET(req("/api/dgl/admin/state", "GET", { cookie: host.cookie }));
     expect((await state.json()).kiosk).toBe(3);
   });
 
   describe("attempt id", () => {
     test("the same attemptId twice is recorded then duplicate with the FIRST score, one vote, one audit row", async () => {
       const pid = await toVoting();
-      const v = await addAdmin("VOLUNTEER");
+      const v = await addAdmin("HOST");
       const attemptId = crypto.randomUUID();
       const now = vi.spyOn(Date, "now");
       const t0 = Date.now();
@@ -605,7 +677,7 @@ describe("kiosk vote route", () => {
 
     test("an upper case attemptId is the same attempt as its lower case form", async () => {
       const pid = await toVoting();
-      const v = await addAdmin("VOLUNTEER");
+      const v = await addAdmin("HOST");
       const attemptId = crypto.randomUUID();
       const now = vi.spyOn(Date, "now");
       const t0 = Date.now();
@@ -619,7 +691,7 @@ describe("kiosk vote route", () => {
 
     test("two different attemptIds make two votes", async () => {
       const pid = await toVoting();
-      const v = await addAdmin("VOLUNTEER");
+      const v = await addAdmin("HOST");
       const now = vi.spyOn(Date, "now");
       const t0 = Date.now();
       now.mockReturnValue(t0);
@@ -635,10 +707,10 @@ describe("kiosk vote route", () => {
       "a missing or malformed attemptId (%s) is 400 and writes nothing",
       async (attemptId) => {
         const pid = await toVoting();
-        const v = await addAdmin("VOLUNTEER");
+        const v = await addAdmin("HOST");
         const res = await kioskPOST(
           req("/api/dgl/kiosk/vote", "POST", {
-            body: attemptId === undefined ? { performanceId: pid, score: 6 } : { performanceId: pid, score: 6, attemptId },
+            body: attemptId === undefined ? { performanceId: pid, score: 6, track: "build" } : { performanceId: pid, score: 6, attemptId, track: "build" },
             cookie: v.cookie,
             ip: ip(),
           }),
@@ -651,7 +723,7 @@ describe("kiosk vote route", () => {
 
     test("a bad attemptId is refused before any database work", async () => {
       const pid = await toVoting();
-      const v = await addAdmin("VOLUNTEER");
+      const v = await addAdmin("HOST");
       const spy = vi.spyOn(db, "query");
       const res = await kioskPOST(req("/api/dgl/kiosk/vote", "POST", { body: { performanceId: pid, score: 6, attemptId: "x" }, cookie: v.cookie, ip: ip() }));
       expect(res.status).toBe(400);
@@ -661,7 +733,7 @@ describe("kiosk vote route", () => {
 
   test("400 on a bad score and 403 on a bad Origin", async () => {
     const pid = await toVoting();
-    const v = await addAdmin("OPERATOR");
+    const v = await addAdmin("HOST");
     expect((await kiosk(pid, "6", { cookie: v.cookie })).status).toBe(400);
     expect((await kiosk(pid, 6, { cookie: v.cookie, origin: "http://evil.test" })).status).toBe(403);
   });
@@ -669,7 +741,7 @@ describe("kiosk vote route", () => {
   test("409 when voting is closed", async () => {
     const pid = await toVoting();
     await run({ type: "stopVoting" });
-    const v = await addAdmin("VOLUNTEER");
+    const v = await addAdmin("HOST");
     const res = await kiosk(pid, 6, { cookie: v.cookie });
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ status: "closed" });

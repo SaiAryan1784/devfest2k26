@@ -1,9 +1,28 @@
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { DGL } from "@/data/dgl";
 import { ensureSchema, type Db } from "./db";
-import type { Role } from "./types";
+import { isTrack } from "./tracks";
+import type { Admin, Role, Track } from "./types";
 
-type Admin = { id: string; name: string; role: Role };
+/**
+ * A stored track: a slug, or null (all tracks). Anything else is unreadable:
+ * undefined, and the caller gives no access rather than assuming all tracks.
+ */
+function readTrack(raw: string | null): Track | null | undefined {
+  if (raw === null) return null;
+  return isTrack(raw) ? raw : undefined;
+}
+
+/**
+ * A role as stored in dgl_admins, read as one of the two roles: SUPER_ADMIN
+ * stays, anything else is HOST. The schema migration turns OPERATOR and
+ * VOLUNTEER into HOST; this covers a row it has not reached (a pass that
+ * stopped early, an old instance writing during a deploy). Every read of a
+ * role from the database goes through here.
+ */
+export function normalizeRole(raw: string): Role {
+  return raw === "SUPER_ADMIN" ? "SUPER_ADMIN" : "HOST";
+}
 
 const KEYLEN = 32;
 const SALT_BYTES = 16;
@@ -66,7 +85,8 @@ export function readSession(token: string | undefined, secret: string, now: numb
 /** A valid-format hash nobody knows the passcode for, so an unknown name costs the same as a known one. */
 const DUMMY_HASH = `scrypt$${"00".repeat(SALT_BYTES)}$${"ab".repeat(KEYLEN)}`;
 
-type AdminRow = { id: string; name: string; role: Role; passcode_hash: string; active: boolean };
+/** `role` is the stored text, which may predate the two roles: read it through normalizeRole. */
+type AdminRow = { id: string; name: string; role: string; track: string | null; passcode_hash: string; active: boolean };
 
 export type LoginResult =
   | { ok: true; admin: Admin }
@@ -78,11 +98,16 @@ const MAX_PASS = 256;
 export const MIN_PASS = 6;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
-/** An admin name, trimmed: 1 to 64 characters, no control characters; else null. */
-export function cleanAdminName(raw: unknown): string | null {
+/** `raw` trimmed, when that is 1 to `max` characters with no control characters (U+0000 to U+001F, U+007F); else null. */
+export function cleanName(raw: unknown, max: number): string | null {
   if (typeof raw !== "string") return null;
   const name = raw.trim();
-  return name && name.length <= MAX_NAME && !CONTROL.test(name) ? name : null;
+  return name && name.length <= max && !CONTROL.test(name) ? name : null;
+}
+
+/** An admin name, trimmed: 1 to 64 characters, no control characters; else null. */
+export function cleanAdminName(raw: unknown): string | null {
+  return cleanName(raw, MAX_NAME);
 }
 
 /** Whether a passcode may be set: MIN_PASS to 256 characters. */
@@ -136,24 +161,26 @@ export async function login(db: Db, rawName: string, pass: string, now: number):
   }
 
   const [row] = await db.query<AdminRow>(
-    "SELECT id, name, role, passcode_hash, active FROM dgl_admins WHERE name = $1::text",
+    "SELECT id, name, role, track, passcode_hash, active FROM dgl_admins WHERE name = $1::text",
     [name],
   );
   const matches = await verifyPasscode(pass, row?.passcode_hash ?? DUMMY_HASH);
-  const ok = !!row && row.active && matches;
+  const track = row ? readTrack(row.track) : undefined;
+  const ok = !!row && row.active && matches && track !== undefined;
 
   await db.query(
     "UPDATE dgl_audit SET action = $2::text, admin_id = $3::uuid WHERE id = $1::bigint",
     [attemptId, ok ? "login" : "loginFailed", row?.id ?? null],
   );
   return ok
-    ? { ok: true, admin: { id: row.id, name: row.name, role: row.role } }
+    ? { ok: true, admin: { id: row.id, name: row.name, role: normalizeRole(row.role), track: track as Track | null } }
     : { ok: false, code: "bad_credentials" };
 }
 
 /**
  * The signed-in admin for a session token, re-read from the row on every call
  * so deactivating them or changing their role bites on their next request.
+ * The role is normalised (see normalizeRole).
  * The token is verified against DGL_SECRET; null when it is unset.
  */
 export async function currentAdmin(db: Db, token: string | undefined, now: number): Promise<Admin | null> {
@@ -163,8 +190,9 @@ export async function currentAdmin(db: Db, token: string | undefined, now: numbe
   if (!id || !UUID.test(id)) return null;
   await ensureSchema(db);
   const [row] = await db.query<AdminRow>(
-    "SELECT id, name, role, active FROM dgl_admins WHERE id = $1::uuid",
+    "SELECT id, name, role, track, active FROM dgl_admins WHERE id = $1::uuid",
     [id],
   );
-  return row?.active ? { id: row.id, name: row.name, role: row.role } : null;
+  const track = row ? readTrack(row.track) : undefined;
+  return row?.active && track !== undefined ? { id: row.id, name: row.name, role: normalizeRole(row.role), track } : null;
 }
