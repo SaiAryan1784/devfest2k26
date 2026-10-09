@@ -291,7 +291,7 @@ export const DGL = {
         deactivate: "Deactivate",
         prompts: {
           title: "Prompts",
-          body: "The wheel picks from the active prompts, unused ones first.",
+          body: "Prompt ideas for the wheel. Add new ones or remove the ones you do not want. The wheel picks from them, unused ones first.",
           empty: "No prompts yet.",
           text: "Prompt",
           add: "Add prompt",
@@ -299,6 +299,8 @@ export const DGL = {
           textMissing: "Enter the prompt text.",
           maxLength: 200,
           added: "Prompt added.",
+          remove: "Remove",
+          removed: "Prompt removed.",
           seed: "Load the starter prompts",
           seedBody: (n: number) => (n === 1 ? "1 starter prompt is not in the list yet." : `${n} starter prompts are not in the list yet.`),
           seedDone: "All starter prompts are in the list.",

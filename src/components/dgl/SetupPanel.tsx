@@ -66,7 +66,6 @@ function PromptsSection({ admin, state }: { admin: UseAdmin; state: AdminState }
   const { note, setNote, run, mounted } = useSetupAct(admin);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
   const list = state.prompts;
   const missing = missingSeedPrompts(
@@ -108,9 +107,9 @@ function PromptsSection({ admin, state }: { admin: UseAdmin; state: AdminState }
     }
   };
 
-  const toggle = (p: Prompt) => {
+  const remove = (p: Prompt) => {
     if (off) return;
-    void run({ type: "upsertPrompt", id: p.id, text: p.text, active: !p.active }, s.saved);
+    void run({ type: "removePrompt", id: p.id }, s.prompts.removed);
   };
 
   const seedOff = off || missing.length === 0;
@@ -120,38 +119,17 @@ function PromptsSection({ admin, state }: { admin: UseAdmin; state: AdminState }
         <p className="text-[15px] text-muted">{s.prompts.empty}</p>
       ) : (
         <ul className="flex flex-col gap-1">
-          {list.map((p) =>
-            editing === p.id ? (
-              <li key={p.id}>
-                <PromptEdit
-                  prompt={p}
-                  off={off}
-                  onCancel={() => setEditing(null)}
-                  onSave={async (t) => {
-                    const r = await run({ type: "upsertPrompt", id: p.id, text: t, active: p.active }, s.saved);
-                    if (r?.ok && mounted.current) setEditing(null);
-                  }}
-                />
-              </li>
-            ) : (
-              <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1">
-                <span className="min-w-0 flex-1 basis-56">
-                  <span className={cn("break-words text-[15px]", p.active ? "text-text" : "text-muted")}>{p.text}</span>
-                  {!p.active && <span className="ml-2 text-[13px] text-muted">{s.inactive}</span>}
-                </span>
-                <span className="flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={() => !off && setEditing(p.id)} aria-disabled={off || undefined} className={cn(BTN, "h-11 px-4 text-[15px]", off ? OFF : GHOST)}>
-                    {s.edit}
-                    <span className="sr-only"> {p.text}</span>
-                  </button>
-                  <button type="button" onClick={() => toggle(p)} aria-disabled={off || undefined} className={cn(BTN, "h-11 px-4 text-[15px]", off ? OFF : GHOST)}>
-                    {p.active ? s.deactivate : s.activate}
-                    <span className="sr-only"> {p.text}</span>
-                  </button>
-                </span>
-              </li>
-            ),
-          )}
+          {list.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-1">
+              <span className="min-w-0 flex-1 basis-56">
+                <span className="break-words text-[15px] text-text">{p.text}</span>
+              </span>
+              <button type="button" onClick={() => remove(p)} aria-disabled={off || undefined} className={cn(BTN, "h-11 px-4 text-[15px]", off ? OFF : GHOST)}>
+                {s.prompts.remove}
+                <span className="sr-only"> {p.text}</span>
+              </button>
+            </li>
+          ))}
         </ul>
       )}
 
@@ -198,53 +176,5 @@ function PromptsSection({ admin, state }: { admin: UseAdmin; state: AdminState }
       </div>
       <NoteLine note={note} />
     </Section>
-  );
-}
-
-/** Inline edit of one prompt's text. */
-function PromptEdit({ prompt, off, onCancel, onSave }: { prompt: Prompt; off: boolean; onCancel(): void; onSave(text: string): Promise<void> }) {
-  const ids = { text: useId(), err: useId() };
-  const [text, setText] = useState(prompt.text);
-  const [error, setError] = useState<string | null>(null);
-
-  const save = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (off) return;
-    const t = text.trim();
-    if (!t) return setError(s.prompts.textMissing);
-    setError(null);
-    void onSave(t);
-  };
-
-  return (
-    <form method="post" noValidate onSubmit={save} className="flex flex-col gap-3 rounded-card bg-white/[0.03] p-4">
-      <label htmlFor={ids.text} className={LABEL}>
-        {s.prompts.editLabel}
-      </label>
-      <input
-        id={ids.text}
-        type="text"
-        autoComplete="off"
-        maxLength={s.prompts.maxLength}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? ids.err : undefined}
-        className={INPUT}
-      />
-      {error && (
-        <p id={ids.err} className={ERROR}>
-          {error}
-        </p>
-      )}
-      <div className="flex flex-wrap gap-2">
-        <button type="submit" aria-disabled={off || undefined} className={cn(BTN, "h-11 px-5 text-[15px]", off ? OFF : PRIMARY)}>
-          {s.save}
-        </button>
-        <button type="button" onClick={onCancel} className={cn(BTN, GHOST, "h-11 px-5 text-[15px]")}>
-          {s.cancel}
-        </button>
-      </div>
-    </form>
   );
 }

@@ -63,6 +63,7 @@ export const LIVE_ACTIONS: readonly LiveType[] = [
 
 export const SETUP_ACTIONS: readonly SetupAction["type"][] = [
   "upsertPrompt",
+  "removePrompt",
   "upsertAdmin",
   "setFlaggedExcluded",
   "resetShow",

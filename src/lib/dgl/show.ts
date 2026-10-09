@@ -256,6 +256,8 @@ function normalize(a: Action): Action | null {
       const name = cleanName(a.name, DGL.limits.nameMax);
       return name ? { type: a.type, name } : null;
     }
+    case "removePrompt":
+      return isUuid(a.id) ? { type: a.type, id: a.id } : null;
     case "setSelfScore":
       return isScore(a.score) ? { type: a.type, score: a.score } : null;
     case "upsertPrompt": {
@@ -447,6 +449,12 @@ function writeStatement(a: Action, admin: Admin, track: Track, version: number, 
         SELECT count(*)::int AS n FROM up`;
       break;
     }
+    case "removePrompt":
+      // One statement: the delete and its audit row. A prompt that is already gone matches nothing (n = 0, "invalid").
+      text = `WITH del AS (DELETE FROM dgl_prompts WHERE id = ${q.add(a.id, "uuid")} RETURNING id),
+        ${audit("del", "NULL::uuid", `${detail()} || jsonb_build_object('id', del.id)`)}
+        SELECT count(*)::int AS n FROM del`;
+      break;
     case "setFlaggedExcluded":
       text = `WITH perf AS (SELECT id FROM dgl_performances WHERE id = ${q.add(a.performanceId, "uuid")} AND track = ${tp()}),
         chg AS (UPDATE dgl_votes v SET excluded = ${q.add(a.excluded, "boolean")}

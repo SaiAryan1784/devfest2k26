@@ -55,6 +55,8 @@ export type LiveAction =
 
 export type SetupAction =
   | { type: "upsertPrompt"; id?: string; text: string; active: boolean }
+  /** Take a prompt idea out of the pool for good (acts that already used it keep their text). */
+  | { type: "removePrompt"; id: string }
   | {
       type: "upsertAdmin";
       id?: string;

@@ -95,7 +95,7 @@ describe("roles", () => {
   });
 
   test("the setup actions are the prompt pool, admins, moderation and reset", () => {
-    expect([...SETUP_ACTIONS].sort()).toEqual(["resetShow", "setFlaggedExcluded", "upsertAdmin", "upsertPrompt"]);
+    expect([...SETUP_ACTIONS].sort()).toEqual(["removePrompt", "resetShow", "setFlaggedExcluded", "upsertAdmin", "upsertPrompt"]);
   });
 
   test("HOST has kioskVote and no setup action", () => {

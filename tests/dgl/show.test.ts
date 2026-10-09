@@ -883,3 +883,15 @@ test("showWinner needs a revealed act with votes", async () => {
   await must({ type: "complete" });
   expect(await run({ type: "showWinner" })).toMatchObject({ ok: false, code: "no_winner" });
 });
+
+test("removePrompt deletes the idea, is audited, and a Host cannot", async () => {
+  const before = (await admin()).prompts;
+  const target = before.find((x) => x.text === KUBERNETES)!;
+  expect(await runAs("HOST", { type: "removePrompt", id: target.id })).toMatchObject({ ok: false, code: "forbidden" });
+  const r = await must({ type: "removePrompt", id: target.id });
+  expect(r.state.prompts.map((x) => x.text)).toEqual([DEPRECATED]);
+  expect(r.state.audit?.[0]).toMatchObject({ action: "removePrompt", detail: { id: target.id, track: "build" } });
+  // Gone already: nothing to remove, so it is refused, not a 500.
+  expect(await run({ type: "removePrompt", id: target.id })).toMatchObject({ ok: false, code: "invalid" });
+  expect(await run({ type: "removePrompt", id: "not-a-uuid" } as Action)).toMatchObject({ ok: false, code: "invalid" });
+});
