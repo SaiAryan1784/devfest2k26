@@ -2,10 +2,11 @@
 
 import { useId, useRef, useState } from "react";
 import { WarningCircle } from "@phosphor-icons/react";
-import { DGL } from "@/data/dgl";
+import { DGL, DGL_TRACKS } from "@/data/dgl";
 import { canEditAdmin, formatAuditDetail, resetEnabled, type AdminEdit } from "@/lib/dgl/setup-view";
 import type { UseAdmin } from "@/lib/dgl/use-admin";
-import type { AdminState, Role } from "@/lib/dgl/types";
+import { isTrack } from "@/lib/dgl/tracks";
+import type { AdminState, Role, Track } from "@/lib/dgl/types";
 import { cn } from "@/lib/utils";
 import { BTN, DANGER, GHOST, OFF, PRIMARY } from "./admin-styles";
 import { INPUT } from "./AdminLogin";
@@ -14,7 +15,23 @@ import { ERROR, HINT, LABEL, NoteLine, Section, useSetupAct } from "./setup-part
 const c = DGL.copy.admin;
 const s = c.setup;
 const a = s.admins;
-const ROLES: Role[] = ["SUPER_ADMIN", "OPERATOR", "HOST", "VOLUNTEER"];
+const ROLES: Role[] = ["SUPER_ADMIN", "HOST"];
+
+/** The <select> value for a track: "" is all tracks. */
+const trackOf = (v: string): Track | null => (isTrack(v) ? v : null);
+
+function TrackSelect({ id, value, onChange, disabled }: { id: string; value: Track | null; onChange(t: Track | null): void; disabled?: boolean }) {
+  return (
+    <select id={id} value={value ?? ""} disabled={disabled} onChange={(e) => onChange(trackOf(e.target.value))} className={cn(INPUT, disabled ? "cursor-not-allowed text-muted" : "cursor-pointer")}>
+      <option value="">{a.allTracks}</option>
+      {DGL_TRACKS.map((t) => (
+        <option key={t.id} value={t.id}>
+          {t.label}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 type AdminRow = NonNullable<AdminState["admins"]>[number];
 
@@ -37,11 +54,12 @@ function Warning({ id, children }: { id?: string; children: React.ReactNode }) {
  * attempt. They never enter React state and are never logged.
  */
 export function AdminsSection({ admin, state, admins }: { admin: UseAdmin; state: AdminState; admins: AdminRow[] }) {
-  const ids = { title: useId(), name: useId(), role: useId(), pass: useId(), passHint: useId(), err: useId() };
+  const ids = { title: useId(), name: useId(), role: useId(), track: useId(), pass: useId(), passHint: useId(), err: useId() };
   const { note, run, mounted } = useSetupAct(admin);
   const [editing, setEditing] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [role, setRole] = useState<Role>("HOST");
+  const [track, setTrack] = useState<Track | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pass = useRef<HTMLInputElement>(null);
   const off = admin.busy;
@@ -55,10 +73,11 @@ export function AdminsSection({ admin, state, admins }: { admin: UseAdmin; state
     if (!n) return setError(a.nameMissing);
     if (passcode.length < a.passcodeMin) return setError(a.passcodeShort);
     setError(null);
-    const r = await run({ type: "upsertAdmin", name: n, role, passcode, active: true }, a.added(n), { invalid: s.notAllowed });
+    const r = await run({ type: "upsertAdmin", name: n, role, track, passcode, active: true }, a.added(n), { invalid: s.notAllowed });
     if (r?.ok && mounted.current) {
       setName("");
       setRole("HOST");
+      setTrack(null);
     }
   };
 
@@ -86,7 +105,9 @@ export function AdminsSection({ admin, state, admins }: { admin: UseAdmin; state
                 <span className={cn("break-words text-[15px]", row.active ? "text-text" : "text-muted")}>{row.name}</span>
                 {flags.self && <span className="ml-2 text-[13px] text-muted">{a.you}</span>}
               </span>
-              <span className="w-28 text-[15px] text-muted">{c.roles[row.role]}</span>
+              <span className="w-36 text-[15px] text-muted">
+                {c.roles[row.role]}, {row.track ? DGL_TRACKS.find((t) => t.id === row.track)?.label : a.allTracks}
+              </span>
               <span className={cn("w-20 text-[15px]", row.active ? "text-text" : "text-muted")}>{row.active ? s.active : s.inactive}</span>
               <button type="button" onClick={() => !off && setEditing(row.id)} aria-disabled={off || undefined} className={cn(BTN, "h-11 px-4 text-[15px]", off ? OFF : GHOST)}>
                 {s.edit}
@@ -98,7 +119,7 @@ export function AdminsSection({ admin, state, admins }: { admin: UseAdmin; state
       </ul>
 
       <form method="post" noValidate onSubmit={add} className="flex flex-col gap-3 pt-2" aria-describedby={error ? ids.err : undefined}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="flex min-w-0 flex-col gap-2">
             <label htmlFor={ids.name} className={LABEL}>
               {a.name}
@@ -126,6 +147,12 @@ export function AdminsSection({ admin, state, admins }: { admin: UseAdmin; state
                 </option>
               ))}
             </select>
+          </div>
+          <div className="flex min-w-0 flex-col gap-2">
+            <label htmlFor={ids.track} className={LABEL}>
+              {a.track}
+            </label>
+            <TrackSelect id={ids.track} value={track} onChange={setTrack} />
           </div>
           <div className="flex min-w-0 flex-col gap-2">
             <label htmlFor={ids.pass} className={LABEL}>
@@ -165,13 +192,14 @@ type AdminEditProps = {
   flags: AdminEdit;
   off: boolean;
   onCancel(): void;
-  onSave(next: { role: Role; active: boolean; passcode?: string }): Promise<void>;
+  onSave(next: { role: Role; track: Track | null; active: boolean; passcode?: string }): Promise<void>;
 };
 
 /** One admin's role, status and passcode. Your own row and the last active super admin are locked, with the reason shown. */
 function AdminEditForm({ row, flags, off, onCancel, onSave }: AdminEditProps) {
-  const ids = { role: useId(), active: useId(), lock: useId(), warn: useId(), pass: useId(), passHint: useId(), err: useId() };
+  const ids = { role: useId(), track: useId(), active: useId(), lock: useId(), warn: useId(), pass: useId(), passHint: useId(), err: useId() };
   const [role, setRole] = useState<Role>(row.role);
+  const [track, setTrack] = useState<Track | null>(row.track);
   const [active, setActive] = useState(row.active);
   const [error, setError] = useState<string | null>(null);
   const pass = useRef<HTMLInputElement>(null);
@@ -185,7 +213,7 @@ function AdminEditForm({ row, flags, off, onCancel, onSave }: AdminEditProps) {
     if (pass.current) pass.current.value = "";
     if (passcode && passcode.length < a.passcodeMin) return setError(a.passcodeShort);
     setError(null);
-    void onSave({ role, active, ...(passcode && { passcode }) });
+    void onSave({ role, track, active, ...(passcode && { passcode }) });
   };
 
   return (
@@ -196,7 +224,7 @@ function AdminEditForm({ row, flags, off, onCancel, onSave }: AdminEditProps) {
           {lock}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="flex min-w-0 flex-col gap-2">
           <label htmlFor={ids.role} className={LABEL}>
             {a.role}
@@ -215,6 +243,12 @@ function AdminEditForm({ row, flags, off, onCancel, onSave }: AdminEditProps) {
               </option>
             ))}
           </select>
+        </div>
+        <div className="flex min-w-0 flex-col gap-2">
+          <label htmlFor={ids.track} className={LABEL}>
+            {a.track}
+          </label>
+          <TrackSelect id={ids.track} value={track} onChange={setTrack} disabled={!flags.canChangeRole} />
         </div>
         <div className="flex min-w-0 flex-col gap-2">
           <span className={LABEL}>{a.status}</span>

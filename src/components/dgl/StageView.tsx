@@ -4,9 +4,10 @@ import { useRef } from "react";
 import Image from "next/image";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { PauseCircle } from "@phosphor-icons/react";
-import { DGL } from "@/data/dgl";
+import { DGL, DGL_TRACKS, type Track } from "@/data/dgl";
 import { screenKey, showsPoster, showsQr, stageView, type StageAct, type StageView as View } from "@/lib/dgl/stage-view";
 import { useDglState } from "@/lib/dgl/use-dgl-state";
+import { useSpinning } from "@/lib/dgl/use-spin";
 import { cn } from "@/lib/utils";
 import { ConnectionPill } from "./ConnectionPill";
 import { IdleCursor } from "./IdleCursor";
@@ -16,6 +17,8 @@ import { StageTimer } from "./StageTimer";
 const c = DGL.copy;
 
 type Props = {
+  /** The track this projector is for. */
+  track: Track;
   /** The QR code as an SVG string, made on the server from our own URL (never user input). */
   qrSvg: string;
   /** The voting URL as people would type it, shown under the code. */
@@ -36,13 +39,14 @@ type Props = {
  * screen does. Hydration: useDglState starts with no state, so the server and
  * the first client render are both the IDLE screen.
  */
-export function StageView({ qrSvg, voteUrl, lockup }: Props) {
-  const { state, offset, connection } = useDglState();
-  const view = stageView(state);
+export function StageView({ track, qrSvg, voteUrl, lockup }: Props) {
+  const { state, offset, connection } = useDglState(track);
+  const spinning = useSpinning(state?.spunAtMs ?? null, offset);
+  const view = stageView(state, spinning);
   const root = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
   const fade = reduce ? { duration: 0 } : { duration: 0.35 };
-  const actKey = view.kind === "idle" || view.kind === "completed" ? view.kind : `act:${view.id}`;
+  const actKey = view.kind === "idle" || view.kind === "completed" || view.kind === "winner" ? view.kind : `act:${view.id}`;
 
   return (
     <div ref={root} className="relative flex min-h-[100dvh] flex-col px-6 py-6 sm:px-10 lg:px-[3vw] lg:py-12">
@@ -52,7 +56,10 @@ export function StageView({ qrSvg, voteUrl, lockup }: Props) {
           {lockup}
           <p className="hidden text-[24px] font-medium text-muted sm:block">{DGL.name}</p>
         </div>
-        <ConnectionPill connection={connection} />
+        <div className="flex items-center gap-4">
+          <span className="glass-pill px-4 py-1.5 text-[clamp(1.25rem,1.6vw,1.75rem)] font-medium text-text">{DGL_TRACKS.find((t) => t.id === track)?.label}</span>
+          <ConnectionPill connection={connection} />
+        </div>
       </header>
 
       {/*
@@ -120,6 +127,8 @@ function Left({ view }: { view: View }) {
         <Message title={c.idleTitle} body={c.stageIdleBody} />
       ) : view.kind === "completed" ? (
         <Message title={c.completed} body={c.stageIdleBody} />
+      ) : view.kind === "winner" ? (
+        <Winner names={view.names} audience={view.audience} />
       ) : (
         <ActBlock act={view.act} status={status(view)} />
       )}
@@ -147,6 +156,17 @@ function Poster({ compact }: { compact: boolean }) {
   );
 }
 
+/** Between acts, with the host's winner screen on. Confetti is the next push. */
+function Winner({ names, audience }: { names: string[]; audience: number }) {
+  return (
+    <div className="flex flex-col gap-5">
+      <p className="text-[clamp(1.5rem,2vw,2.25rem)] font-medium text-yellow-hi">{names.length > 1 ? c.winnersTitle : c.winnerTitle}</p>
+      <h1 className="display break-words text-[clamp(3rem,8vw,9rem)] font-semibold leading-[1.02]">{names.join(" and ")}</h1>
+      <p className="font-mono text-[clamp(1.75rem,3vw,3.5rem)] tabular-nums text-muted">{c.winnerScore(audience)}</p>
+    </div>
+  );
+}
+
 function Message({ title, body }: { title: string; body: string }) {
   return (
     <div className="flex max-w-[22ch] flex-col gap-6">
@@ -166,6 +186,7 @@ function ActBlock({ act, status }: { act: StageAct; status: { text: string; tone
     <div className="flex flex-col gap-5">
       {status && <p className={cn("text-[clamp(1.5rem,2vw,2.25rem)] font-medium", status.tone)}>{status.text}</p>}
       {act.contestant && <h1 className="display line-clamp-3 break-words text-[clamp(3rem,6vw,7rem)] font-semibold leading-[1.02]">{act.contestant}</h1>}
+      {act.spinning && <p className="text-[clamp(1.75rem,2.8vw,3.25rem)] leading-[1.2] text-yellow-hi">{c.spinning}</p>}
       {act.prompt && <p className="line-clamp-4 max-w-[30ch] break-words text-[clamp(1.75rem,2.8vw,3.25rem)] leading-[1.2] text-muted">{act.prompt}</p>}
     </div>
   );

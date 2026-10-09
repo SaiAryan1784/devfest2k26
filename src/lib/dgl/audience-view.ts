@@ -31,7 +31,8 @@ export type AudienceView =
   | { kind: "paused"; act: Act; vote: VoteShown | null }
   | { kind: "closed"; act: Act; tally: Tally; vote: VoteShown | null }
   | { kind: "reveal"; act: Act; self: number; audience: number | null; result: Comparison }
-  | { kind: "completed" };
+  | { kind: "completed" }
+  | { kind: "winner"; names: string[]; audience: number };
 
 /**
  * The line for a vote, from its state and the CURRENT phase. A queued vote's
@@ -66,7 +67,7 @@ export function viewFor(state: PublicState | null, local: LocalVote | null, cook
     case "IDLE":
       return { kind: "idle" };
     case "COMPLETED":
-      return { kind: "completed" };
+      return state.winner ? { kind: "winner", ...state.winner } : { kind: "completed" };
     case "READY":
       return { kind: "ready", act };
     case "PERFORMING":
@@ -157,6 +158,8 @@ export function liveText(v: AudienceView): string {
     }
     case "completed":
       return c.completed;
+    case "winner":
+      return sentence(v.names.length > 1 ? c.winnersTitle : c.winnerTitle, v.names.join(", "), c.winnerScore(v.audience));
   }
 }
 

@@ -117,10 +117,10 @@ test("migrates the shipped schema in place", async () => {
 
   // A migrated HOST signs in, and the app reads the migrated database without an error.
   const signedIn = await login(second.db, "Legacy OPERATOR", "legacy passcode", T0);
-  expect(signedIn).toEqual({ ok: true, admin: { id: admins.OPERATOR, name: "Legacy OPERATOR", role: "HOST" } });
+  expect(signedIn).toEqual({ ok: true, admin: { id: admins.OPERATOR, name: "Legacy OPERATOR", role: "HOST", track: null } });
   expect(await login(second.db, "Legacy SUPER_ADMIN", "legacy passcode", T0)).toMatchObject({ ok: true, admin: { role: "SUPER_ADMIN" } });
-  await expect(readPublicState(second.db, T0)).resolves.toMatchObject({ phase: expect.any(String) });
-  if (signedIn.ok) await expect(readAdminState(second.db, signedIn.admin, T0)).resolves.toMatchObject({ me: { role: "HOST" } });
+  await expect(readPublicState(second.db, "build", T0)).resolves.toMatchObject({ phase: expect.any(String) });
+  if (signedIn.ok) await expect(readAdminState(second.db, signedIn.admin, "build", T0)).resolves.toMatchObject({ me: { role: "HOST" } });
 });
 
 test("a database where the role update has not run yet still reads retired roles as HOST", async () => {

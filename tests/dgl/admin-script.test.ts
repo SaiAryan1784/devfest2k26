@@ -3,8 +3,11 @@ import { parseArgs } from "../../scripts/dgl-admin";
 
 describe("dgl-admin parseArgs", () => {
   test("accepts the two roles", () => {
-    expect(parseArgs(["--name", "Sai", "--role", "SUPER_ADMIN"])).toEqual({ name: "Sai", role: "SUPER_ADMIN" });
-    expect(parseArgs(["--name", " Neha ", "--role", "HOST"])).toEqual({ name: "Neha", role: "HOST" });
+    expect(parseArgs(["--name", "Sai", "--role", "SUPER_ADMIN"])).toEqual({ name: "Sai", role: "SUPER_ADMIN", track: null });
+    expect(parseArgs(["--name", " Neha ", "--role", "HOST"])).toEqual({ name: "Neha", role: "HOST", track: null });
+    expect(parseArgs(["--name", "Build Admin", "--role", "SUPER_ADMIN", "--track", "build"])).toEqual({ name: "Build Admin", role: "SUPER_ADMIN", track: "build" });
+    expect(parseArgs(["--name", "X", "--role", "HOST", "--track", "all"])).toMatchObject({ track: null });
+    expect(parseArgs(["--name", "X", "--role", "HOST", "--track", "nope"])).toHaveProperty("error");
   });
 
   test("refuses the retired roles and anything else", () => {

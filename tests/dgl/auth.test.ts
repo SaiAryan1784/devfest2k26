@@ -108,7 +108,7 @@ describe("login and currentAdmin", () => {
 
   test("a correct passcode logs in and audits it", async () => {
     const r = await login(db, "Sai", "right", T0);
-    expect(r).toEqual({ ok: true, admin: { id, name: "Sai", role: "HOST" } });
+    expect(r).toEqual({ ok: true, admin: { id, name: "Sai", role: "HOST", track: null } });
     const rows = await audit();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ admin_id: id, admin_name: "Sai", action: "login" });
@@ -200,7 +200,7 @@ describe("login and currentAdmin", () => {
 
   test("the name is trimmed, so ' Sai ' matches admin Sai", async () => {
     const r = await login(db, "  Sai ", "right", T0);
-    expect(r).toEqual({ ok: true, admin: { id, name: "Sai", role: "HOST" } });
+    expect(r).toEqual({ ok: true, admin: { id, name: "Sai", role: "HOST", track: null } });
     expect((await audit())[0].admin_name).toBe("Sai");
   });
 
@@ -226,7 +226,7 @@ describe("login and currentAdmin", () => {
 
   test("currentAdmin reads the live row", async () => {
     const t = signSession(id, T0 + 60 * MIN, SECRET);
-    expect(await currentAdmin(db, t, T0)).toEqual({ id, name: "Sai", role: "HOST" });
+    expect(await currentAdmin(db, t, T0)).toEqual({ id, name: "Sai", role: "HOST", track: null });
 
     await db.query("UPDATE dgl_admins SET role = 'SUPER_ADMIN' WHERE id = $1", [id]);
     expect((await currentAdmin(db, t, T0))?.role).toBe("SUPER_ADMIN");
@@ -263,7 +263,7 @@ describe("login and currentAdmin", () => {
     const t = signSession(id, T0 + 60 * MIN, SECRET);
     for (const stored of ["OPERATOR", "VOLUNTEER"]) {
       await db.query("UPDATE dgl_admins SET role = $2 WHERE id = $1", [id, stored]);
-      expect(await currentAdmin(db, t, T0), stored).toEqual({ id, name: "Sai", role: "HOST" });
+      expect(await currentAdmin(db, t, T0), stored).toEqual({ id, name: "Sai", role: "HOST", track: null });
     }
   });
 

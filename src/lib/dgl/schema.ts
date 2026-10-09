@@ -122,6 +122,31 @@ const STEPS: SchemaStep[] = [
     ddl: `ALTER TABLE dgl_performances ALTER COLUMN contestant_id DROP NOT NULL`,
     probe: column("dgl_performances", "contestant_id", " AND NOT attnotnull"),
   },
+  // Tracks: one show per room. dgl_show and the rows from before tracks are left in place, unused.
+  {
+    creates: "dgl_tracks",
+    ddl: `CREATE TABLE IF NOT EXISTS dgl_tracks (
+    track text PRIMARY KEY CHECK (track IN ('build', 'grow', 'think')),
+    current_performance_id uuid REFERENCES dgl_performances,
+    version int NOT NULL DEFAULT 0,
+    winner_shown boolean NOT NULL DEFAULT false
+  )`,
+  },
+  {
+    ddl: `INSERT INTO dgl_tracks (track) VALUES ('build'), ('grow'), ('think') ON CONFLICT DO NOTHING`,
+  },
+  {
+    ddl: `ALTER TABLE dgl_performances ADD COLUMN IF NOT EXISTS track text`,
+    probe: column("dgl_performances", "track"),
+  },
+  {
+    ddl: `ALTER TABLE dgl_admins ADD COLUMN IF NOT EXISTS track text`,
+    probe: column("dgl_admins", "track"),
+  },
+  {
+    creates: "dgl_performances_track_idx",
+    ddl: `CREATE INDEX IF NOT EXISTS dgl_performances_track_idx ON dgl_performances (track, created_at)`,
+  },
   // Two roles remain. A data step with no probe: it must stay the last step (see above).
   { ddl: `UPDATE dgl_admins SET role = 'HOST' WHERE role IN ('OPERATOR', 'VOLUNTEER')` },
 ];

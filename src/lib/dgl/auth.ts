@@ -1,9 +1,17 @@
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { DGL } from "@/data/dgl";
 import { ensureSchema, type Db } from "./db";
-import type { Role } from "./types";
+import { isTrack } from "./tracks";
+import type { Admin, Role, Track } from "./types";
 
-type Admin = { id: string; name: string; role: Role };
+/**
+ * A stored track: a slug, or null (all tracks). Anything else is unreadable:
+ * undefined, and the caller gives no access rather than assuming all tracks.
+ */
+function readTrack(raw: string | null): Track | null | undefined {
+  if (raw === null) return null;
+  return isTrack(raw) ? raw : undefined;
+}
 
 /**
  * A role as stored in dgl_admins, read as one of the two roles: SUPER_ADMIN
@@ -78,7 +86,7 @@ export function readSession(token: string | undefined, secret: string, now: numb
 const DUMMY_HASH = `scrypt$${"00".repeat(SALT_BYTES)}$${"ab".repeat(KEYLEN)}`;
 
 /** `role` is the stored text, which may predate the two roles: read it through normalizeRole. */
-type AdminRow = { id: string; name: string; role: string; passcode_hash: string; active: boolean };
+type AdminRow = { id: string; name: string; role: string; track: string | null; passcode_hash: string; active: boolean };
 
 export type LoginResult =
   | { ok: true; admin: Admin }
@@ -153,18 +161,19 @@ export async function login(db: Db, rawName: string, pass: string, now: number):
   }
 
   const [row] = await db.query<AdminRow>(
-    "SELECT id, name, role, passcode_hash, active FROM dgl_admins WHERE name = $1::text",
+    "SELECT id, name, role, track, passcode_hash, active FROM dgl_admins WHERE name = $1::text",
     [name],
   );
   const matches = await verifyPasscode(pass, row?.passcode_hash ?? DUMMY_HASH);
-  const ok = !!row && row.active && matches;
+  const track = row ? readTrack(row.track) : undefined;
+  const ok = !!row && row.active && matches && track !== undefined;
 
   await db.query(
     "UPDATE dgl_audit SET action = $2::text, admin_id = $3::uuid WHERE id = $1::bigint",
     [attemptId, ok ? "login" : "loginFailed", row?.id ?? null],
   );
   return ok
-    ? { ok: true, admin: { id: row.id, name: row.name, role: normalizeRole(row.role) } }
+    ? { ok: true, admin: { id: row.id, name: row.name, role: normalizeRole(row.role), track: track as Track | null } }
     : { ok: false, code: "bad_credentials" };
 }
 
@@ -181,8 +190,9 @@ export async function currentAdmin(db: Db, token: string | undefined, now: numbe
   if (!id || !UUID.test(id)) return null;
   await ensureSchema(db);
   const [row] = await db.query<AdminRow>(
-    "SELECT id, name, role, active FROM dgl_admins WHERE id = $1::uuid",
+    "SELECT id, name, role, track, active FROM dgl_admins WHERE id = $1::uuid",
     [id],
   );
-  return row?.active ? { id: row.id, name: row.name, role: normalizeRole(row.role) } : null;
+  const track = row ? readTrack(row.track) : undefined;
+  return row?.active && track !== undefined ? { id: row.id, name: row.name, role: normalizeRole(row.role), track } : null;
 }

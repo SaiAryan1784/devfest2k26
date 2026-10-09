@@ -16,10 +16,10 @@ beforeEach(async () => {
     [CONTESTANT],
   );
   await db.query(
-    "INSERT INTO dgl_performances (id, contestant_id, status, created_at) VALUES ($1, $2, 'VOTING', now())",
+    "INSERT INTO dgl_performances (id, contestant_id, status, track, created_at) VALUES ($1, $2, 'VOTING', 'build', now())",
     [PERF, CONTESTANT],
   );
-  await db.query("UPDATE dgl_show SET current_performance_id = $1 WHERE id = 1", [PERF]);
+  await db.query("UPDATE dgl_tracks SET current_performance_id = $1 WHERE track = 'build'", [PERF]);
 });
 
 function cast(

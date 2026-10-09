@@ -6,6 +6,8 @@ const ID = "11111111-1111-4111-8111-111111111111";
 const act = { contestant: "Riya Sharma", prompt: "Explain Kubernetes to your grandmother", spinning: false };
 
 const st = (over: Partial<PublicState> = {}): PublicState => ({
+  track: "build",
+  winner: null,
   phase: "VOTING",
   performanceId: ID,
   contestant: act.contestant,
@@ -94,6 +96,7 @@ const reveal = { self: 8, audience: 8, result: { kind: "match" as const } };
 const views: Record<StageView["kind"], StageView[]> = {
   idle: [{ kind: "idle" }],
   completed: [{ kind: "completed" }],
+  winner: [{ kind: "winner", names: ["Riya Sharma"], audience: 9 }],
   ready: [{ kind: "ready", id: ID, act }],
   clock: [
     { kind: "clock", id: ID, act, endsAtMs: 90_000, running: true },

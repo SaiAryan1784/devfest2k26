@@ -25,11 +25,11 @@ describe("missingSeedPrompts", () => {
 });
 
 describe("canEditAdmin", () => {
-  const me = { name: "Sai", role: "SUPER_ADMIN" as const };
+  const me = { name: "Sai", role: "SUPER_ADMIN" as const, track: null };
   const admins = [
-    { name: "Sai", role: "SUPER_ADMIN" as const, active: true },
-    { name: "Neha", role: "HOST" as const, active: true },
-    { name: "Old", role: "SUPER_ADMIN" as const, active: false },
+    { name: "Sai", role: "SUPER_ADMIN" as const, track: null, active: true },
+    { name: "Neha", role: "HOST" as const, track: null, active: true },
+    { name: "Old", role: "SUPER_ADMIN" as const, track: null, active: false },
   ];
   test("you cannot change your own role or deactivate yourself", () => {
     expect(canEditAdmin(me, admins[0], admins)).toEqual({ self: true, lastSuper: true, canChangeRole: false, canDeactivate: false });
@@ -39,11 +39,11 @@ describe("canEditAdmin", () => {
     expect(canEditAdmin(me, admins[2], admins)).toEqual({ self: false, lastSuper: false, canChangeRole: true, canDeactivate: true });
   });
   test("the last active SUPER_ADMIN is locked even for another SUPER_ADMIN", () => {
-    const other = { name: "Aman", role: "SUPER_ADMIN" as const };
+    const other = { name: "Aman", role: "SUPER_ADMIN" as const, track: null };
     expect(canEditAdmin(other, admins[0], admins)).toEqual({ self: false, lastSuper: true, canChangeRole: false, canDeactivate: false });
   });
   test("with two active SUPER_ADMINs, the other one can step down", () => {
-    const two = [...admins, { name: "Aman", role: "SUPER_ADMIN" as const, active: true }];
+    const two = [...admins, { name: "Aman", role: "SUPER_ADMIN" as const, track: null, active: true }];
     expect(canEditAdmin(me, two[3], two)).toEqual({ self: false, lastSuper: false, canChangeRole: true, canDeactivate: true });
   });
 });
@@ -97,14 +97,14 @@ describe("setupSections", () => {
   const base = { admins: undefined, audit: undefined, moderation: undefined };
   const full = { admins: [], audit: [], moderation: [] };
   test("SUPER_ADMIN sees every section, and there is no contestants section", () => {
-    expect(setupSections({ me: { role: "SUPER_ADMIN" }, ...full })).toEqual(["prompts", "admins", "moderation", "audit", "reset"]);
+    expect(setupSections({ me: { role: "SUPER_ADMIN", track: null }, ...full })).toEqual(["prompts", "admins", "moderation", "audit", "reset"]);
   });
   test("HOST gets no setup, even if the data were there", () => {
-    expect(setupSections({ me: { role: "HOST" }, ...base })).toEqual([]);
-    expect(setupSections({ me: { role: "HOST" }, ...full })).toEqual([]);
+    expect(setupSections({ me: { role: "HOST", track: null }, ...base })).toEqual([]);
+    expect(setupSections({ me: { role: "HOST", track: null }, ...full })).toEqual([]);
   });
   test("a SUPER_ADMIN section needs its data", () => {
-    expect(setupSections({ me: { role: "SUPER_ADMIN" }, ...base })).toEqual(["prompts", "reset"]);
+    expect(setupSections({ me: { role: "SUPER_ADMIN", track: null }, ...base })).toEqual(["prompts", "reset"]);
   });
 });
 

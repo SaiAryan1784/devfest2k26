@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { DGL } from "@/data/dgl";
 import { outcomeOf, settleKey, SETTLE_MS } from "./admin-view";
 import { estimateOffset, pickOffset } from "./clock";
-import { timeoutSignal } from "./client-http";
-import type { Action, ActionResult, AdminState } from "./types";
+import { adminStateUrl, timeoutSignal } from "./client-http";
+import type { Action, ActionResult, AdminState, Track } from "./types";
 import { connectionFor, type Connection } from "./connection";
 
 /** "checking" until /admin/state first answers; 401 means "signedOut". */
@@ -58,7 +58,8 @@ function asAdminState(x: unknown): AdminState | null {
     typeof s.version === "number" &&
     typeof s.serverNow === "number" &&
     Number.isFinite(s.serverNow) &&
-    Array.isArray(s.contestants) &&
+    typeof s.track === "string" &&
+    Array.isArray(s.acts) &&
     Array.isArray(s.prompts) &&
     typeof s.me === "object" &&
     s.me !== null
@@ -112,7 +113,7 @@ function stateKey(s: AdminState): string {
  * - The clock offset comes from each poll's round trip (lowest of the last
  *   five), ignoring changes under 25 ms.
  */
-export function useAdmin(): UseAdmin {
+export function useAdmin(track: Track | null): UseAdmin {
   const [state, setState] = useState<AdminState | null>(null);
   const [session, setSession] = useState<Session>("checking");
   const [failing, setFailing] = useState(false);
@@ -184,7 +185,7 @@ export function useAdmin(): UseAdmin {
       polling = true;
       const sentAt = Date.now();
       try {
-        const res = await fetch("/api/dgl/admin/state", { cache: "no-store", signal: timeoutSignal() });
+        const res = await fetch(adminStateUrl(track), { cache: "no-store", signal: timeoutSignal() });
         if (!alive) return;
         if (res.status === 401) {
           stopped = true;
@@ -203,6 +204,8 @@ export function useAdmin(): UseAdmin {
         const next = asAdminState(await res.json());
         const receivedAt = Date.now();
         if (!next) throw new Error("admin state shape");
+        // A state for another track (a late answer after a switch) is not this screen's.
+        if (track && next.track !== track) throw new Error("admin state track");
         if (!alive) return;
         failures = 0;
         setFailing(false);
@@ -238,7 +241,7 @@ export function useAdmin(): UseAdmin {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("online", onOnline);
     };
-  }, [epoch, adopt]);
+  }, [epoch, adopt, track]);
 
   const act = useCallback(
     async (action: Action, expectedVersion?: number): Promise<ActionResult | null> => {
@@ -252,7 +255,7 @@ export function useAdmin(): UseAdmin {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           // The rendered version: a button re-labelled since it was drawn comes back stale, not as the new action.
-          body: JSON.stringify({ action, version: expectedVersion ?? cur.version }),
+          body: JSON.stringify({ track: cur.track, action, version: expectedVersion ?? cur.version }),
           cache: "no-store",
           signal: timeoutSignal(),
         });

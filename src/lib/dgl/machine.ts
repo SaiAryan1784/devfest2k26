@@ -30,7 +30,7 @@ export function effectivePhase(
  */
 const TRANSITIONS: Record<Phase, readonly LiveType[]> = {
   IDLE: ["putOnStage"],
-  COMPLETED: ["putOnStage"],
+  COMPLETED: ["putOnStage", "showWinner", "hideWinner"],
   READY: ["renameAct", "spinWheel", "setSelfScore", "startPerformance"],
   PERFORMING: ["renameAct", "setSelfScore", "startVoting"],
   PERFORMED: ["renameAct", "setSelfScore", "startVoting"],
@@ -57,6 +57,8 @@ export const LIVE_ACTIONS: readonly LiveType[] = [
   "setSelfScore",
   "reveal",
   "complete",
+  "showWinner",
+  "hideWinner",
 ];
 
 export const SETUP_ACTIONS: readonly SetupAction["type"][] = [
@@ -104,6 +106,8 @@ const NEXT_STATUS: Record<LiveType, StoredStatus | null> = {
   renameAct: null,
   spinWheel: null,
   setSelfScore: null,
+  showWinner: null,
+  hideWinner: null,
 };
 
 /** The status an action moves the show to; null when it does not move it. */

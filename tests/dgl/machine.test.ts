@@ -39,12 +39,14 @@ const ACTIONS: LiveType[] = [
   "setSelfScore",
   "reveal",
   "complete",
+  "showWinner",
+  "hideWinner",
 ];
 
 /** The transition table, written out from the brief: what each phase allows. */
 const TABLE: Record<Phase, LiveType[]> = {
   IDLE: ["putOnStage"],
-  COMPLETED: ["putOnStage"],
+  COMPLETED: ["putOnStage", "showWinner", "hideWinner"],
   READY: ["renameAct", "spinWheel", "setSelfScore", "startPerformance"],
   PERFORMING: ["renameAct", "setSelfScore", "startVoting"],
   PERFORMED: ["renameAct", "setSelfScore", "startVoting"],
@@ -70,7 +72,7 @@ describe("the transition table, cell by cell", () => {
     }
   }
 
-  test("the live actions are exactly the twelve in the table", () => {
+  test("the live actions are exactly the fourteen in the table", () => {
     expect([...LIVE_ACTIONS].sort()).toEqual([...ACTIONS].sort());
   });
 
@@ -121,6 +123,8 @@ test("nextStatus maps each status-moving action, and the rest move nothing", () 
     renameAct: null,
     spinWheel: null,
     setSelfScore: null,
+    showWinner: null,
+    hideWinner: null,
   };
   for (const [action, status] of Object.entries(table)) {
     expect(nextStatus(action as LiveType), action).toBe(status);

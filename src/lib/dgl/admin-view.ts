@@ -28,7 +28,7 @@ export type PrimaryKey =
   | "reveal"
   | "complete";
 
-export type DisabledReason = "needsSelfScore" | "noPrompts";
+export type DisabledReason = "needsSelfScore" | "noPrompts" | "noWinner";
 
 export type Primary = {
   /** Key into DGL.copy.admin.primary. */
@@ -90,7 +90,9 @@ export type SecondaryKey =
   | "reopenVoting"
   | "spinWheel"
   | "renameAct"
-  | "setSelfScore";
+  | "setSelfScore"
+  | "showWinner"
+  | "hideWinner";
 
 export type Secondary = { key: SecondaryKey; needsConfirm: boolean; disabledReason: DisabledReason | null };
 
@@ -102,6 +104,8 @@ const SECONDARY: readonly SecondaryKey[] = [
   "spinWheel",
   "renameAct",
   "setSelfScore",
+  "showWinner",
+  "hideWinner",
 ];
 const CONFIRM = new Set<SecondaryKey>(["stopVoting", "reopenVoting"]);
 
@@ -116,11 +120,20 @@ export function secondaryActions(s: AdminState | null, role: Role | null, now?: 
   if (!s || !role) return [];
   const phase = phaseAt(s, now);
   const primary = primaryAction(s, role, now)?.action?.type;
-  return SECONDARY.filter((k) => k !== primary && allowed(phase, k) && can(role, k)).map((key) => ({
+  return SECONDARY.filter(
+    (k) =>
+      k !== primary &&
+      allowed(phase, k) &&
+      can(role, k) &&
+      // One winner button at a time: show it, then hide it.
+      !(k === "showWinner" && s.winnerShown) &&
+      !(k === "hideWinner" && !s.winnerShown),
+  ).map((key) => ({
     key,
     needsConfirm: CONFIRM.has(key),
-    // The wheel draws from the active prompts only.
-    disabledReason: key === "spinWheel" && !s.prompts.some((r) => r.active) ? "noPrompts" : null,
+    // The wheel draws from the active prompts only; the winner needs a revealed act with votes.
+    disabledReason:
+      key === "spinWheel" && !s.prompts.some((r) => r.active) ? "noPrompts" : key === "showWinner" && !s.leaders ? "noWinner" : null,
   }));
 }
 

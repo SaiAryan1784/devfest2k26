@@ -92,7 +92,7 @@ If the offline shell misbehaves in production:
 1. Replace `public/dgl-sw.js` with a file whose `activate` handler unregisters the worker and deletes every cache whose name starts with `dgl-`. Keep `skipWaiting` in the `install` handler so it takes over at once. Do not add a `fetch` handler.
 2. In the same release delete `<RegisterSw />` from `src/app/dgl/layout.tsx`, so nothing registers it again.
 3. Deploy. Browsers fetch the worker script on navigation (at the latest every 24 h) and install the replacement.
-4. On a single device: DevTools, Application, Service Workers, Unregister, then Cache Storage, delete `dgl-v1`.
+4. On a single device: DevTools, Application, Service Workers, Unregister, then Cache Storage, delete `dgl-v2`.
 
 ## Rehearsal checklist for 8 Oct
 
@@ -157,14 +157,14 @@ Not verified in any browser: every screen. The layout at 360 and 390 px wide, th
 
 ### Offline
 
-- On a production build over HTTPS, open `/dgl` in Chrome. Application, Service Workers shows `/dgl-sw.js` running with scope `/dgl`. Cache Storage has `dgl-v1`.
-- Reload once online. `dgl-v1` has `/dgl` and `/_next/static/` entries and no `/api/` entries.
+- On a production build over HTTPS, open `/dgl` in Chrome. Application, Service Workers shows `/dgl-sw.js` running with scope `/dgl`. Cache Storage has `dgl-v2`.
+- Reload once online. `dgl-v2` has `/dgl` and `/_next/static/` entries and no `/api/` entries.
 - Tick Offline and reload: the page renders from the cache and the pill says Offline. Cast a vote: "Vote queued, waiting for connection". Go online: "Vote recorded" within 4 s.
 - Offline vote, then Stop voting, then online: the phone shows "Voting closed before your vote arrived, so it was not counted".
 - Throttle to Slow 3G with 4 s or more of latency and reload: the cached page shows after about 4 s.
 - Open `/`: it is not controlled by the DGL worker.
 - Repeat the offline reload once on `/dgl/kiosk` and `/dgl/stage` after visiting them online.
-- Check Unregister and deleting `dgl-v1` work.
+- Check Unregister and deleting `dgl-v2` work.
 
 ### Load check (300 voters)
 
@@ -181,3 +181,17 @@ The script only casts votes. It does not log in or change the show, and it print
 ### CDN check with real browsers
 
 Developer: with 20 or more real phones polling the preview, confirm `x-vercel-cache: HIT` or `STALE` on the browsers' `/api/dgl/state` requests (not only curl): the client fetches with `cache: "no-store"`, which makes browsers send `Cache-Control: no-cache`; if the CDN misses, change that fetch to `cache: "default"` in `src/lib/dgl/use-dgl-state.ts` (the response's `max-age=0, must-revalidate` still keeps browsers fresh).
+
+
+## Event day: three tracks (10 Oct 2026)
+
+- Rooms: `/dgl/build`, `/dgl/grow`, `/dgl/think` (voting) and `/dgl/{track}/stage` (projector, its QR points at its own room). `/dgl` and `/dgl/stage` are pickers.
+- Roles: Super admin and Host only. A Build, Grow or Think admin is a Super admin locked to one track; the all-track Super admins can run any track and manage accounts.
+- Create the track admins after the deploy (passcodes are the organisers'; the first run also migrates the database):
+  - `npm run dgl:admin -- --name "Build Admin" --role SUPER_ADMIN --track build`
+  - `npm run dgl:admin -- --name "Grow Admin" --role SUPER_ADMIN --track grow`
+  - `npm run dgl:admin -- --name "Think Admin" --role SUPER_ADMIN --track think`
+  - Give each kiosk its own Host account (`--track` as needed); a Host can also run that track's show.
+- Run an act: type the name, Put on stage, optionally Spin the wheel (can spin again), Start performance, Start voting, Stop voting, enter the own score, Reveal, Finish act. Between acts, Show winner puts the highest scorer on the stage (and phones); Hide winner or the next act clears it.
+- Not yet built (next push): the poster and banner stage layout, the wheel graphic, winner confetti, the refined phone screen. The stage and phone currently show plain text for the spin and the winner.
+- Not verified in any browser: every screen above. Rehearse each track on a real device before doors open.

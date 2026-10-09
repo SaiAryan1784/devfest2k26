@@ -84,7 +84,7 @@ describe("ensureSchema", () => {
     const created = SCHEMA.flatMap((s) => [...s.matchAll(/CREATE (?:TABLE|INDEX) IF NOT EXISTS (\w+)/g)].map((m) => m[1]));
     expect([...SCHEMA_OBJECTS].sort()).toEqual([...created].sort());
     expect(created).toContain("dgl_votes_ip_idx");
-    expect(created).toHaveLength(8);
+    expect(created).toHaveLength(10);
   });
 
   test("every schema statement is counted as DDL by these tests", () => {
@@ -103,6 +103,8 @@ describe("ensureSchema", () => {
     const breakers = [
       "ALTER TABLE dgl_performances DROP COLUMN contestant_name",
       "ALTER TABLE dgl_performances DROP COLUMN spun_at",
+      "ALTER TABLE dgl_performances DROP COLUMN track",
+      "ALTER TABLE dgl_admins DROP COLUMN track",
       // No row has a null contestant_id yet, so the old constraint can come back.
       "ALTER TABLE dgl_performances ALTER COLUMN contestant_id SET NOT NULL",
     ];
@@ -118,7 +120,7 @@ describe("ensureSchema", () => {
       expect(await probe(pg), breaker).toBe(true);
       await pg.close();
     }
-  });
+  }, 30_000);
 
   test("the role update runs last, after every object it could depend on", () => {
     expect(SCHEMA.at(-1)).toMatch(/^UPDATE dgl_admins SET role = 'HOST' WHERE role IN \('OPERATOR', 'VOLUNTEER'\)$/);

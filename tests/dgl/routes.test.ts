@@ -58,9 +58,9 @@ async function addAdmin(role: Role | "OPERATOR" | "VOLUNTEER", name = `${role}-$
 }
 
 async function run(action: Action) {
-  const admin = { id: (await addAdmin("SUPER_ADMIN")).id, name: "Seed", role: "SUPER_ADMIN" as const };
-  const { version } = await readAdminState(db, admin, Date.now());
-  const r = await applyAction(db, admin, action, version, Date.now());
+  const admin = { id: (await addAdmin("SUPER_ADMIN")).id, name: "Seed", role: "SUPER_ADMIN" as const, track: null };
+  const { version } = await readAdminState(db, admin, "build", Date.now());
+  const r = await applyAction(db, admin, "build", action, version, Date.now());
   if (!r.ok) throw new Error(`${action.type}: ${r.code}`);
   return r.state;
 }
@@ -89,7 +89,7 @@ afterEach(() => {
 
 describe("state route", () => {
   test("sends CDN cache headers and no cookie", async () => {
-    const res = await stateGET();
+    const res = await stateGET(req("/api/dgl/state?track=build", "GET"));
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
     expect(res.headers.get("cdn-cache-control")).toBe("max-age=1, stale-while-revalidate=2");
@@ -99,17 +99,17 @@ describe("state route", () => {
 
   test("one vote is already the audience score, and it is a whole number", async () => {
     const pid = await toVoting();
-    expect(await (await stateGET()).json()).toMatchObject({ phase: "VOTING", votes: 0, average: null });
+    expect(await (await stateGET(req("/api/dgl/state?track=build", "GET"))).json()).toMatchObject({ phase: "VOTING", votes: 0, average: null });
     expect((await vote(pid, 7)).status).toBe(200);
-    expect(await (await stateGET()).json()).toMatchObject({ phase: "VOTING", votes: 1, average: 7 });
+    expect(await (await stateGET(req("/api/dgl/state?track=build", "GET"))).json()).toMatchObject({ phase: "VOTING", votes: 1, average: 7 });
     expect((await vote(pid, 8)).status).toBe(200);
-    expect(await (await stateGET()).json()).toMatchObject({ votes: 2, average: 8 }); // 7.5 shows as 8
+    expect(await (await stateGET(req("/api/dgl/state?track=build", "GET"))).json()).toMatchObject({ votes: 2, average: 8 }); // 7.5 shows as 8
   });
 
   test("503 when the database is not configured", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     holder.db = null;
-    const res = await stateGET();
+    const res = await stateGET(req("/api/dgl/state?track=build", "GET"));
     expect(res.status).toBe(503);
     expect(await res.json()).toEqual({ error: "unavailable" });
     expect(res.headers.get("set-cookie")).toBeNull();
@@ -118,13 +118,13 @@ describe("state route", () => {
   test("503 when DGL_SECRET is unset or empty", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubEnv("DGL_SECRET", "");
-    expect((await stateGET()).status).toBe(503);
+    expect((await stateGET(req("/api/dgl/state?track=build", "GET"))).status).toBe(503);
   });
 
   test("503 when the database throws, and the error never leaks", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     holder.db = { query: async () => { throw new Error("secret-host.neon.tech down"); } };
-    const res = await stateGET();
+    const res = await stateGET(req("/api/dgl/state?track=build", "GET"));
     expect(res.status).toBe(503);
     expect(JSON.stringify(await res.json())).not.toContain("neon");
   });
@@ -282,7 +282,7 @@ describe("me route", () => {
     const pid = await toVoting();
     const cookie = voter();
     await vote(pid, 9, cookie);
-    const res = await meGET(req("/api/dgl/me", "GET", { cookie }));
+    const res = await meGET(req("/api/dgl/me?track=build", "GET", { cookie }));
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     const body = await res.json();
@@ -293,10 +293,10 @@ describe("me route", () => {
 
   test("null vote, and sets dgl_voter when missing", async () => {
     await toVoting();
-    const res = await meGET(req("/api/dgl/me", "GET"));
+    const res = await meGET(req("/api/dgl/me?track=build", "GET"));
     expect((await res.json()).vote).toBeNull();
     expect(res.cookies.get("dgl_voter")?.value).toMatch(UUID);
-    const other = await meGET(req("/api/dgl/me", "GET", { cookie: voter() }));
+    const other = await meGET(req("/api/dgl/me?track=build", "GET", { cookie: voter() }));
     expect((await other.json()).vote).toBeNull();
   });
 });
@@ -425,9 +425,10 @@ describe("admin state route", () => {
 });
 
 describe("action route", () => {
-  const act = (o: Init) => actionPOST(req("/api/dgl/admin/action", "POST", o));
+  const act = (o: Init) =>
+    actionPOST(req("/api/dgl/admin/action", "POST", { ...o, body: o.body && typeof o.body === "object" && !("track" in o.body) ? { track: "build", ...o.body } : o.body }));
   const audits = () => db.query("SELECT 1 FROM dgl_audit");
-  const showVersion = async () => (await db.query<{ version: number }>("SELECT version FROM dgl_show WHERE id = 1"))[0].version;
+  const showVersion = async () => (await db.query<{ version: number }>("SELECT version FROM dgl_tracks WHERE track = 'build'"))[0].version;
 
   test("403 when Origin differs", async () => {
     const a = await addAdmin("HOST");
@@ -486,7 +487,7 @@ describe("action route", () => {
   });
 
   test("the status map has no needs_prompt", () => {
-    expect(ACTION_STATUS).toEqual({ forbidden: 403, invalid: 400, stale: 409, not_allowed: 409, needs_self_score: 409 });
+    expect(ACTION_STATUS).toEqual({ forbidden: 403, invalid: 400, stale: 409, not_allowed: 409, needs_self_score: 409, no_winner: 409 });
     expect("needs_prompt" in ACTION_STATUS).toBe(false);
   });
 
@@ -569,7 +570,7 @@ describe("action route", () => {
       const state = await adminStateGET(req("/api/dgl/admin/state", "GET", { cookie: a.cookie }));
       expect(state.status).toBe(200);
       const { me, version } = await state.json();
-      expect(me).toEqual({ name: a.name, role: "HOST" });
+      expect(me).toEqual({ name: a.name, role: "HOST", track: null });
       const forbidden = await act({ body: { action: { type: "upsertPrompt", text: "x", active: true }, version }, cookie: a.cookie });
       expect(forbidden.status).toBe(403);
     }
@@ -582,7 +583,7 @@ describe("action route", () => {
 describe("kiosk vote route", () => {
   const kiosk = (pid: string, score: unknown, o: Init & { attemptId?: unknown } = {}) => {
     const { attemptId = crypto.randomUUID(), ...init } = o;
-    return kioskPOST(req("/api/dgl/kiosk/vote", "POST", { body: { performanceId: pid, score, attemptId }, ip: ip(), ...init }));
+    return kioskPOST(req("/api/dgl/kiosk/vote", "POST", { body: { performanceId: pid, score, attemptId, track: "build" }, ip: ip(), ...init }));
   };
   const kioskRows = () => db.query<{ voter_id: string; score: number }>("SELECT voter_id, score FROM dgl_votes");
   const kioskAudit = () => db.query("SELECT 1 FROM dgl_audit WHERE action = 'kioskVote'");
@@ -622,7 +623,7 @@ describe("kiosk vote route", () => {
     const audit = await db.query<{ admin_id: string; admin_name: string; performance_id: string; detail: unknown }>(
       "SELECT admin_id, admin_name, performance_id, detail FROM dgl_audit WHERE action = 'kioskVote'",
     );
-    expect(audit).toEqual([{ admin_id: v.id, admin_name: "Vee", performance_id: pid, detail: {} }]);
+    expect(audit).toEqual([{ admin_id: v.id, admin_name: "Vee", performance_id: pid, detail: { track: "build" } }]);
   });
 
   test("429 when the same admin votes again within kioskGapMs", async () => {
@@ -709,7 +710,7 @@ describe("kiosk vote route", () => {
         const v = await addAdmin("HOST");
         const res = await kioskPOST(
           req("/api/dgl/kiosk/vote", "POST", {
-            body: attemptId === undefined ? { performanceId: pid, score: 6 } : { performanceId: pid, score: 6, attemptId },
+            body: attemptId === undefined ? { performanceId: pid, score: 6, track: "build" } : { performanceId: pid, score: 6, attemptId, track: "build" },
             cookie: v.cookie,
             ip: ip(),
           }),

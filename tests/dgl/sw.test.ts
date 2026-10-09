@@ -263,7 +263,7 @@ describe("cacheFirst", () => {
 });
 
 describe("cache name", () => {
-  it("is dgl-v1", () => {
-    expect(sw.CACHE).toBe("dgl-v1");
+  it("is dgl-v2", () => {
+    expect(sw.CACHE).toBe("dgl-v2");
   });
 });

@@ -1,5 +1,5 @@
 import { can } from "./machine";
-import type { AdminState, Role } from "./types";
+import type { AdminState, Role, Track } from "./types";
 
 /**
  * Pure helpers for the setup panel (/dgl/admin, Setup). No React, no DOM.
@@ -24,7 +24,7 @@ export function missingSeedPrompts(existing: string[], seed: string[]): string[]
   return out;
 }
 
-type AdminLike = { name: string; role: Role; active: boolean };
+type AdminLike = { name: string; role: Role; track: Track | null; active: boolean };
 
 export type AdminEdit = {
   /** The row is the signed-in admin (names are unique). */
@@ -43,13 +43,14 @@ export type AdminEdit = {
  * match is by name, which is unique. The server still decides.
  */
 export function canEditAdmin(
-  me: { name: string; role: Role },
+  me: { name: string; role: Role; track: Track | null },
   target: AdminLike,
   admins: readonly AdminLike[],
 ): AdminEdit {
   const self = target.name === me.name;
-  const supers = admins.filter((x) => x.role === "SUPER_ADMIN" && x.active).length;
-  const lastSuper = target.role === "SUPER_ADMIN" && target.active && supers <= 1;
+  // Only an all-track super admin can manage accounts, so that is the kind the last one guard keeps.
+  const supers = admins.filter((x) => x.role === "SUPER_ADMIN" && x.active && x.track === null).length;
+  const lastSuper = target.role === "SUPER_ADMIN" && target.active && target.track === null && supers <= 1;
   const locked = self || lastSuper;
   return { self, lastSuper, canChangeRole: !locked, canDeactivate: !locked };
 }
@@ -101,15 +102,17 @@ export type SetupSection = "prompts" | "admins" | "moderation" | "audit" | "rese
  * none (setup is the super admin's), so the console offers no Setup view.
  */
 export function setupSections(
-  s: { me: { role: Role } } & Pick<AdminState, "admins" | "audit" | "moderation">,
+  s: { me: { role: Role; track: Track | null } } & Pick<AdminState, "admins" | "audit" | "moderation">,
 ): SetupSection[] {
   const role = s.me.role;
   const out: SetupSection[] = [];
   if (can(role, "upsertPrompt")) out.push("prompts");
-  if (can(role, "upsertAdmin") && s.admins) out.push("admins");
+  // Accounts belong to all-track super admins; a track admin never gets the list.
+  const accounts = can(role, "upsertAdmin") && s.me.track === null;
+  if (accounts && s.admins) out.push("admins");
   if (can(role, "setFlaggedExcluded") && s.moderation) out.push("moderation");
   // The audit log has no action of its own: it is shown with admin management.
-  if (can(role, "upsertAdmin") && s.audit) out.push("audit");
+  if (accounts && s.audit) out.push("audit");
   if (can(role, "resetShow")) out.push("reset");
   return out;
 }

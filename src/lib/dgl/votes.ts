@@ -1,5 +1,6 @@
 import { DGL } from "@/data/dgl";
 import type { Db } from "./db";
+import type { Track } from "./types";
 
 export type VoteResult =
   | { status: "recorded"; score: number }
@@ -13,6 +14,8 @@ export type CastVoteInput = {
   score: number;
   ipHash: string;
   source: "web" | "kiosk";
+  /** The kiosk's track: the performance must belong to it. Null for the public route (the id alone says which show). */
+  track?: Track | null;
   now: number;
 };
 
@@ -23,14 +26,14 @@ export type CastVoteInput = {
  *
  * The kiosk variant adds one CTE that writes the audit row FROM `ins`, so the
  * row exists exactly when a vote was inserted and never otherwise (same
- * statement, same transaction). It takes two more parameters ($9 admin id,
- * $10 admin name); the plain statement has none, since Postgres rejects
- * parameters that are never used.
+ * statement, same transaction). It takes two more parameters ($10 admin id,
+ * $11 admin name); the plain statement has none, since Postgres rejects
+ * parameters that are never used. $9 is the track (null on the public route).
  */
 function castSql(withAudit: boolean): string {
   return `
-WITH cur AS (SELECT p.id FROM dgl_show s JOIN dgl_performances p ON p.id = s.current_performance_id
-             WHERE p.id = $1 AND p.status = 'VOTING'),
+WITH cur AS (SELECT p.id FROM dgl_tracks s JOIN dgl_performances p ON p.id = s.current_performance_id
+             WHERE p.id = $1 AND p.status = 'VOTING' AND ($9::text IS NULL OR p.track = $9::text)),
 burst AS (SELECT count(*) AS n FROM dgl_votes WHERE performance_id = $1 AND ip_hash = $4
           AND created_at > to_timestamp($6::float8 / 1000.0) - make_interval(secs => $7::float8)),
 ins AS (INSERT INTO dgl_votes (performance_id, voter_id, score, ip_hash, source, flagged, created_at)
@@ -39,7 +42,7 @@ ins AS (INSERT INTO dgl_votes (performance_id, voter_id, score, ip_hash, source,
           withAudit
             ? `,
 aud AS (INSERT INTO dgl_audit (at, admin_id, admin_name, action, performance_id, detail)
-        SELECT to_timestamp($6::float8 / 1000.0), $9::uuid, $10::text, 'kioskVote', $1::uuid, '{}'::jsonb FROM ins)`
+        SELECT to_timestamp($6::float8 / 1000.0), $10::uuid, $11::text, 'kioskVote', $1::uuid, jsonb_build_object('track', $9::text) FROM ins)`
             : ""
         }
 SELECT (SELECT score FROM ins) AS inserted,
@@ -73,6 +76,7 @@ const castParams = (v: CastVoteInput) => [
   v.now,
   DGL.limits.burstWindowS,
   DGL.limits.burstFlagAt,
+  v.track ?? null,
 ];
 
 /** The one mapping from the statement's row to a result, shared by both entry points. */
@@ -116,12 +120,13 @@ export async function castKioskVote(
 export async function myVote(
   db: Db,
   voterId: string,
+  track: Track,
 ): Promise<{ performanceId: string; score: number } | null> {
   const [row] = await db.query<{ performance_id: string; score: number }>(
-    `SELECT v.performance_id, v.score FROM dgl_show s
+    `SELECT v.performance_id, v.score FROM dgl_tracks s
      JOIN dgl_votes v ON v.performance_id = s.current_performance_id
-     WHERE s.id = 1 AND v.voter_id = $1::text`,
-    [voterId],
+     WHERE s.track = $2::text AND v.voter_id = $1::text`,
+    [voterId, track],
   );
   return row ? { performanceId: row.performance_id, score: Number(row.score) } : null;
 }

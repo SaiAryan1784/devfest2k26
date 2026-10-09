@@ -16,6 +16,8 @@ export type StageAct = { contestant: string | null; prompt: string | null; spinn
 export type StageView =
   | { kind: "idle" }
   | { kind: "completed" }
+  /** Between acts, with the host's winner screen on. */
+  | { kind: "winner"; names: string[]; audience: number }
   | { kind: "ready"; id: string; act: StageAct }
   /** PERFORMING (running) and PERFORMED (time up) share one screen so the timer never remounts at 0. */
   | { kind: "clock"; id: string; act: StageAct; endsAtMs: number | null; running: boolean }
@@ -28,7 +30,7 @@ export function stageView(state: PublicState | null, spinning = false): StageVie
   // Before the first poll (and on the server) there is nothing to show but the waiting screen.
   if (!state) return { kind: "idle" };
   const { phase, performanceId: id } = state;
-  if (phase === "COMPLETED") return { kind: "completed" };
+  if (phase === "COMPLETED") return state.winner ? { kind: "winner", ...state.winner } : { kind: "completed" };
   if (phase === "IDLE" || !id) return { kind: "idle" };
   const act: StageAct = { contestant: state.contestant, prompt: spinning ? null : state.prompt, spinning };
 
@@ -74,5 +76,5 @@ export function showsPoster(v: StageView): boolean {
  * the key; a new act always gets a new one.
  */
 export function screenKey(v: StageView): string {
-  return v.kind === "idle" || v.kind === "completed" ? v.kind : `${v.kind}:${v.id}`;
+  return v.kind === "idle" || v.kind === "completed" || v.kind === "winner" ? v.kind : `${v.kind}:${v.id}`;
 }

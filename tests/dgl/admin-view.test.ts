@@ -34,7 +34,12 @@ const st = (over: Partial<AdminState> = {}): AdminState => ({
   excluded: 0,
   kiosk: 0,
   prompts: [{ id: "p1", text: "Sell us a deprecated API", active: true }],
-  me: { name: "Sai", role: "HOST" },
+  me: { name: "Sai", role: "HOST", track: null },
+  track: "build",
+  winner: null,
+  acts: [],
+  leaders: null,
+  winnerShown: false,
   ...over,
 });
 
@@ -160,10 +165,12 @@ describe("secondaryActions", () => {
     expect(keys("VOTING_CLOSED")).toEqual(["reopenVoting", "setSelfScore"]);
   });
 
-  test("IDLE, REVEAL and COMPLETED have no secondary controls", () => {
+  test("IDLE and REVEAL have no secondary controls; COMPLETED offers the winner", () => {
     expect(keys("IDLE")).toEqual([]);
     expect(keys("REVEAL")).toEqual([]);
-    expect(keys("COMPLETED")).toEqual([]);
+    expect(keys("COMPLETED")).toEqual(["showWinner"]);
+    expect(secondaryActions(inPhase("COMPLETED", { winnerShown: true, leaders: { names: ["A"], audience: 8 } }), "HOST").map((x) => x.key)).toEqual(["hideWinner"]);
+    expect(secondaryActions(inPhase("COMPLETED"), "HOST")[0].disabledReason).toBe("noWinner");
   });
 
   test("stop and reopen need a second tap; the rest do not", () => {
@@ -303,7 +310,7 @@ describe("settleKey: what counts as the big button changing", () => {
     expect(settleKey(inPhase("PERFORMING"))).not.toBe(settleKey(ready));
     expect(settleKey(inPhase("READY", { performanceId: "66666666-6666-4666-8666-666666666666" }))).not.toBe(settleKey(ready));
     expect(settleKey(inPhase("REVEAL"))).not.toBe(settleKey(inPhase("COMPLETED")));
-    expect(settleKey(inPhase("READY", { me: { name: "Sai", role: "SUPER_ADMIN" } }))).not.toBe(settleKey(ready));
+    expect(settleKey(inPhase("READY", { me: { name: "Sai", role: "SUPER_ADMIN", track: null } }))).not.toBe(settleKey(ready));
   });
 
   test("putting an act on stage is a real step, from IDLE and from COMPLETED", () => {

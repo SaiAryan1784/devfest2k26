@@ -1,4 +1,5 @@
 import { estimateOffset } from "./clock";
+import type { Track } from "./types";
 
 /** Browser-side fetch helpers shared by the DGL hooks. No React, no server imports. */
 
@@ -12,6 +13,12 @@ export function timeoutSignal(ms: number = FETCH_TIMEOUT_MS): AbortSignal {
   return ctl.signal;
 }
 
+/** The URLs the hooks poll, one place so tests can pin them. */
+export const stateUrl = (track: Track) => `/api/dgl/state?track=${track}`;
+export const meUrl = (track: Track) => `/api/dgl/me?track=${track}`;
+/** Null asks the server for the admin's default track. */
+export const adminStateUrl = (track: Track | null) => (track ? `/api/dgl/admin/state?track=${track}` : "/api/dgl/admin/state");
+
 export type Me = {
   /** This voter's vote on the server's current performance. */
   vote: { performanceId: string; score: number } | null;
@@ -20,19 +27,20 @@ export type Me = {
   rtt: number;
 };
 
-let inflight: Promise<Me | null> | null = null;
+const inflight = new Map<Track, Promise<Me | null>>();
 
 /**
- * GET /api/dgl/me (which also sets the voter cookie). Calls made while one is
+ * GET /api/dgl/me?track= (which also sets the voter cookie). Calls made while one is
  * already in flight share it, so the clock and the vote seed cost one request
  * on page load, not two. Null on any failure.
  */
-export function fetchMe(): Promise<Me | null> {
-  if (inflight) return inflight;
+export function fetchMe(track: Track): Promise<Me | null> {
+  const existing = inflight.get(track);
+  if (existing) return existing;
   const run = (async (): Promise<Me | null> => {
     const sentAt = Date.now();
     try {
-      const res = await fetch("/api/dgl/me", { cache: "no-store", signal: timeoutSignal() });
+      const res = await fetch(meUrl(track), { cache: "no-store", signal: timeoutSignal() });
       if (!res.ok) return null;
       const body: unknown = await res.json();
       const receivedAt = Date.now();
@@ -51,9 +59,9 @@ export function fetchMe(): Promise<Me | null> {
       return null;
     }
   })();
-  inflight = run;
+  inflight.set(track, run);
   void run.then(() => {
-    inflight = null;
+    inflight.delete(track);
   });
   return run;
 }

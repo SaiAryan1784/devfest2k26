@@ -22,6 +22,8 @@ export function useSpinning(spunAtMs: number | null, offset: number): boolean {
   const [spinning, setSpinning] = useState(false);
   useLayoutEffect(() => {
     const left = spinLeftMs(spunAtMs, Date.now() + offset);
+    // Deliberate: the answer depends on the client clock, which the server render cannot know (hydration).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSpinning(left > 0);
     if (left <= 0) return;
     const timer = setTimeout(() => setSpinning(false), Math.ceil(left));
