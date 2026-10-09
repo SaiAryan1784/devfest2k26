@@ -119,8 +119,12 @@ export const DGL = {
     stageTitle: "DevFest Got Latent stage",
     stageIdleBody: "The QR code to vote appears when the act begins.",
     scanToVote: "Scan to vote",
-    /** Alt text for the DevFest Got Latent artwork shown on the stage (waiting, up next, voting, between acts). */
+    /** Alt text for the full DevFest Got Latent poster shown on the stage while waiting and between acts. */
     posterAlt: "DevFest Got Latent: a gold title on a stage with blue curtains",
+    /** Alt text for the title strip along the top of every other stage screen. */
+    bannerAlt: "DevFest Got Latent",
+    /** Accessible name of the prompt wheel on the stage. */
+    wheelLabel: "Prompt wheel",
     voteNow: "Vote now",
     stageTime: "Time",
     stageVotingOpen: "Voting open",

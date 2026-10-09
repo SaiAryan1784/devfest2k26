@@ -1,18 +1,20 @@
 "use client";
 
 import { useRef } from "react";
-import Image from "next/image";
 import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { PauseCircle } from "@phosphor-icons/react";
 import { DGL, DGL_TRACKS, type Track } from "@/data/dgl";
-import { screenKey, showsPoster, showsQr, stageView, type StageAct, type StageView as View } from "@/lib/dgl/stage-view";
+import { bannerFor, screenKey, showsQr, stageView, type StageAct, type StageView as View } from "@/lib/dgl/stage-view";
 import { useDglState } from "@/lib/dgl/use-dgl-state";
 import { useSpinning } from "@/lib/dgl/use-spin";
 import { cn } from "@/lib/utils";
 import { ConnectionPill } from "./ConnectionPill";
 import { IdleCursor } from "./IdleCursor";
+import { PromptWheel } from "./PromptWheel";
 import { Reveal } from "./Reveal";
+import { StageBanner, StagePoster } from "./StageBanner";
 import { StageTimer } from "./StageTimer";
+import { Winner } from "./Winner";
 
 const c = DGL.copy;
 
@@ -27,17 +29,23 @@ type Props = {
   lockup: React.ReactNode;
 };
 
+const GUTTER = "px-6 sm:px-10 lg:px-[3vw]";
+
 /**
  * The projector screen for DevFest Got Latent. Polls the show and renders
  * one screen per phase; every decision comes from `stageView`
  * (src/lib/dgl/stage-view.ts, unit tested). Read from the back of a hall:
  * nothing smaller than 24 px except the connection pill and the URL line.
  *
- * Two columns at lg and up (the act on the left, the timer, QR or reveal on
- * the right), one column below so it also works on a laptop or a phone. The
- * left column cross-fades only when the act changes; the right one when the
- * screen does. Hydration: useDglState starts with no state, so the server and
- * the first client render are both the IDLE screen.
+ * Two looks, picked by `bannerFor`. While nothing is on (waiting, between
+ * acts) the poster fills the screen with two lines of text on a dark fade and
+ * no QR. Every other screen has the title strip across the top, the header
+ * under it and the content below: centred for "up next" and the winner, two
+ * columns at lg and up for the rest (the act on the left; the wheel, the
+ * timer with the QR, the voting QR or the reveal on the right), one column
+ * below. The left column cross-fades only when the act changes; the right one
+ * when the screen does. Hydration: useDglState starts with no state, so the
+ * server and the first client render are both the waiting poster.
  */
 export function StageView({ track, qrSvg, voteUrl, lockup }: Props) {
   const { state, offset, connection } = useDglState(track);
@@ -46,51 +54,102 @@ export function StageView({ track, qrSvg, voteUrl, lockup }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
   const fade = reduce ? { duration: 0 } : { duration: 0.35 };
-  const actKey = view.kind === "idle" || view.kind === "completed" || view.kind === "winner" ? view.kind : `act:${view.id}`;
+  const header = <Header track={track} connection={connection} lockup={lockup} />;
 
   return (
-    <div ref={root} className="relative flex min-h-[100dvh] flex-col px-6 py-6 sm:px-10 lg:px-[3vw] lg:py-12">
+    <div ref={root} className="relative min-h-[100dvh] overflow-x-clip">
       <IdleCursor target={root} />
-      <header className="flex items-center justify-between gap-6">
-        <div className="flex items-center gap-5">
-          {lockup}
-          <p className="hidden text-[24px] font-medium text-muted sm:block">{DGL.name}</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <span className="glass-pill px-4 py-1.5 text-[clamp(1.25rem,1.6vw,1.75rem)] font-medium text-text">{DGL_TRACKS.find((t) => t.id === track)?.label}</span>
-          <ConnectionPill connection={connection} />
-        </div>
-      </header>
+      <AnimatePresence initial={false} mode="wait">
+        {bannerFor(view) === "poster" ? (
+          <m.div key="poster" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="relative flex min-h-[100dvh] flex-col overflow-hidden">
+            <StagePoster />
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-canvas/80 to-transparent" />
+            <div className="relative z-10">{header}</div>
+            <div className={cn("relative z-10 mt-auto bg-gradient-to-t from-canvas via-canvas/85 to-transparent pb-[5vh] pt-32 text-center", GUTTER)}>
+              <h1 className="display text-[clamp(2.5rem,4.5vw,5.5rem)] font-semibold leading-[1.05]">{view.kind === "completed" ? c.completed : c.idleTitle}</h1>
+              <p className="mx-auto mt-4 max-w-[40ch] text-[clamp(1.5rem,2vw,2.5rem)] leading-snug text-muted">{c.stageIdleBody}</p>
+            </div>
+          </m.div>
+        ) : (
+          <m.div key="strip" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="flex min-h-[100dvh] flex-col">
+            <StageBanner />
+            <div className="relative z-10">{header}</div>
+            <Body view={view} prompt={state?.prompt ?? null} spunAtMs={state?.spunAtMs ?? null} offset={offset} qrSvg={qrSvg} voteUrl={voteUrl} fade={fade} />
+          </m.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
-      {/*
-       * At lg the right track is fit-content(52%): it sizes to the timer, QR or
-       * reveal, but never past 52% of the row, so nothing on the right can
-       * squeeze the act. The gutters are in vw on purpose: the timer is at most
-       * 20vw type (see StageTimer, which also caps it by height), 0.48 W wide
-       * (four 0.6 em mono glyphs, a width it keeps even when it reads "Time"),
-       * and with 3vw padding and a 4vw gap it leaves the left column 0.42 W,
-       * 47% of the tracks, at every width up to 1440 (where the timer stops
-       * growing).
-       */}
-      <div className="grid flex-1 grid-cols-1 content-center items-center gap-10 py-10 lg:grid-cols-[minmax(0,1fr)_fit-content(52%)] lg:gap-[4vw]">
-        <AnimatePresence initial={false} mode="wait">
-          <m.div key={actKey} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="min-w-0">
-            <Left view={view} />
-          </m.div>
-        </AnimatePresence>
-        <AnimatePresence initial={false} mode="wait">
-          <m.div
-            key={screenKey(view)}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={fade}
-            className="flex min-w-0 flex-col items-start lg:items-center"
-          >
-            <Right view={view} offset={offset} qrSvg={qrSvg} voteUrl={voteUrl} />
-          </m.div>
-        </AnimatePresence>
+function Header({ track, connection, lockup }: { track: Track; connection: React.ComponentProps<typeof ConnectionPill>["connection"]; lockup: React.ReactNode }) {
+  return (
+    <header className={cn("flex items-center justify-between gap-6 py-4 lg:py-5", GUTTER)}>
+      <div className="flex items-center gap-5">
+        {lockup}
+        <p className="hidden text-[24px] font-medium text-muted sm:block">{DGL.name}</p>
       </div>
+      <div className="flex items-center gap-4">
+        <span className="glass-pill px-4 py-1.5 text-[clamp(1.25rem,1.6vw,1.75rem)] font-medium text-text">{DGL_TRACKS.find((t) => t.id === track)?.label}</span>
+        <ConnectionPill connection={connection} />
+      </div>
+    </header>
+  );
+}
+
+type BodyProps = { view: View; prompt: string | null; spunAtMs: number | null; offset: number; qrSvg: string; voteUrl: string; fade: { duration: number } };
+
+/** Everything under the banner and header. Up next and the winner are centred; the rest are two columns. */
+function Body({ view, prompt, spunAtMs, offset, qrSvg, voteUrl, fade }: BodyProps) {
+  const centred = view.kind === "winner" || (view.kind === "ready" && !view.act.spinning);
+  const wheel = view.kind === "ready" && view.act.spinning;
+  // A re-spin (a new spunAtMs) is a new wheel; every other change of screen keeps the screen's own key.
+  const rightKey = wheel ? `wheel:${spunAtMs}` : screenKey(view);
+  const leftKey = view.kind === "idle" || view.kind === "completed" || view.kind === "winner" ? view.kind : `act:${view.id}`;
+
+  return (
+    <div className={cn("flex flex-1 flex-col justify-center py-6 lg:py-8", GUTTER)}>
+      <AnimatePresence initial={false} mode="wait">
+        {centred ? (
+          <m.div key={`centre:${screenKey(view)}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="flex flex-col items-center">
+            {view.kind === "winner" ? <Winner names={view.names} audience={view.audience} /> : view.kind === "ready" ? <UpNext act={view.act} /> : null}
+          </m.div>
+        ) : (
+          /*
+           * At lg the right track is fit-content(52%): it sizes to the wheel,
+           * timer, QR or reveal, but never past 52% of the row, so nothing on
+           * the right can squeeze the act. The gutters are in vw on purpose: the
+           * timer is at most 19vw type (see StageTimer, which also caps it by
+           * height), 0.48 W wide (four 0.6 em mono glyphs, a width it keeps even
+           * when it reads "Time"), and with 3vw padding and a 4vw gap it leaves
+           * the left column 0.42 W at every width up to 1440 (where the timer
+           * stops growing).
+           */
+          <m.div key="columns" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="grid grid-cols-1 items-center gap-10 lg:grid-cols-[minmax(0,1fr)_fit-content(52%)] lg:gap-[4vw]">
+            <AnimatePresence initial={false} mode="wait">
+              <m.div key={leftKey} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="min-w-0">
+                <Left view={view} />
+              </m.div>
+            </AnimatePresence>
+            <AnimatePresence initial={false} mode="wait">
+              <m.div key={rightKey} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={fade} className="flex min-w-0 flex-col items-start lg:items-center">
+                {wheel ? <PromptWheel prompt={prompt} spunAtMs={spunAtMs} offset={offset} /> : <Right view={view} offset={offset} qrSvg={qrSvg} voteUrl={voteUrl} />}
+              </m.div>
+            </AnimatePresence>
+          </m.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** "Up next": the name very large and centred, and the prompt under it once the wheel has landed. */
+function UpNext({ act }: { act: StageAct }) {
+  return (
+    <div className="flex flex-col items-center gap-6 text-center">
+      <p className="text-[clamp(1.75rem,2.6vw,3rem)] font-medium text-muted">{c.upNext}</p>
+      {act.contestant && <h1 className="display line-clamp-3 max-w-[20ch] text-balance break-words text-[clamp(3.5rem,10vw,12rem)] font-semibold leading-[1.02]">{act.contestant}</h1>}
+      {act.prompt && <p className="line-clamp-3 max-w-[32ch] text-balance break-words text-[clamp(1.75rem,3vw,3.5rem)] leading-[1.2] text-yellow-hi">{act.prompt}</p>}
     </div>
   );
 }
@@ -113,67 +172,9 @@ function status(view: View): { text: string; tone: string } | null {
 }
 
 function Left({ view }: { view: View }) {
-  // The artwork rides along on the waiting, up next, voting and between-acts
-  // screens (showsPoster; the QR rule does not move it): big when the left
-  // column is otherwise just a message (waiting, between acts), a shorter
-  // banner above the act's name and prompt (up next, voting) so those never
-  // get squeezed.
-  const poster = showsPoster(view);
-  const between = view.kind === "idle" || view.kind === "completed";
-  return (
-    <div className="flex flex-col gap-8">
-      {poster && <Poster compact={!between} />}
-      {view.kind === "idle" ? (
-        <Message title={c.idleTitle} body={c.stageIdleBody} />
-      ) : view.kind === "completed" ? (
-        <Message title={c.completed} body={c.stageIdleBody} />
-      ) : view.kind === "winner" ? (
-        <Winner names={view.names} audience={view.audience} />
-      ) : (
-        <ActBlock act={view.act} status={status(view)} />
-      )}
-    </div>
-  );
-}
-
-/**
- * The DevFest Got Latent artwork (public/brand/dgl/dgl-poster.webp, 1502 x 1047).
- * Height-capped so the name and prompt (and, while voting, the QR beside it)
- * always keep their room on a projector; the image scales down to fit its box,
- * never crops.
- */
-function Poster({ compact }: { compact: boolean }) {
-  return (
-    <Image
-      src="/brand/dgl/dgl-poster.webp"
-      alt={c.posterAlt}
-      width={1502}
-      height={1047}
-      priority
-      sizes="(min-width: 1024px) 45vw, 100vw"
-      className={cn("h-auto w-auto max-w-full rounded-panel border border-hair object-contain", compact ? "max-h-[24vh]" : "max-h-[38vh]")}
-    />
-  );
-}
-
-/** Between acts, with the host's winner screen on. Confetti is the next push. */
-function Winner({ names, audience }: { names: string[]; audience: number }) {
-  return (
-    <div className="flex flex-col gap-5">
-      <p className="text-[clamp(1.5rem,2vw,2.25rem)] font-medium text-yellow-hi">{names.length > 1 ? c.winnersTitle : c.winnerTitle}</p>
-      <h1 className="display break-words text-[clamp(3rem,8vw,9rem)] font-semibold leading-[1.02]">{names.join(" and ")}</h1>
-      <p className="font-mono text-[clamp(1.75rem,3vw,3.5rem)] tabular-nums text-muted">{c.winnerScore(audience)}</p>
-    </div>
-  );
-}
-
-function Message({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="flex max-w-[22ch] flex-col gap-6">
-      <h1 className="display text-[clamp(3rem,6vw,7rem)] font-semibold leading-[1.02]">{title}</h1>
-      <p className="max-w-[32ch] text-[clamp(1.5rem,2.2vw,2.5rem)] leading-snug text-muted">{body}</p>
-    </div>
-  );
+  // Only act screens use the columns; the waiting, between-acts and winner screens have their own layouts.
+  if (view.kind === "idle" || view.kind === "completed" || view.kind === "winner") return null;
+  return <ActBlock act={view.act} status={status(view)} />;
 }
 
 /**
@@ -205,8 +206,8 @@ function Right({ view, offset, qrSvg, voteUrl }: RightProps) {
     );
   }
   // The code and the URL line under it show only while the act is running or
-  // voting is open. Waiting, up next and between acts have nothing on this side
-  // for now (the stage layout is redesigned later), and no QR.
+  // voting is open. Waiting, up next and between acts have no QR (those
+  // screens do not use this column at all).
   if (!showsQr(view)) return null;
 
   if (view.kind === "clock") {
@@ -217,7 +218,7 @@ function Right({ view, offset, qrSvg, voteUrl }: RightProps) {
       <div className="flex flex-col items-start gap-3 lg:items-center">
         <StageTimer endsAtMs={view.endsAtMs} offset={offset} running={view.running} />
         <div className="relative flex flex-col items-start gap-3 lg:items-center">
-          <Qr svg={qrSvg} className="size-[min(28vh,40vw)]" />
+          <Qr svg={qrSvg} className="size-[min(26vh,40vw)]" />
           <p className="display text-[clamp(1.5rem,2vw,2.25rem)] font-semibold leading-none text-text">{c.scanToVote}</p>
           <p className="font-mono text-[20px] text-muted">{voteUrl}</p>
         </div>
@@ -227,7 +228,7 @@ function Right({ view, offset, qrSvg, voteUrl }: RightProps) {
   if (view.kind !== "voting") return null;
 
   return (
-    <div className="flex flex-col items-start gap-6 lg:items-center">
+    <div className="flex flex-col items-start gap-4 lg:items-center lg:gap-5">
       <Qr svg={qrSvg} className="size-[min(40vh,80vw)]" />
       {view.paused ? (
         <p className="flex items-center gap-3 text-[clamp(1.75rem,3vw,3.5rem)] font-semibold text-yellow-hi">

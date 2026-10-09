@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { DGL } from "@/data/dgl";
-import { spinLeftMs, spinState } from "@/lib/dgl/wheel";
+import { spinLeftMs, spinState, wheelTarget } from "@/lib/dgl/wheel";
 
 const T = 1_000_000;
 const SPIN = DGL.wheel.spinMs;
@@ -54,5 +54,36 @@ describe("spinLeftMs", () => {
 
   test("never more than one spin, whatever the clock says", () => {
     expect(spinLeftMs(T, T - 300_000)).toBe(SPIN);
+  });
+});
+
+describe("wheelTarget", () => {
+  const prompts = ["Explain Kubernetes to your grandmother", "Pitch a startup in one breath", "Sell this pen", "Roast your own code", "Describe the cloud to a farmer"];
+
+  test("is deterministic", () => {
+    for (const p of prompts) expect(wheelTarget(p, 12)).toEqual(wheelTarget(p, 12));
+  });
+
+  test("lands on a real segment, after six turns", () => {
+    for (const p of prompts) {
+      const t = wheelTarget(p, 12);
+      expect(Number.isInteger(t.segment)).toBe(true);
+      expect(t.segment).toBeGreaterThanOrEqual(0);
+      expect(t.segment).toBeLessThan(12);
+      expect(t.turns).toBe(6);
+    }
+  });
+
+  test("no prompt lands on segment 0", () => {
+    expect(wheelTarget(null, 12)).toEqual({ segment: 0, turns: 6 });
+  });
+
+  test("different prompts do not all land on one segment", () => {
+    const segments = new Set(prompts.map((p) => wheelTarget(p, 12).segment));
+    expect(segments.size).toBeGreaterThan(1);
+  });
+
+  test("the segment count is respected", () => {
+    for (const p of prompts) expect(wheelTarget(p, 5).segment).toBeLessThan(5);
   });
 });

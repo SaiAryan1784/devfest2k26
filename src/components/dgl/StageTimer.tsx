@@ -36,9 +36,10 @@ type Props = {
  *
  * The row is never narrower than four digits (4ch, the width of the time copy),
  * so the column does not change width when "Time" replaces the digits and the
- * act's name beside it does not re-wrap. The type is min(20vw, 22vh): the QR
+ * act's name beside it does not re-wrap. The type is min(20vw, 19vh): the QR
  * sits under the timer while the act runs, and the vh term keeps both inside a
- * short projector's screen (1280 x 720 leaves about 490 px for the column).
+ * short projector's screen once the banner strip and header take their share
+ * (1280 x 720 leaves about 440 px for the column).
  *
  * The loop runs only while running and the tab is visible, and is cancelled
  * on unmount. Under reduced motion it still ticks (the time is information,
@@ -92,9 +93,9 @@ export function StageTimer({ endsAtMs, offset, running }: Props) {
         shape="ring"
         color={RING_COLOR[tone]}
         tubes={3}
-        className="pointer-events-none absolute left-1/2 top-1/2 size-[clamp(16rem,36vw,42rem)] -translate-x-1/2 -translate-y-1/2 opacity-45"
+        className="pointer-events-none absolute left-1/2 top-1/2 size-[min(clamp(16rem,36vw,42rem),46vh)] -translate-x-1/2 -translate-y-1/2 opacity-45"
       />
-      <p className="relative flex min-w-[4ch] items-baseline justify-center gap-[clamp(0.75rem,1.5vw,2rem)] font-mono text-[clamp(8rem,min(20vw,22vh),18rem)] leading-none">
+      <p className="relative flex min-w-[4ch] items-baseline justify-center gap-[clamp(0.75rem,1.5vw,2rem)] font-mono text-[clamp(8rem,min(20vw,19vh),18rem)] leading-none">
         <span className="sr-only">{DGL.copy.timeLeft} </span>
         <m.span
           className={cn("block whitespace-nowrap font-medium tabular-nums transition-colors duration-300 motion-reduce:transition-none", TONE_TEXT[tone])}

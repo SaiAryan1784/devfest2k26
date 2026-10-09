@@ -24,3 +24,23 @@ export function spinLeftMs(spunAtMs: number | null, serverNowMs: number, spinMs:
   if (spunAtMs === null || spinState(spunAtMs, serverNowMs, spinMs) !== "spinning") return 0;
   return Math.min(spinMs, spunAtMs + spinMs - serverNowMs);
 }
+
+/** Whole turns the wheel makes before it settles. */
+const WHEEL_TURNS = 6;
+
+/**
+ * Where the wheel stops: a segment picked by a stable hash of the prompt
+ * (FNV-1a), so the stage's wheel is the same on a refresh or a second
+ * screen, and the number of turns. The wheel is for show: the prompt itself
+ * is chosen on the server; this only gives it a place to land. No prompt
+ * (before any spin) is segment 0.
+ */
+export function wheelTarget(prompt: string | null, segments: number): { segment: number; turns: number } {
+  if (prompt === null) return { segment: 0, turns: WHEEL_TURNS };
+  let h = 0x811c9dc5;
+  for (let i = 0; i < prompt.length; i++) {
+    h ^= prompt.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return { segment: h % segments, turns: WHEEL_TURNS };
+}
