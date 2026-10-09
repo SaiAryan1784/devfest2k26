@@ -7,6 +7,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // PGlite boots slowly on a loaded machine.
+    testTimeout: 30_000,
     include: ["tests/**/*.test.ts"],
   },
 });

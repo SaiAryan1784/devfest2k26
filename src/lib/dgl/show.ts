@@ -412,7 +412,7 @@ function writeStatement(a: Action, admin: Admin, track: Track, version: number, 
       const set = {
         renameAct: () => `contestant_name = ${q.add((a as { name: string }).name, "text")}`,
         setSelfScore: () => `self_score = ${q.add((a as { score: number }).score, "smallint")}`,
-        startPerformance: () => `${status(a.type)}, ends_at = ${ts(now + DGL.performanceMs)}`,
+        startPerformance: () => `${status(a.type)}, ends_at = ${ts(now + DGL.performanceMs + DGL.startLeadMs)}`,
         startVoting: () => `${status(a.type)}, voting_opened_at = ${at}`,
         pauseVoting: () => status(a.type),
         resumeVoting: () => status(a.type),

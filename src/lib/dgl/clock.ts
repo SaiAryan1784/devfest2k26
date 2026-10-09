@@ -1,3 +1,4 @@
+import { DGL } from "@/data/dgl";
 import type { Phase } from "./types";
 
 /**
@@ -36,7 +37,10 @@ export function pollDelay(phase: Phase | null, poll: { votingMs: number; idleMs:
   return live ? poll.votingMs : poll.idleMs;
 }
 
-/** Milliseconds until `endsAtMs` (server time), never below 0. */
+/**
+ * Milliseconds the clock shows until `endsAtMs` (server time): never below 0 and never above
+ * DGL.performanceMs, so the screens read 90 until the server's start lead has run down.
+ */
 export function remainingMs(endsAtMs: number, clientNow: number, offset: number): number {
-  return Math.max(0, endsAtMs - (clientNow + offset));
+  return Math.min(DGL.performanceMs, Math.max(0, endsAtMs - (clientNow + offset)));
 }

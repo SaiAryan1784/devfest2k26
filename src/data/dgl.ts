@@ -16,6 +16,13 @@ export const DGL = {
   name: "DevFest Got Latent",
   /** Performance length, server time. */
   performanceMs: 90_000,
+  /**
+   * The server ends an act this long after performanceMs. The stage and phones learn that the act
+   * started a second or three late (CDN cache plus poll), so they hold the clock at 90 until the
+   * remaining time drops under it: the performer gets a full 90 s on screen and every screen
+   * starts from 90.
+   */
+  startLeadMs: 3_000,
   /** The last N seconds of the timer are made visually obvious. */
   finalCountdownS: 10,
   /** The last N seconds turn the stage timer red. */
@@ -93,7 +100,6 @@ export const DGL = {
     votingClosed: "Voting closed",
     ownScore: "Own score",
     audience: "Audience",
-    difference: (d: number) => `Difference ${d}`,
     /** The reveal's line, and the tally line once voting closed, when nobody voted. */
     noVotes: "No votes",
     completed: "Next act coming up",

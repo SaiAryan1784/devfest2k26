@@ -205,7 +205,7 @@ function Screen({ view, offset, picked, onPick, onLockIn, focusLockedRef, fade }
               </div>
             )}
           </dl>
-          <p className="text-[17px] font-medium text-text">{verdict}</p>
+          {verdict && <p className="text-[17px] font-medium text-text">{verdict}</p>}
         </>
       );
     }

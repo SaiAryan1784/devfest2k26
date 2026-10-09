@@ -87,8 +87,8 @@ test("full happy path", async () => {
   const s = await readPublicState(db, "build", T0 + 1000);
   expect(s.phase).toBe("PERFORMING");
   expect(s.contestant).toBe("Riya Sharma");
-  expect(s.endsAtMs).toBe(T0 + DGL.performanceMs);
-  expect((await readPublicState(db, "build", T0 + DGL.performanceMs)).phase).toBe("PERFORMED");
+  expect(s.endsAtMs).toBe(T0 + DGL.performanceMs + DGL.startLeadMs);
+  expect((await readPublicState(db, "build", T0 + DGL.performanceMs + DGL.startLeadMs)).phase).toBe("PERFORMED");
 });
 
 test("stale version is rejected and changes nothing", async () => {
@@ -221,7 +221,7 @@ test("spinWheel is not_allowed outside READY", async () => {
   await must({ type: "putOnStage", name: "Riya Sharma" });
   await must({ type: "startPerformance" });
   await refused(); // PERFORMING
-  await refused(T0 + DGL.performanceMs + 1); // PERFORMED
+  await refused(T0 + DGL.performanceMs + DGL.startLeadMs + 1); // PERFORMED
   await must({ type: "startVoting" });
   await refused(); // VOTING
   await must({ type: "pauseVoting" });
@@ -252,7 +252,7 @@ test("spinWheel is invalid with no active prompts", async () => {
 test("startPerformance works without a prompt", async () => {
   await must({ type: "putOnStage", name: "Riya Sharma" });
   const r = await must({ type: "startPerformance" });
-  expect(r.state).toMatchObject({ phase: "PERFORMING", prompt: null, spunAtMs: null, endsAtMs: T0 + DGL.performanceMs });
+  expect(r.state).toMatchObject({ phase: "PERFORMING", prompt: null, spunAtMs: null, endsAtMs: T0 + DGL.performanceMs + DGL.startLeadMs });
 });
 
 test("public state exposes spunAtMs", async () => {

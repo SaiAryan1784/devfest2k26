@@ -91,6 +91,7 @@ export function Reveal(props: Props) {
           </m.div>
         )}
       </dl>
+      {lines.verdict && (
       <m.p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -99,6 +100,7 @@ export function Reveal(props: Props) {
       >
         {lines.verdict}
       </m.p>
+      )}
     </div>
   );
 }

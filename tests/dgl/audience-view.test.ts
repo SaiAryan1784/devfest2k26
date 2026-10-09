@@ -262,8 +262,8 @@ describe("revealLines", () => {
   const rv = (self: number, audience: number | null, result: Extract<AudienceView, { kind: "reveal" }>["result"]) =>
     ({ kind: "reveal", act, self, audience, result }) as const;
   test("revealLines whole numbers", () => {
-    expect(revealLines(rv(7, 9, { kind: "diff", diff: 2 }))).toEqual({ audience: "9 / 10", verdict: "Difference 2" });
-    expect(revealLines(rv(9, 3, { kind: "diff", diff: 6 }))).toEqual({ audience: "3 / 10", verdict: "Difference 6" });
+    expect(revealLines(rv(7, 9, { kind: "diff", diff: 2 }))).toEqual({ audience: "9 / 10", verdict: "" });
+    expect(revealLines(rv(9, 3, { kind: "diff", diff: 6 }))).toEqual({ audience: "3 / 10", verdict: "" });
     expect(revealLines(rv(8, 8, { kind: "match" }))).toEqual({ audience: "8 / 10", verdict: DGL.copy.perfectMatch });
   });
   test("revealLines with no votes says No votes", () => {
@@ -272,14 +272,13 @@ describe("revealLines", () => {
   });
   test("the copy takes whole numbers, and the new lines carry no dashes", () => {
     expect(DGL.copy.outOfTen(8)).toBe("8 / 10");
-    expect(DGL.copy.difference(2)).toBe("Difference 2");
     expect(DGL.copy.stageIdleBody).toBe("The QR code to vote appears when the act begins.");
-    for (const line of [DGL.copy.outOfTen(8), DGL.copy.difference(2), DGL.copy.noVotes, DGL.copy.secondsUnit, DGL.copy.stageIdleBody]) {
+    for (const line of [DGL.copy.outOfTen(8), DGL.copy.noVotes, DGL.copy.secondsUnit, DGL.copy.stageIdleBody]) {
       expect(line).not.toMatch(/[\u2013\u2014]/);
     }
   });
   test("the live region reads the whole reveal", () => {
-    expect(liveText(rv(9, 8, { kind: "diff", diff: 1 }))).toBe("Own score 9. Audience 8 / 10. Difference 1");
+    expect(liveText(rv(9, 8, { kind: "diff", diff: 1 }))).toBe("Own score 9. Audience 8 / 10");
     expect(liveText(rv(8, 8, { kind: "match" }))).toBe("Own score 8. Audience 8 / 10. Perfect match");
     expect(liveText(rv(9, null, { kind: "insufficient" }))).toBe("Own score 9. No votes");
   });

@@ -41,3 +41,12 @@ test("pollDelay is fast while an act is up (ready, performing, voting, paused) a
   for (const p of ["IDLE", "VOTING_CLOSED", "REVEAL", "COMPLETED"] as const) expect(pollDelay(p, poll), p).toBe(3_000);
   expect(pollDelay(null, poll)).toBe(3_000);
 });
+
+test("remainingMs never reads above the act length, so every screen starts from 90", () => {
+  // The server ends an act performanceMs + startLeadMs after the tap; a screen that learns of it a
+  // second late still holds 90 until the lead has run down.
+  const end = 100_000 + 90_000 + 3_000;
+  expect(remainingMs(end, 101_000, 0)).toBe(90_000);
+  expect(remainingMs(end, 103_000, 0)).toBe(90_000);
+  expect(remainingMs(end, 104_000, 0)).toBe(89_000);
+});

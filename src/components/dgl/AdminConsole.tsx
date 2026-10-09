@@ -108,7 +108,8 @@ function TrackConsole({ track, onTrack }: { track: Track | null; onTrack(t: Trac
   return <Console admin={admin} state={admin.state} onTrack={onTrack} />;
 }
 
-function Console({ admin, state, onTrack }: { admin: UseAdmin; state: AdminState; onTrack(t: Track): void }) {
+/** Exported for tests/dgl/console-render.test.ts only. */
+export function Console({ admin, state, onTrack }: { admin: UseAdmin; state: AdminState; onTrack(t: Track): void }) {
   const role = state.me.role;
   const primary = primaryAction(state, role);
   const secondary = secondaryActions(state, role);
@@ -229,9 +230,9 @@ function Console({ admin, state, onTrack }: { admin: UseAdmin; state: AdminState
 
             {state.performanceId && state.phase !== "COMPLETED" && <PromptLine state={state} />}
 
-            {has("renameAct") && <RenamePanel key={state.performanceId ?? "none"} state={state} admin={admin} gate={gate} />}
+            {has("renameAct") && <RenamePanel key={`rename:${state.performanceId ?? "none"}`} state={state} admin={admin} gate={gate} />}
 
-            {has("setSelfScore") && <OwnScorePanel key={state.performanceId ?? "none"} state={state} admin={admin} gate={gate} />}
+            {has("setSelfScore") && <OwnScorePanel key={`score:${state.performanceId ?? "none"}`} state={state} admin={admin} gate={gate} />}
           </div>
 
           <ActsPanel state={state} />

@@ -172,7 +172,8 @@ export function revealLines(v: Extract<AudienceView, { kind: "reveal" }>): { aud
   if (v.result.kind === "insufficient" || v.audience === null) return { audience: null, verdict: c.noVotes };
   return {
     audience: c.outOfTen(v.audience),
-    verdict: v.result.kind === "match" ? c.perfectMatch : c.difference(v.result.diff),
+    // Only an exact match gets a line; the gap between the two numbers is not shown.
+    verdict: v.result.kind === "match" ? c.perfectMatch : "",
   };
 }
 
